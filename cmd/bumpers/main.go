@@ -11,65 +11,67 @@ import (
 func main() {
 	configPath := "bumpers.yaml"
 
-	var rootCmd = &cobra.Command{
+	rootCmd := &cobra.Command{
 		Use:   "bumpers",
-		Short: "Simple Claude Code hook guard with positive guidance",
-		Run: func(cmd *cobra.Command, args []string) {
+		Short: "Claude Code hook guard",
+		Run: func(_ *cobra.Command, _ []string) {
 			// Default behavior: process hook from stdin
 			app := cli.NewApp(configPath)
-			
+
 			response, err := app.ProcessHook(os.Stdin)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 				os.Exit(1)
 			}
-			
+
 			// If there's a response, print it and exit with error code
 			if response != "" {
-				fmt.Print(response)
+				_, _ = fmt.Print(response)
 				os.Exit(1)
 			}
-			
+
 			// No response means command is allowed
 			os.Exit(0)
 		},
 	}
 
-	var testCmd = &cobra.Command{
+	testCmd := &cobra.Command{
 		Use:   "test [command]",
 		Short: "Test a command against current rules",
 		Args:  cobra.ExactArgs(1),
-		Run: func(cmd *cobra.Command, args []string) {
+		Run: func(_ *cobra.Command, args []string) {
 			app := cli.NewApp(configPath)
-			
+
 			result, err := app.TestCommand(args[0])
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 				os.Exit(1)
 			}
-			
-			fmt.Println(result)
+
+			_, _ = fmt.Println(result)
 		},
 	}
 
-	var statusCmd = &cobra.Command{
+	// TODO: this is a stub, it should eventually check for an "active" flag in the config AND confirm
+	// at least one rule is loaded and at least one hook is set to run bumpers in the claude config
+	statusCmd := &cobra.Command{
 		Use:   "status",
 		Short: "Check hook status",
-		Run: func(cmd *cobra.Command, args []string) {
-			fmt.Println("Bumpers guard is active")
-			fmt.Printf("Config: %s\n", configPath)
+		Run: func(_ *cobra.Command, _ []string) {
+			_, _ = fmt.Println("Bumpers guard is active")
+			_, _ = fmt.Printf("Config: %s\n", configPath)
 		},
 	}
 
 	// Add global config flag
 	rootCmd.PersistentFlags().StringVarP(&configPath, "config", "c", configPath, "path to configuration file")
 
-	// Add subcommands  
+	// Add subcommands
 	rootCmd.AddCommand(testCmd, statusCmd)
 
 	// Execute
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
 }

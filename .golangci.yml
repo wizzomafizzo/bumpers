@@ -158,7 +158,7 @@ linters:
     tagliatelle:
       case:
         rules:
-          json: snake
+          yaml: snake
     dupl:
       threshold: 100
     wrapcheck:

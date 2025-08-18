@@ -2,11 +2,13 @@ package response
 
 import (
 	"testing"
-	
+
 	"github.com/wizzomafizzo/bumpers/internal/config"
 )
 
 func TestFormatResponse(t *testing.T) {
+	t.Parallel()
+
 	rule := &config.Rule{
 		Name:    "block-go-test",
 		Pattern: "go test.*",
@@ -18,13 +20,13 @@ func TestFormatResponse(t *testing.T) {
 		},
 		UseClaude: false,
 	}
-	
+
 	response := FormatResponse(rule)
-	
+
 	if response == "" {
 		t.Fatal("Expected non-empty response")
 	}
-	
+
 	// Should contain the message
 	if !contains(response, "Use make test instead") {
 		t.Error("Response should contain the rule message")
@@ -32,9 +34,9 @@ func TestFormatResponse(t *testing.T) {
 }
 
 func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) && 
-		(s[0:len(substr)] == substr || s[len(s)-len(substr):] == substr || 
-		 containsHelper(s, substr)))
+	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) &&
+		(s[0:len(substr)] == substr || s[len(s)-len(substr):] == substr ||
+			containsHelper(s, substr)))
 }
 
 func containsHelper(s, substr string) bool {
