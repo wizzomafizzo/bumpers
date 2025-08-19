@@ -24,7 +24,7 @@ func TestProcessHook(t *testing.T) {
 
 	configContent := `rules:
   - name: "block-go-test"
-    pattern: "go test.*"
+    pattern: "go test"
     action: "deny"
     message: "Use make test instead for better TDD integration"
     alternatives:
@@ -61,7 +61,7 @@ func TestProcessHookAllowed(t *testing.T) {
 
 	configContent := `rules:
   - name: "block-go-test"
-    pattern: "go test.*"
+    pattern: "go test"
     action: "deny"
     message: "Use make test instead for better TDD integration"`
 
@@ -90,7 +90,7 @@ func TestProcessHookDangerousCommand(t *testing.T) {
 
 	configContent := `rules:
   - name: "dangerous-rm"
-    pattern: "rm -rf /.*"
+    pattern: "rm -rf /*"
     action: "deny"
     message: "⚠️  Dangerous rm command detected"
     alternatives:
@@ -124,7 +124,7 @@ func TestProcessHookPatternMatching(t *testing.T) {
 
 	configContent := `rules:
   - name: "block-go-test"
-    pattern: "go test.*"
+    pattern: "go test"
     action: "deny"
     message: "Use make test instead for better TDD integration"
     alternatives:
@@ -163,7 +163,7 @@ func TestConfigurationIsUsed(t *testing.T) {
 	// a specific message from the config rather than hardcoded responses
 	configContent := `rules:
   - name: "block-go-test"
-    pattern: "go test.*"
+    pattern: "go test"
     action: "deny"
     message: "Use make test instead for better TDD integration"
     use_claude: false`
@@ -193,7 +193,7 @@ func TestTestCommand(t *testing.T) {
 
 	configContent := `rules:
   - name: "block-go-test"
-    pattern: "go test.*"
+    pattern: "go test"
     action: "deny"
     message: "Use make test instead for better TDD integration"
     use_claude: false`

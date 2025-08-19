@@ -60,6 +60,43 @@ func TestLoadConfigWithAlternatives(t *testing.T) {
 	}
 }
 
+func TestLoadConfigWithNewStructure(t *testing.T) {
+	t.Parallel()
+
+	yamlContent := `rules:
+  - name: "block-go-test"
+    pattern: "go test*"
+    action: "deny"
+    response: |
+      Use make test instead for better TDD integration
+      
+      Try one of these alternatives:
+      • make test          # Run all tests
+      • make test-unit     # Run unit tests only
+    use_claude: "no"
+    prompt: "Explain why direct go test is discouraged"
+`
+
+	config, err := LoadFromYAML([]byte(yamlContent))
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	rule := config.Rules[0]
+	if rule.Response == "" {
+		t.Errorf("Expected response to be populated")
+	}
+	
+	// For now, UseClaude is still a bool, so this test checks the zero value
+	if rule.UseClaude {
+		t.Errorf("Expected UseClaude to be false (zero value), got %v", rule.UseClaude)
+	}
+	
+	if rule.Prompt != "Explain why direct go test is discouraged" {
+		t.Errorf("Expected prompt to be set correctly, got %s", rule.Prompt)
+	}
+}
+
 func TestRuleActionConstants(t *testing.T) {
 	t.Parallel()
 

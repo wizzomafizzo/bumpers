@@ -17,7 +17,7 @@ func TestEndToEndHookProcessing(t *testing.T) {
 	// Create config in memory
 	configContent := `rules:
   - name: "block-go-test"
-    pattern: "go test.*"
+    pattern: "go test"
     action: "deny"
     message: "Use make test instead for better TDD integration"
     alternatives:

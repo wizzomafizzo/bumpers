@@ -16,7 +16,9 @@ type Rule struct {
 	Pattern      string   `yaml:"pattern"`
 	Action       string   `yaml:"action"`
 	Message      string   `yaml:"message,omitempty"`
+	Response     string   `yaml:"response,omitempty"`
 	ClaudePrompt string   `yaml:"claude_prompt,omitempty"`
+	Prompt       string   `yaml:"prompt,omitempty"`
 	Alternatives []string `yaml:"alternatives,omitempty"`
 	UseClaude    bool     `yaml:"use_claude,omitempty"`
 }

@@ -1,0 +1,99 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Project Overview
+
+Bumpers is a Claude Code hook guard utility that intercepts hook events and provides intelligent command guarding with positive guidance. Instead of just blocking commands, it suggests better alternatives using encouraging, educational messaging.
+
+## Core Commands
+
+### Build & Development
+```bash
+make build          # Build binary to bin/bumpers
+make install        # Install to $GOPATH/bin
+make all            # Lint, test, and build (default)
+```
+
+### Testing
+```bash
+make test                           # Run all tests with coverage
+make test PKG=./internal/config    # Test specific package
+make test PKG=./internal/cli       # Test CLI package only
+```
+
+**IMPORTANT**: Always use `make test` instead of `go test` to ensure proper TDD guard integration and consistent test execution.
+
+### Code Quality
+```bash
+make lint           # Run golangci-lint
+make lint-fix       # Run golangci-lint with auto-fix
+make check          # Run lint + test (pre-commit check)
+```
+
+### Clean Up
+```bash
+make clean          # Remove build artifacts, coverage files, and bin/
+```
+
+## Architecture
+
+### Package Structure
+
+The codebase follows standard Go project layout with clear separation of concerns:
+
+- **cmd/bumpers/** - Minimal CLI entry point using Cobra framework. Contains only command definitions and basic orchestration.
+
+- **internal/cli/** - Application orchestrator that coordinates between all internal packages. Handles the main business logic flow.
+
+- **internal/config/** - YAML configuration management. Loads and validates bumpers.yaml files containing rule definitions.
+
+- **internal/hooks/** - Hook event processing. Parses JSON input from Claude Code hooks and extracts command information.
+
+- **internal/matcher/** - Pattern matching engine using Go regex. Matches commands against configured rules.
+
+- **internal/response/** - Response generation for denied commands. Formats helpful alternative suggestions.
+
+- **internal/claude/** - Claude binary detection and execution:
+  - **launcher.go** - Auto-detects Claude binary location with smart fallback
+  - **settings/** - Claude settings.json management for hook configuration
+
+### Core Flow
+
+1. **Hook Input**: Claude Code sends JSON to stdin when a hook is triggered
+2. **Command Extraction**: `hooks.ParseHookInput()` extracts the command
+3. **Rule Matching**: `matcher.RuleMatcher` checks command against YAML rules
+4. **Response Generation**: If denied, `response.FormatResponse()` creates helpful guidance
+5. **Exit Codes**: 0 = allowed, 1 = denied (with message to stdout)
+
+### Configuration System
+
+Rules are defined in YAML with regex patterns:
+- **pattern**: Regex to match commands
+- **action**: "allow" or "deny"
+- **message**: User-friendly explanation
+- **alternatives**: List of better commands to suggest
+- **use_claude**: Enable Claude CLI integration for dynamic responses
+
+### Testing Approach
+
+The project uses strict TDD with comprehensive test coverage:
+- Unit tests for all packages in `*_test.go` files
+- Integration test in `internal/bumpers_test.go`
+- Tests automatically integrate with tdd-guard-go if available
+- Coverage target: >75% for all internal packages
+
+## Key Patterns
+
+- **Value Types**: Uses value types instead of pointers for better performance
+- **Error Handling**: Clean error propagation without excessive wrapping
+- **Minimal CLI**: Cobra commands are thin wrappers around internal/cli
+- **Thread Safety**: Launcher uses mutex for cached path management
+- **Configuration**: YAML-based with validation on load
+
+## Development Notes
+
+- Lefthook is configured for pre-commit hooks (lint, go mod tidy)
+- golangci-lint is used for comprehensive linting
+- The project avoids external dependencies where possible (no Viper, minimal deps)
+- Focus on positive, educational messaging in all user-facing output
