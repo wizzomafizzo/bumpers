@@ -7,7 +7,8 @@ import (
 )
 
 type Config struct {
-	Rules []Rule `yaml:"rules"`
+	ClaudeBinary string `yaml:"claude_binary,omitempty"`
+	Rules        []Rule `yaml:"rules"`
 }
 
 type Rule struct {

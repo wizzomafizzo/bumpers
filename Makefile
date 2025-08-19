@@ -1,4 +1,4 @@
-.PHONY: all build test test-unit test-integration lint lint-fix clean install help
+.PHONY: all build test lint lint-fix clean install help
 
 # Go parameters
 GOCMD=go
@@ -37,28 +37,14 @@ build:
 	mkdir -p bin
 	$(GOBUILD) -o bin/bumpers ./cmd/bumpers
 
-# Run all tests (unit + integration)
-test: test-unit test-integration
-	@echo "All tests completed!"
-
-# Run unit tests only
-test-unit:
-	@echo "Running unit tests on $(PKG)..."
+# Run all tests
+test:
+	@echo "Running tests on $(PKG)..."
 ifdef TDDGUARD_AVAILABLE
 	@echo "TDD Guard detected - integrating test reporting..."
-	$(GOTEST) -json -v $(RACE_FLAG) -coverprofile=coverage-unit.txt -covermode=atomic $(PKG) 2>&1 | tdd-guard-go -project-root $(PROJECT_ROOT)
+	$(GOTEST) -json -v $(RACE_FLAG) -coverprofile=coverage.txt -covermode=atomic $(PKG) 2>&1 | tdd-guard-go -project-root $(PROJECT_ROOT)
 else
-	$(GOTEST) -v $(RACE_FLAG) -coverprofile=coverage-unit.txt -covermode=atomic $(PKG)
-endif
-
-# Run integration tests only
-test-integration:
-	@echo "Running integration tests on $(PKG)..."
-ifdef TDDGUARD_AVAILABLE
-	@echo "TDD Guard detected - integrating test reporting..."
-	$(GOTEST) -json -v $(RACE_FLAG) -tags=integration -coverprofile=coverage-integration.txt -covermode=atomic $(PKG) 2>&1 | tdd-guard-go -project-root $(PROJECT_ROOT)
-else
-	$(GOTEST) -v $(RACE_FLAG) -tags=integration -coverprofile=coverage-integration.txt -covermode=atomic $(PKG)
+	$(GOTEST) -v $(RACE_FLAG) -coverprofile=coverage.txt -covermode=atomic $(PKG)
 endif
 
 # Install the bumpers binary
@@ -83,7 +69,7 @@ lint-fix:
 clean:
 	@echo "Cleaning..."
 	$(GOCMD) clean
-	rm -f coverage*.txt
+	rm -f coverage.txt
 	rm -rf bin/
 
 # Quick check before committing
@@ -99,9 +85,7 @@ help:
 	@echo "  all                 - Lint, test, and build (default)"
 	@echo "  build               - Build bumpers binary to bin/bumpers"
 	@echo "  install             - Install bumpers binary to \$$GOPATH/bin"
-	@echo "  test                - Run all tests (unit + integration)"
-	@echo "  test-unit           - Run unit tests only"
-	@echo "  test-integration    - Run integration tests only"
+	@echo "  test                - Run all tests"
 	@echo "  lint                - Format code and run linters (golangci-lint)"
 	@echo "  lint-fix            - Run linters with auto-fix (golangci-lint --fix)"
 	@echo "  clean               - Remove build artifacts"
@@ -115,6 +99,6 @@ help:
 	@echo ""
 	@echo "Examples:"
 	@echo "  make test PKG=./internal/config    - Test config package only"
-	@echo "  make test-unit PKG=./internal/cli  - Unit tests for CLI package"
+	@echo "  make test PKG=./internal/cli       - Test CLI package only"
 	@echo ""
 	@echo "Note: Test commands automatically integrate with tdd-guard-go if available"

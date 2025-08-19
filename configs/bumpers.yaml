@@ -1,3 +1,12 @@
+# Claude Binary Configuration (optional)
+# By default, Bumpers automatically detects Claude in these locations:
+#   1. ~/.claude/local/claude (local installation)
+#   2. claude in PATH (system installation)  
+#   3. /opt/homebrew/bin/claude (macOS Homebrew)
+#   4. /usr/local/bin/claude (Unix standard)
+# Uncomment and specify a custom path if needed:
+# claude_binary: "/path/to/your/claude"
+
 rules:
   - name: "block-go-test"
     pattern: "go test.*"
