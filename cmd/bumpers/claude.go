@@ -58,6 +58,17 @@ func createClaudeRestoreCommand() *cobra.Command {
 	}
 }
 
+// createClaudeCommandGroup creates the claude command group with backup/restore subcommands.
+func createClaudeCommandGroup() *cobra.Command {
+	claudeCmd := &cobra.Command{
+		Use:   "claude",
+		Short: "Claude settings management",
+	}
+	claudeCmd.AddCommand(createClaudeBackupCommand())
+	claudeCmd.AddCommand(createClaudeRestoreCommand())
+	return claudeCmd
+}
+
 // createRootCommand creates the root command with claude subcommands.
 func createRootCommand() *cobra.Command {
 	rootCmd := &cobra.Command{
@@ -65,16 +76,8 @@ func createRootCommand() *cobra.Command {
 		Short: "Claude Code hook guard",
 	}
 
-	// Create Claude commands group
-	claudeCmd := &cobra.Command{
-		Use:   "claude",
-		Short: "Claude settings management",
-	}
-	claudeCmd.AddCommand(createClaudeBackupCommand())
-	claudeCmd.AddCommand(createClaudeRestoreCommand())
-
 	// Add subcommands
-	rootCmd.AddCommand(claudeCmd)
+	rootCmd.AddCommand(createClaudeCommandGroup())
 
 	return rootCmd
 }
@@ -139,15 +142,20 @@ func buildMainRootCommand() *cobra.Command {
 	statusCmd := &cobra.Command{
 		Use:   "status",
 		Short: "Check hook status",
+		Run: func(cmd *cobra.Command, _ []string) {
+			configPath, _ := cmd.Flags().GetString("config")
+			app := cli.NewApp(configPath)
+			status, err := app.Status()
+			if err != nil {
+				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Error: %v\n", err)
+				os.Exit(1) //nolint:revive // CLI command exit is acceptable
+			}
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), status)
+		},
 	}
 
 	// Create Claude commands group
-	claudeCmd := &cobra.Command{
-		Use:   "claude",
-		Short: "Claude settings management",
-	}
-	claudeCmd.AddCommand(createClaudeBackupCommand())
-	claudeCmd.AddCommand(createClaudeRestoreCommand())
+	claudeCmd := createClaudeCommandGroup()
 
 	// Add persistent config flag
 	rootCmd.PersistentFlags().StringP("config", "c", "bumpers.yml", "Path to config file")

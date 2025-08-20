@@ -90,6 +90,21 @@ func TestMainCommandStructure(t *testing.T) {
 	}
 }
 
+func TestStatusCommandShouldHaveRunFunction(t *testing.T) {
+	t.Parallel()
+
+	rootCmd := buildMainRootCommand()
+	statusCmd, _, err := rootCmd.Find([]string{"status"})
+	if err != nil {
+		t.Fatalf("Status command not found: %v", err)
+	}
+
+	// Status command should have a Run function to be functional
+	if statusCmd.Run == nil {
+		t.Error("Status command should have a Run function to be functional")
+	}
+}
+
 func TestBackupCommandExecution(t *testing.T) {
 	t.Parallel()
 	// Create a temporary test directory
@@ -125,7 +140,7 @@ func TestBackupCommandExecution(t *testing.T) {
 	}
 }
 
-func TestBackupWithTimestamp(t *testing.T) {
+func TestBackupWithSimpleExtension(t *testing.T) {
 	t.Parallel()
 	// Create a temporary test directory
 	testDir := t.TempDir()
@@ -138,20 +153,16 @@ func TestBackupWithTimestamp(t *testing.T) {
 		t.Fatalf("Failed to create test settings file: %v", err)
 	}
 
-	// Test the backup functionality with proper timestamping using settings package
+	// Test the backup functionality using simple .bak extension
 	backupPath, err := executeBackupCommand(filepath.Dir(settingsFile))
 	if err != nil {
 		t.Fatalf("executeBackupCommand failed: %v", err)
 	}
 
-	// Verify backup path contains timestamp format (not just .backup suffix)
-	if filepath.Ext(backupPath) != ".json" {
-		t.Errorf("Backup should maintain .json extension, got: %s", backupPath)
-	}
-
-	// Verify it's not just the simple .backup format
-	if backupPath == settingsFile+".backup" {
-		t.Error("Expected timestamped backup, got simple .backup suffix")
+	// Verify backup uses simple .bak extension
+	expectedBackupPath := settingsFile + ".bak"
+	if backupPath != expectedBackupPath {
+		t.Errorf("Expected backup path %s, got: %s", expectedBackupPath, backupPath)
 	}
 
 	// Verify backup was created and has correct content
@@ -383,8 +394,7 @@ func TestClaudeRestoreCommandInCLI(t *testing.T) {
 	}
 }
 
-func TestRestoreCommandExecution(t *testing.T) {
-	t.Parallel()
+func TestRestoreCommandExecution(t *testing.T) { //nolint:paralleltest // changes working directory
 	// Test that the restore command can actually execute and restore settings
 	// Create a temporary directory and change to it
 	testDir := t.TempDir()
@@ -407,7 +417,7 @@ func TestRestoreCommandExecution(t *testing.T) {
 	}
 
 	// Create a backup
-	backupPath, err := executeBackupCommand(testDir)
+	backupPath, err := executeBackupCommand(".")
 	if err != nil {
 		t.Fatalf("Failed to create backup: %v", err)
 	}

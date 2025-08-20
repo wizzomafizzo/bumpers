@@ -8,7 +8,6 @@ import (
 	"github.com/wizzomafizzo/bumpers/internal/config"
 	"github.com/wizzomafizzo/bumpers/internal/hooks"
 	"github.com/wizzomafizzo/bumpers/internal/matcher"
-	"github.com/wizzomafizzo/bumpers/internal/response"
 )
 
 func TestEndToEndHookProcessing(t *testing.T) {
@@ -59,7 +58,7 @@ func TestEndToEndHookProcessing(t *testing.T) {
 	}
 
 	// Generate response
-	resp := response.FormatResponse(rule)
+	resp := rule.Response
 	if resp == "" {
 		t.Fatal("Expected non-empty response")
 	}

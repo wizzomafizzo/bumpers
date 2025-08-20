@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -207,4 +208,142 @@ func TestLoadConfigSimplifiedSchema(t *testing.T) {
 		t.Error("Expected prompt to be populated when UseClaude is true")
 	}
 	// In simplified schema, these fields don't exist at all
+}
+
+// Test config validation
+func TestConfigValidation(t *testing.T) {
+	t.Parallel()
+
+	t.Run("ValidConfigs", testValidConfigs)
+	t.Run("InvalidConfigs", testInvalidConfigs)
+}
+
+func testValidConfigs(t *testing.T) {
+	t.Parallel()
+	tests := []configTestCase{
+		{
+			name: "valid config",
+			yamlContent: `rules:
+  - pattern: "go test.*"
+    response: "Use make test instead"`,
+			expectError: false,
+		},
+		{
+			name: "valid use_claude with prompt",
+			yamlContent: `rules:
+  - pattern: "test.*"
+    use_claude: true
+    prompt: "Test prompt"`,
+			expectError: false,
+		},
+		{
+			name: "rule with alternatives only",
+			yamlContent: `rules:
+  - pattern: "test.*"
+    alternatives:
+      - "make test"`,
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			validateConfigTest(t, tt)
+		})
+	}
+}
+
+func testInvalidConfigs(t *testing.T) {
+	t.Parallel()
+	tests := []configTestCase{
+		{
+			name:          "empty rules",
+			yamlContent:   `rules: []`,
+			expectError:   true,
+			errorContains: "must contain at least one rule",
+		},
+		{
+			name:          "missing rules entirely",
+			yamlContent:   `claude_binary: "/usr/bin/claude"`,
+			expectError:   true,
+			errorContains: "must contain at least one rule",
+		},
+		{
+			name: "empty pattern",
+			yamlContent: `rules:
+  - pattern: ""
+    response: "Empty pattern"`,
+			expectError:   true,
+			errorContains: "pattern field is required",
+		},
+		{
+			name: "invalid regex pattern",
+			yamlContent: `rules:
+  - pattern: "[invalid"
+    response: "Invalid regex"`,
+			expectError:   true,
+			errorContains: "invalid regex pattern",
+		},
+		{
+			name: "use_claude without prompt",
+			yamlContent: `rules:
+  - pattern: "test.*"
+    use_claude: true`,
+			expectError:   true,
+			errorContains: "prompt field is required when use_claude is true",
+		},
+		{
+			name: "rule with no response mechanisms",
+			yamlContent: `rules:
+  - pattern: "test.*"`,
+			expectError:   true,
+			errorContains: "must provide either a response, alternatives, or use_claude configuration",
+		},
+		{
+			name: "multiple rules with one invalid",
+			yamlContent: `rules:
+  - pattern: "valid.*"
+    response: "Valid rule"
+  - pattern: "[invalid"
+    response: "Invalid rule"`,
+			expectError:   true,
+			errorContains: "rule 2 validation failed",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			validateConfigTest(t, tt)
+		})
+	}
+}
+
+type configTestCase struct {
+	name          string
+	yamlContent   string
+	errorContains string
+	expectError   bool
+}
+
+func validateConfigTest(t *testing.T, tt configTestCase) {
+	_, err := LoadFromYAML([]byte(tt.yamlContent))
+
+	if tt.expectError {
+		if err == nil {
+			t.Error("Expected error but got none")
+			return
+		}
+		if tt.errorContains != "" && !contains(err.Error(), tt.errorContains) {
+			t.Errorf("Expected error to contain '%s', got: %s", tt.errorContains, err.Error())
+		}
+	} else if err != nil {
+		t.Errorf("Expected no error, got: %v", err)
+	}
+}
+
+// Helper function for substring checking
+func contains(s, substr string) bool {
+	return strings.Contains(s, substr)
 }

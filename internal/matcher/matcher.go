@@ -54,12 +54,13 @@ func matchSinglePattern(pattern, command string) bool {
 
 // matchWildcardPattern handles glob patterns with wildcards
 func matchWildcardPattern(pattern, command string) bool {
-	// Convert glob pattern to prefix matching for commands
-	if strings.HasSuffix(pattern, "*") {
+	// For simple suffix wildcards, use prefix matching (more intuitive for command patterns)
+	if strings.HasSuffix(pattern, "*") && !strings.Contains(pattern[:len(pattern)-1], "*") {
 		prefix := strings.TrimSuffix(pattern, "*")
 		return strings.HasPrefix(command, prefix)
 	}
-	// Use filepath.Match for more complex glob patterns
+
+	// Use filepath.Match for complex glob patterns
 	matched, err := filepath.Match(pattern, command)
 	if err != nil {
 		// If glob pattern is invalid, fall back to exact match
