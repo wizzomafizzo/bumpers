@@ -35,9 +35,10 @@ func TestEndToEndHookProcessing(t *testing.T) {
 
 	// Simulate hook input
 	hookInput := `{
-		"command": "go test ./...",
-		"args": ["go", "test", "./..."],
-		"cwd": "/path/to/project"
+		"tool_input": {
+			"command": "go test ./...",
+			"description": "Run tests"
+		}
 	}`
 
 	// Parse hook event
@@ -47,7 +48,7 @@ func TestEndToEndHookProcessing(t *testing.T) {
 	}
 
 	// Match rule
-	rule, err := ruleMatcher.Match(event.Command)
+	rule, err := ruleMatcher.Match(event.ToolInput.Command)
 	if err != nil {
 		if errors.Is(err, matcher.ErrNoRuleMatch) {
 			t.Fatal("Expected rule match for go test command, but got no match")

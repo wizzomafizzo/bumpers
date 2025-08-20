@@ -8,6 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/wizzomafizzo/bumpers/internal/claude/settings"
+	"github.com/wizzomafizzo/bumpers/internal/cli"
 )
 
 // createClaudeBackupCommand creates the claude backup command.
@@ -83,11 +84,56 @@ func buildMainRootCommand() *cobra.Command {
 	rootCmd := &cobra.Command{
 		Use:   "bumpers",
 		Short: "Claude Code hook guard",
+		Run: func(cmd *cobra.Command, _ []string) {
+			configFlag, _ := cmd.PersistentFlags().GetString("config")
+			app := cli.NewApp(configFlag)
+
+			response, err := app.ProcessHook(os.Stdin)
+			if err != nil {
+				_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				os.Exit(1) //nolint:revive // CLI command exit is acceptable
+			}
+
+			if response != "" {
+				_, _ = fmt.Fprintf(os.Stderr, "%s\n", response)
+				os.Exit(2) //nolint:revive // CLI command exit is acceptable
+			}
+		},
+	}
+
+	installCmd := &cobra.Command{
+		Use:   "install",
+		Short: "Install bumpers configuration and Claude hooks",
+		Run: func(cmd *cobra.Command, _ []string) {
+			configFlag, _ := cmd.Parent().PersistentFlags().GetString("config")
+			app := cli.NewApp(configFlag)
+
+			err := app.Initialize()
+			if err != nil {
+				_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				os.Exit(1) //nolint:revive // CLI command exit is acceptable
+			}
+
+			_, _ = fmt.Println("Bumpers installed successfully!")
+		},
 	}
 
 	testCmd := &cobra.Command{
 		Use:   "test [command]",
 		Short: "Test a command against current rules",
+		Args:  cobra.ExactArgs(1),
+		Run: func(cmd *cobra.Command, args []string) {
+			configFlag, _ := cmd.Parent().PersistentFlags().GetString("config")
+			app := cli.NewApp(configFlag)
+
+			result, err := app.TestCommand(args[0])
+			if err != nil {
+				_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				os.Exit(1) //nolint:revive // CLI command exit is acceptable
+			}
+
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), result)
+		},
 	}
 
 	statusCmd := &cobra.Command{
@@ -103,8 +149,11 @@ func buildMainRootCommand() *cobra.Command {
 	claudeCmd.AddCommand(createClaudeBackupCommand())
 	claudeCmd.AddCommand(createClaudeRestoreCommand())
 
+	// Add persistent config flag
+	rootCmd.PersistentFlags().StringP("config", "c", "bumpers.yml", "Path to config file")
+
 	// Add subcommands
-	rootCmd.AddCommand(testCmd, statusCmd, claudeCmd)
+	rootCmd.AddCommand(installCmd, testCmd, statusCmd, claudeCmd)
 
 	return rootCmd
 }

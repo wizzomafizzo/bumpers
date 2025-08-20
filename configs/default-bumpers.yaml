@@ -1,3 +1,6 @@
+# Bumpers Configuration
+# This file defines rules for command guarding in Claude Code
+
 # Claude Binary Configuration (optional)
 # By default, Bumpers automatically detects Claude in these locations:
 #   1. ~/.claude/local/claude (local installation)
@@ -15,9 +18,8 @@ rules:
       Use make test instead for better TDD integration
       
       Try one of these alternatives:
-      • make test          # Run all tests
-      • make test-unit     # Run unit tests only
-    use_claude: "no"
+      - make test          # Run all tests
+      - make test-unit     # Run unit tests only
 
   - name: "dangerous-rm"
     pattern: "rm -rf /*"
@@ -28,8 +30,8 @@ rules:
       This command could delete important system files!
       
       Safer alternatives:
-      • Be more specific with your rm command
-      • Use safer alternatives like moving to trash
-      • Double-check the path before using -rf flags
+      - Be more specific with your rm command
+      - Use safer alternatives like moving to trash
+      - Double-check the path before using -rf flags
     use_claude: "yes"
     prompt: "Explain why this rm command is dangerous and suggest safer alternatives"

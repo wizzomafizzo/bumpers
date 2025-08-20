@@ -139,7 +139,7 @@ func (e *ClaudeNotFoundError) Error() string {
 	_, _ = msg.WriteString("\nTo resolve this issue:\n")
 	_, _ = msg.WriteString("  1. Install Claude Code from https://claude.ai/code\n")
 	_, _ = msg.WriteString("  2. Ensure Claude is in your PATH\n")
-	_, _ = msg.WriteString("  3. Or specify the path in bumpers.yaml: claude_binary: \"/path/to/claude\"\n")
+	_, _ = msg.WriteString("  3. Or specify the path in bumpers.yml: claude_binary: \"/path/to/claude\"\n")
 
 	return msg.String()
 }

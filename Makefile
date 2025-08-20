@@ -41,7 +41,6 @@ build:
 test:
 	@echo "Running tests on $(PKG)..."
 ifdef TDDGUARD_AVAILABLE
-	@echo "TDD Guard detected - integrating test reporting..."
 	$(GOTEST) -json -v $(RACE_FLAG) -coverprofile=coverage.txt -covermode=atomic $(PKG) 2>&1 | tdd-guard-go -project-root $(PROJECT_ROOT)
 else
 	$(GOTEST) -v $(RACE_FLAG) -coverprofile=coverage.txt -covermode=atomic $(PKG)
@@ -100,5 +99,3 @@ help:
 	@echo "Examples:"
 	@echo "  make test PKG=./internal/config    - Test config package only"
 	@echo "  make test PKG=./internal/cli       - Test CLI package only"
-	@echo ""
-	@echo "Note: Test commands automatically integrate with tdd-guard-go if available"

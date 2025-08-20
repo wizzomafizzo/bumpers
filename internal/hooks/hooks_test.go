@@ -9,9 +9,10 @@ func TestParseHookInput(t *testing.T) {
 	t.Parallel()
 
 	jsonInput := `{
-		"command": "go test ./...",
-		"args": ["go", "test", "./..."],
-		"cwd": "/path/to/project"
+		"tool_input": {
+			"command": "go test ./...",
+			"description": "Run tests"
+		}
 	}`
 
 	event, err := ParseHookInput(strings.NewReader(jsonInput))
@@ -19,15 +20,7 @@ func TestParseHookInput(t *testing.T) {
 		t.Fatalf("Expected no error, got %v", err)
 	}
 
-	if event.Command != "go test ./..." {
-		t.Errorf("Expected command 'go test ./...', got %s", event.Command)
-	}
-
-	if len(event.Args) != 3 {
-		t.Fatalf("Expected 3 args, got %d", len(event.Args))
-	}
-
-	if event.Args[0] != "go" {
-		t.Errorf("Expected first arg 'go', got %s", event.Args[0])
+	if event.ToolInput.Command != "go test ./..." {
+		t.Errorf("Expected command 'go test ./...', got %s", event.ToolInput.Command)
 	}
 }

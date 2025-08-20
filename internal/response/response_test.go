@@ -37,10 +37,12 @@ func TestFormatResponseWithNewStructure(t *testing.T) {
 	t.Parallel()
 
 	rule := &config.Rule{
-		Name:     "block-go-test",
-		Pattern:  "go test*",
-		Action:   "deny",
-		Response: "Use make test instead for better TDD integration\n\nTry one of these alternatives:\n• make test          # Run all tests\n• make test-unit     # Run unit tests only",
+		Name:    "block-go-test",
+		Pattern: "go test*",
+		Action:  "deny",
+		Response: "Use make test instead for better TDD integration\n\n" +
+			"Try one of these alternatives:\n• make test          # Run all tests\n" +
+			"• make test-unit     # Run unit tests only",
 	}
 
 	response := FormatResponse(rule)
@@ -53,7 +55,7 @@ func TestFormatResponseWithNewStructure(t *testing.T) {
 	if !contains(response, "Use make test instead") {
 		t.Error("Response should contain the rule response")
 	}
-	
+
 	if !contains(response, "alternatives") {
 		t.Error("Response should contain alternatives within the response text")
 	}

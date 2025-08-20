@@ -6,6 +6,7 @@ import (
 
 	"github.com/wizzomafizzo/bumpers/internal/config"
 	"github.com/wizzomafizzo/bumpers/internal/hooks"
+	"github.com/wizzomafizzo/bumpers/internal/logger"
 	"github.com/wizzomafizzo/bumpers/internal/matcher"
 	"github.com/wizzomafizzo/bumpers/internal/response"
 )
@@ -28,11 +29,12 @@ func (a *App) ProcessHook(input io.Reader) (string, error) {
 	// Load config and match rules
 	cfg, err := config.LoadFromFile(a.configPath)
 	if err != nil {
+		logger.Error("Failed to load config file", "path", a.configPath, "error", err)
 		return "", err //nolint:wrapcheck // Config file path is known from app context
 	}
 
 	ruleMatcher := matcher.NewRuleMatcher(cfg.Rules)
-	rule, err := ruleMatcher.Match(event.Command)
+	rule, err := ruleMatcher.Match(event.ToolInput.Command)
 	if err != nil {
 		if errors.Is(err, matcher.ErrNoRuleMatch) {
 			// No rule matched, command is allowed

@@ -5,10 +5,13 @@ import (
 	"io"
 )
 
+type ToolInput struct {
+	Command     string `json:"command"`
+	Description string `json:"description"`
+}
+
 type HookEvent struct {
-	Command string   `json:"command"`
-	Cwd     string   `json:"cwd"`
-	Args    []string `json:"args"`
+	ToolInput ToolInput `json:"tool_input"` //nolint:tagliatelle // API uses snake_case
 }
 
 func ParseHookInput(reader io.Reader) (*HookEvent, error) {

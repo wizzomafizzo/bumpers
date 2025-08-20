@@ -84,14 +84,14 @@ func TestLoadConfigWithNewStructure(t *testing.T) {
 
 	rule := config.Rules[0]
 	if rule.Response == "" {
-		t.Errorf("Expected response to be populated")
+		t.Error("Expected response to be populated")
 	}
-	
+
 	// For now, UseClaude is still a bool, so this test checks the zero value
 	if rule.UseClaude {
 		t.Errorf("Expected UseClaude to be false (zero value), got %v", rule.UseClaude)
 	}
-	
+
 	if rule.Prompt != "Explain why direct go test is discouraged" {
 		t.Errorf("Expected prompt to be set correctly, got %s", rule.Prompt)
 	}

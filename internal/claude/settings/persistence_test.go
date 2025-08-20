@@ -4,7 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 )
 
 func TestLoadFromFile(t *testing.T) {
@@ -143,10 +142,15 @@ func TestCreateBackup(t *testing.T) {
 	}
 }
 
-func TestListBackups(t *testing.T) {
+func TestBackupHelpers(t *testing.T) {
 	t.Parallel()
 	tempDir := t.TempDir()
 	settingsFile := filepath.Join(tempDir, "settings.json")
+
+	// Initially no backup should exist
+	if HasBackup(settingsFile) {
+		t.Error("HasBackup should return false when no backup exists")
+	}
 
 	// Create original settings file
 	settings := &Settings{OutputStyle: "explanatory"}
@@ -155,28 +159,21 @@ func TestListBackups(t *testing.T) {
 		t.Fatalf("Failed to create settings file: %v", err)
 	}
 
-	// Create multiple backups
-	_, err = CreateBackup(settingsFile)
+	// Create backup
+	backupPath, err := CreateBackup(settingsFile)
 	if err != nil {
-		t.Fatalf("Failed to create first backup: %v", err)
+		t.Fatalf("Failed to create backup: %v", err)
 	}
 
-	// Add a small delay to ensure different timestamps
-	time.Sleep(time.Second)
-
-	_, err = CreateBackup(settingsFile)
-	if err != nil {
-		t.Fatalf("Failed to create second backup: %v", err)
+	// Check backup path is correct
+	expectedPath := GetBackupPath(settingsFile)
+	if backupPath != expectedPath {
+		t.Errorf("Backup path mismatch: expected %s, got %s", expectedPath, backupPath)
 	}
 
-	// Test listing backups
-	backups, err := ListBackups(settingsFile)
-	if err != nil {
-		t.Fatalf("ListBackups failed: %v", err)
-	}
-
-	if len(backups) < 2 {
-		t.Errorf("Expected at least 2 backups, got %d", len(backups))
+	// Now backup should exist
+	if !HasBackup(settingsFile) {
+		t.Error("HasBackup should return true when backup exists")
 	}
 }
 
@@ -234,76 +231,9 @@ func TestRestoreFromBackup(t *testing.T) {
 	}
 }
 
-func TestSaveToFileAtomically(t *testing.T) {
+func TestRestoreFromBackup_Simple(t *testing.T) {
 	t.Parallel()
-	// Create a temporary file for testing
-	tmpDir := t.TempDir()
-	settingsFile := filepath.Join(tmpDir, "settings.json")
-
-	// Create initial settings
-	settings := &Settings{
-		OutputStyle: "explanatory",
-		Model:       "claude-3-5-sonnet-20241022",
-	}
-
-	// Test atomic save operation
-	err := SaveToFileAtomically(settings, settingsFile)
-	if err != nil {
-		t.Fatalf("SaveToFileAtomically failed: %v", err)
-	}
-
-	// Verify file was created and has correct content
-	if _, statErr := os.Stat(settingsFile); os.IsNotExist(statErr) {
-		t.Fatal("Settings file was not created")
-	}
-
-	// Load and verify content
-	loadedSettings, err := LoadFromFile(settingsFile)
-	if err != nil {
-		t.Fatalf("Failed to load settings: %v", err)
-	}
-
-	if loadedSettings.OutputStyle != settings.OutputStyle {
-		t.Errorf("OutputStyle mismatch. Expected: %s, Got: %s", settings.OutputStyle, loadedSettings.OutputStyle)
-	}
-
-	if loadedSettings.Model != settings.Model {
-		t.Errorf("Model mismatch. Expected: %s, Got: %s", settings.Model, loadedSettings.Model)
-	}
-}
-
-func TestSaveToFileAtomicallyWithTempFile(t *testing.T) {
-	t.Parallel()
-	// Test that atomic save uses temporary files
-	tmpDir := t.TempDir()
-	settingsFile := filepath.Join(tmpDir, "settings.json")
-
-	settings := &Settings{
-		OutputStyle: "explanatory",
-		Model:       "claude-3-5-sonnet-20241022",
-	}
-
-	// Mock the atomic save to verify temp file usage
-	err := SaveToFileAtomicallyWithTempFile(settings, settingsFile)
-	if err != nil {
-		t.Fatalf("SaveToFileAtomicallyWithTempFile failed: %v", err)
-	}
-
-	// Verify the final file exists and temp file is cleaned up
-	if _, err := os.Stat(settingsFile); os.IsNotExist(err) {
-		t.Fatal("Settings file was not created")
-	}
-
-	// Verify no temp file remains
-	tmpFile := settingsFile + ".tmp"
-	if _, err := os.Stat(tmpFile); !os.IsNotExist(err) {
-		t.Error("Temporary file was not cleaned up")
-	}
-}
-
-func TestRestoreFromBackupAtomic(t *testing.T) {
-	t.Parallel()
-	// Test that RestoreFromBackup uses atomic operations to prevent corruption
+	// Test that RestoreFromBackup correctly restores from backup
 	tempDir := t.TempDir()
 	settingsFile := filepath.Join(tempDir, "settings.json")
 
@@ -339,15 +269,7 @@ func TestRestoreFromBackupAtomic(t *testing.T) {
 		t.Fatalf("RestoreFromBackup failed: %v", err)
 	}
 
-	// Verify atomic operation by checking that the current implementation
-	// SHOULD use temporary files but currently doesn't (this will fail until we implement atomic restore)
-	// This test documents the expected behavior for atomic operations
-	tmpFile := settingsFile + ".tmp"
-
-	// Check if the function uses the same atomic pattern as SaveToFileAtomically
-	// For now, we'll check that the operation completed successfully
-	// TODO: This test should verify atomic behavior matches SaveToFileAtomically pattern
-	_ = tmpFile // Variable defined for future atomic behavior verification
+	// Test restore operation completed successfully
 
 	// Verify content was restored correctly
 	restoredSettings, err := LoadFromFile(settingsFile)
@@ -358,5 +280,63 @@ func TestRestoreFromBackupAtomic(t *testing.T) {
 	if restoredSettings.OutputStyle != originalSettings.OutputStyle {
 		t.Errorf("Restored output style mismatch: expected %s, got %s",
 			originalSettings.OutputStyle, restoredSettings.OutputStyle)
+	}
+}
+
+func TestLoadInitializesHooksField(t *testing.T) {
+	t.Parallel()
+
+	// Create JSON with hooks field that might not properly initialize pointers
+	jsonContent := `{"hooks":{"PreToolUse":[]},"permissions":{"allow":["test"]}}`
+
+	tempFile := filepath.Join(t.TempDir(), "test-hooks.json")
+	err := os.WriteFile(tempFile, []byte(jsonContent), 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Load settings
+	settings, err := LoadFromFile(tempFile)
+	if err != nil {
+		t.Fatalf("Expected no error loading settings, got: %v", err)
+	}
+
+	// Hooks field should be initialized and ready for modifications
+	if settings.Hooks == nil {
+		t.Error("Expected Hooks field to be initialized after loading")
+	}
+
+	// Should be able to add a hook without issues
+	hookCmd := HookCommand{
+		Type:    "command",
+		Command: "test-command",
+		Timeout: 30,
+	}
+
+	err = settings.AddHook(PreToolUseEvent, "TestMatcher", hookCmd)
+	if err != nil {
+		t.Fatalf("Expected no error adding hook, got: %v", err)
+	}
+
+	// Hook should be present
+	if len(settings.Hooks.PreToolUse) != 1 {
+		t.Errorf("Expected 1 hook in PreToolUse, got %d", len(settings.Hooks.PreToolUse))
+	}
+
+	// Now save and reload to ensure persistence
+	tempSaveFile := filepath.Join(t.TempDir(), "test-save.json")
+	err = SaveToFile(settings, tempSaveFile)
+	if err != nil {
+		t.Fatalf("Expected no error saving settings, got: %v", err)
+	}
+
+	// Reload and verify hook persisted
+	reloadedSettings, err := LoadFromFile(tempSaveFile)
+	if err != nil {
+		t.Fatalf("Expected no error reloading settings, got: %v", err)
+	}
+
+	if len(reloadedSettings.Hooks.PreToolUse) != 1 {
+		t.Errorf("Expected 1 hook after reload, got %d", len(reloadedSettings.Hooks.PreToolUse))
 	}
 }

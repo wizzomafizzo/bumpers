@@ -74,27 +74,27 @@ func TestGlobPatternMatching(t *testing.T) {
 		{"partial match with args", "go test", "go test ./...", true},
 		{"partial match prefix", "go test", "make go test", true},
 		{"partial no match", "make test", "npm install", false},
-		
+
 		// Glob wildcard pattern (explicit)
 		{"glob wildcard start", "go test*", "go test", true},
 		{"glob wildcard with args", "go test*", "go test ./...", true},
 		{"glob wildcard with flags", "go test*", "go test -v", true},
 		{"glob wildcard no match prefix", "go test*", "make go test", false},
-		
+
 		// OR operator
 		{"or partial match within command", "npm|yarn|pnpm", "run npm install", true},
 		{"or simple match first", "npm|yarn|pnpm", "npm", true},
 		{"or simple match second", "npm|yarn|pnpm", "yarn", true},
 		{"or simple match third", "npm|yarn|pnpm", "pnpm", true},
 		{"or simple no match", "npm|yarn|pnpm", "bun", false},
-		
+
 		// Combined patterns
 		{"or with wildcards first", "npm *|yarn *|pnpm *", "npm install", true},
 		{"or with wildcards second", "npm *|yarn *|pnpm *", "yarn add", true},
 		{"or with wildcards third", "npm *|yarn *|pnpm *", "pnpm update", true},
 		{"or with wildcards no match simple", "npm *|yarn *|pnpm *", "npm", false},
 		{"or with wildcards no match other", "npm *|yarn *|pnpm *", "bun install", false},
-		
+
 		// Dangerous rm patterns
 		{"dangerous rm match 1", "rm -rf /*|rm -fr /*", "rm -rf /", true},
 		{"dangerous rm match 2", "rm -rf /*|rm -fr /*", "rm -rf /usr", true},
@@ -105,6 +105,8 @@ func TestGlobPatternMatching(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
 			rule := config.Rule{
 				Name:     "test-rule",
 				Pattern:  tc.pattern,
@@ -113,27 +115,36 @@ func TestGlobPatternMatching(t *testing.T) {
 			}
 
 			matcher := NewRuleMatcher([]config.Rule{rule})
-
 			match, err := matcher.Match(tc.command)
 
 			if tc.matches {
-				if err != nil {
-					t.Fatalf("Expected match but got error: %v", err)
-				}
-				if match == nil {
-					t.Fatal("Expected match but got nil")
-				}
+				assertMatch(t, match, err)
 			} else {
-				if err == nil {
-					t.Fatal("Expected no match but got one")
-				}
-				if !errors.Is(err, ErrNoRuleMatch) {
-					t.Errorf("Expected ErrNoRuleMatch, got %v", err)
-				}
-				if match != nil {
-					t.Errorf("Expected no match, got %v", match)
-				}
+				assertNoMatch(t, match, err)
 			}
 		})
+	}
+}
+
+func assertMatch(t *testing.T, match *config.Rule, err error) {
+	t.Helper()
+	if err != nil {
+		t.Fatalf("Expected match but got error: %v", err)
+	}
+	if match == nil {
+		t.Fatal("Expected match but got nil")
+	}
+}
+
+func assertNoMatch(t *testing.T, match *config.Rule, err error) {
+	t.Helper()
+	if err == nil {
+		t.Fatal("Expected no match but got one")
+	}
+	if !errors.Is(err, ErrNoRuleMatch) {
+		t.Errorf("Expected ErrNoRuleMatch, got %v", err)
+	}
+	if match != nil {
+		t.Errorf("Expected no match, got %v", match)
 	}
 }

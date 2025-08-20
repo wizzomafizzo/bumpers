@@ -13,7 +13,7 @@ func (*Editor) Load(filename string) (*Settings, error) {
 	return LoadFromFile(filename)
 }
 
-// Save saves settings to a file using atomic operations.
+// Save saves settings to a file.
 func (*Editor) Save(settings *Settings, filename string) error {
-	return SaveToFileAtomically(settings, filename)
+	return SaveToFile(settings, filename)
 }
