@@ -1,12 +1,19 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
 ## Project Overview
 
 Bumpers is a Claude Code hook guard utility that intercepts hook events and provides intelligent command guarding with positive guidance. Instead of just blocking commands, it suggests better alternatives using encouraging, educational messaging.
 
 ## Core Commands
+
+### CLI Usage
+```bash
+bumpers                    # Process hook input (main command)
+bumpers install           # Install configuration and Claude hooks
+bumpers test [command]    # Test a command against current rules
+bumpers claude backup     # Backup Claude settings.json
+bumpers claude restore    # Restore Claude settings from backup
+```
 
 ### Build & Development
 ```bash
@@ -54,9 +61,13 @@ The codebase follows standard Go project layout with clear separation of concern
 
 - **internal/response/** - Response generation for denied commands. Formats helpful alternative suggestions.
 
+- **internal/logger/** - Structured logging to .claude/bumpers/bumpers.log using slog with JSON format.
+
 - **internal/claude/** - Claude binary detection and execution:
   - **launcher.go** - Auto-detects Claude binary location with smart fallback
   - **settings/** - Claude settings.json management for hook configuration
+
+- **configs/** - Embedded default configuration (default-bumpers.yaml) for installation.
 
 ### Core Flow
 
@@ -69,11 +80,12 @@ The codebase follows standard Go project layout with clear separation of concern
 ### Configuration System
 
 Rules are defined in YAML with regex patterns:
-- **pattern**: Regex to match commands
-- **action**: "allow" or "deny"
-- **message**: User-friendly explanation
-- **alternatives**: List of better commands to suggest
+- **pattern**: Regex to match commands (any match results in denial)
+- **response**: User-friendly explanation and alternatives
 - **use_claude**: Enable Claude CLI integration for dynamic responses
+- **prompt**: Custom prompt for Claude when use_claude is enabled
+
+Installation creates bumpers.yaml and configures .claude/settings.local.json hooks automatically.
 
 ### Testing Approach
 

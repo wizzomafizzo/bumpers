@@ -43,10 +43,11 @@ func (a *App) ProcessHook(input io.Reader) (string, error) {
 		return "", err //nolint:wrapcheck // Rule matching errors are internal
 	}
 
-	if rule != nil && rule.Action == "deny" {
+	if rule != nil {
 		return response.FormatResponse(rule), nil
 	}
 
+	// This should never happen based on matcher logic, but Go requires a return
 	return "", nil
 }
 
@@ -67,8 +68,10 @@ func (a *App) TestCommand(command string) (string, error) {
 		return "", err //nolint:wrapcheck // Rule matching errors are internal
 	}
 
-	if rule != nil && rule.Action == "deny" {
-		return "Command blocked: " + response.FormatResponse(rule), nil
+	if rule != nil {
+		return response.FormatResponse(rule), nil
 	}
+
+	// This should never happen based on matcher logic, but Go requires a return
 	return "Command allowed", nil
 }

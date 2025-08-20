@@ -10,10 +10,8 @@ func TestFormatResponse(t *testing.T) {
 	t.Parallel()
 
 	rule := &config.Rule{
-		Name:    "block-go-test",
-		Pattern: "go test",
-		Action:  "deny",
-		Message: "Use make test instead for better TDD integration",
+		Pattern:  "go test",
+		Response: "Use make test instead for better TDD integration",
 		Alternatives: []string{
 			"make test          # Run all tests",
 			"make test-unit     # Run unit tests only",
@@ -37,9 +35,7 @@ func TestFormatResponseWithNewStructure(t *testing.T) {
 	t.Parallel()
 
 	rule := &config.Rule{
-		Name:    "block-go-test",
 		Pattern: "go test*",
-		Action:  "deny",
 		Response: "Use make test instead for better TDD integration\n\n" +
 			"Try one of these alternatives:\n• make test          # Run all tests\n" +
 			"• make test-unit     # Run unit tests only",

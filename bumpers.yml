@@ -1,13 +1,9 @@
 rules:
-  - name: "block-go-test"
-    pattern: "go test"
-    action: "deny"
+  - pattern: "go test"
     response: |
       Use "make test" instead for TDD integration:
       - make test                        # Run all tests
       - make test PKG=./internal/claude  # Test only a specific package
       See Makefile for more information.
-  - name: "block-gci"
-    pattern: "gci"
-    action: "deny"
-    response: Use "make lint-fx" instead to resolve formatting issues.
+  - pattern: "gci"
+    response: Use "make lint-fix" instead to resolve formatting issues.

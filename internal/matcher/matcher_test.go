@@ -11,10 +11,8 @@ func TestRuleMatcher(t *testing.T) {
 	t.Parallel()
 
 	rule := config.Rule{
-		Name:    "block-go-test",
-		Pattern: "go test*",
-		Action:  "deny",
-		Message: "Use make test instead",
+		Pattern:  "go test*",
+		Response: "Use make test instead",
 	}
 
 	matcher := NewRuleMatcher([]config.Rule{rule})
@@ -28,8 +26,8 @@ func TestRuleMatcher(t *testing.T) {
 		t.Fatal("Expected match, got nil")
 	}
 
-	if match.Name != "block-go-test" {
-		t.Errorf("Expected rule name 'block-go-test', got %s", match.Name)
+	if match.Pattern != "go test*" {
+		t.Errorf("Expected rule pattern 'go test*', got %s", match.Pattern)
 	}
 }
 
@@ -37,10 +35,8 @@ func TestRuleMatcherNoMatch(t *testing.T) {
 	t.Parallel()
 
 	rule := config.Rule{
-		Name:    "block-go-test",
-		Pattern: "go test*",
-		Action:  "deny",
-		Message: "Use make test instead",
+		Pattern:  "go test*",
+		Response: "Use make test instead",
 	}
 
 	matcher := NewRuleMatcher([]config.Rule{rule})
@@ -108,9 +104,7 @@ func TestGlobPatternMatching(t *testing.T) {
 			t.Parallel()
 
 			rule := config.Rule{
-				Name:     "test-rule",
 				Pattern:  tc.pattern,
-				Action:   "deny",
 				Response: "Test response",
 			}
 

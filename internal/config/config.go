@@ -12,23 +12,12 @@ type Config struct {
 }
 
 type Rule struct {
-	Name         string   `yaml:"name"`
 	Pattern      string   `yaml:"pattern"`
-	Action       string   `yaml:"action"`
-	Message      string   `yaml:"message,omitempty"`
 	Response     string   `yaml:"response,omitempty"`
-	ClaudePrompt string   `yaml:"claude_prompt,omitempty"`
 	Prompt       string   `yaml:"prompt,omitempty"`
 	Alternatives []string `yaml:"alternatives,omitempty"`
 	UseClaude    bool     `yaml:"use_claude,omitempty"`
 }
-
-type RuleAction string
-
-const (
-	ActionAllow RuleAction = "allow"
-	ActionDeny  RuleAction = "deny"
-)
 
 func LoadFromYAML(data []byte) (*Config, error) {
 	var config Config

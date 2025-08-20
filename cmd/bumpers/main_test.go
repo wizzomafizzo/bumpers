@@ -106,8 +106,8 @@ func TestTestCommandActuallyWorks(t *testing.T) {
 	}
 
 	result := output.String()
-	if !strings.Contains(result, "blocked") {
-		t.Errorf("Expected output to contain 'blocked', got: %s", result)
+	if !strings.Contains(result, "make test") {
+		t.Errorf("Expected output to contain 'make test', got: %s", result)
 	}
 }
 
@@ -128,11 +128,8 @@ func TestConfigFlagWorks(t *testing.T) { //nolint:paralleltest // changes workin
 	// Create a custom config file
 	customConfigPath := "custom-config.yaml"
 	err = os.WriteFile(customConfigPath, []byte(`rules:
-  - name: "test-rule"
-    pattern: "echo test"
-    action: "deny"
+  - pattern: "echo test"
     response: "Custom config loaded"
-    use_claude: "no"
 `), 0o600)
 	if err != nil {
 		t.Fatal(err)
@@ -153,7 +150,7 @@ func TestConfigFlagWorks(t *testing.T) { //nolint:paralleltest // changes workin
 	}
 
 	result := output.String()
-	if !strings.Contains(result, "Command blocked: Custom config loaded") {
+	if !strings.Contains(result, "Custom config loaded") {
 		t.Errorf("Expected output to contain custom config response, got: %s", result)
 	}
 }
@@ -177,11 +174,8 @@ func TestHookDeniedCommandOutputsToStderrAndExitsCode2(t *testing.T) {
 	// Create config with deny rule
 	configPath := "bumpers.yml"
 	err = os.WriteFile(configPath, []byte(`rules:
-  - name: "deny-test"
-    pattern: "go test"
-    action: "deny"
+  - pattern: "go test"
     response: "Test command blocked"
-    use_claude: "no"
 `), 0o600)
 	if err != nil {
 		t.Fatal(err)

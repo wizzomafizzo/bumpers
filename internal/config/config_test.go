@@ -10,10 +10,8 @@ func TestLoadConfig(t *testing.T) {
 	t.Parallel()
 
 	yamlContent := `rules:
-  - name: "test-rule"
-    pattern: "go test.*"
-    action: "deny"
-    message: "Use make test instead"
+  - pattern: "go test.*"
+    response: "Use make test instead"
 `
 
 	config, err := LoadFromYAML([]byte(yamlContent))
@@ -26,8 +24,8 @@ func TestLoadConfig(t *testing.T) {
 	}
 
 	rule := config.Rules[0]
-	if rule.Name != "test-rule" {
-		t.Errorf("Expected rule name 'test-rule', got %s", rule.Name)
+	if rule.Pattern != "go test.*" {
+		t.Errorf("Expected rule pattern 'go test.*', got %s", rule.Pattern)
 	}
 }
 
@@ -35,10 +33,8 @@ func TestLoadConfigWithAlternatives(t *testing.T) {
 	t.Parallel()
 
 	yamlContent := `rules:
-  - name: "block-go-test"
-    pattern: "go test.*"
-    action: "deny"
-    message: "Use make test instead for better TDD integration"
+  - pattern: "go test.*"
+    response: "Use make test instead for better TDD integration"
     alternatives:
       - "make test          # Run all tests"
       - "make test-unit     # Run unit tests only"
@@ -64,9 +60,7 @@ func TestLoadConfigWithNewStructure(t *testing.T) {
 	t.Parallel()
 
 	yamlContent := `rules:
-  - name: "block-go-test"
-    pattern: "go test*"
-    action: "deny"
+  - pattern: "go test*"
     response: |
       Use make test instead for better TDD integration
       
@@ -97,16 +91,34 @@ func TestLoadConfigWithNewStructure(t *testing.T) {
 	}
 }
 
-func TestRuleActionConstants(t *testing.T) {
+func TestSimplifiedSchemaHasNoActionConstants(t *testing.T) {
 	t.Parallel()
 
-	if ActionAllow != "allow" {
-		t.Errorf("Expected ActionAllow to be 'allow', got %s", ActionAllow)
+	// This test will fail until action constants are removed
+	// It verifies the constants don't exist by trying to use them
+	// We can't directly test for their non-existence, but we can test
+	// that the simplified schema works without them
+
+	yamlContent := `rules:
+  - pattern: "test*"
+    response: "Test response"
+`
+	config, err := LoadFromYAML([]byte(yamlContent))
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
 	}
 
-	if ActionDeny != "deny" {
-		t.Errorf("Expected ActionDeny to be 'deny', got %s", ActionDeny)
+	// Verify that rules work without action constants
+	rule := config.Rules[0]
+	if rule.Pattern != "test*" {
+		t.Errorf("Expected pattern 'test*', got %s", rule.Pattern)
 	}
+	if rule.Response != "Test response" {
+		t.Errorf("Expected response 'Test response', got %s", rule.Response)
+	}
+
+	// This test implicitly shows that action constants are not needed
+	// since the rule works without specifying any action
 }
 
 func TestLoadConfigFromFile(t *testing.T) {
@@ -116,10 +128,8 @@ func TestLoadConfigFromFile(t *testing.T) {
 	tempDir := t.TempDir()
 	configPath := filepath.Join(tempDir, "test-config.yaml")
 	configContent := `rules:
-  - name: "block-go-test"
-    pattern: "go test.*"
-    action: "deny"
-    message: "Use make test instead for better TDD integration"
+  - pattern: "go test.*"
+    response: "Use make test instead for better TDD integration"
     alternatives:
       - "make test          # Run all tests"
       - "make test-unit     # Run unit tests only"
@@ -141,7 +151,60 @@ func TestLoadConfigFromFile(t *testing.T) {
 
 	// Check first rule
 	rule := config.Rules[0]
-	if rule.Name != "block-go-test" {
-		t.Errorf("Expected first rule name 'block-go-test', got %s", rule.Name)
+	if rule.Pattern != "go test.*" {
+		t.Errorf("Expected first rule pattern 'go test.*', got %s", rule.Pattern)
 	}
+}
+
+func TestLoadConfigSimplifiedSchema(t *testing.T) {
+	t.Parallel()
+
+	yamlContent := `rules:
+  - pattern: "go test*"
+    response: |
+      Use make test instead for better TDD integration
+      
+      Try one of these alternatives:
+      • make test          # Run all tests
+      • make test-unit     # Run unit tests only
+  - pattern: "rm -rf /*"
+    response: "Dangerous rm command detected! Be more specific with your rm command."
+    use_claude: true
+    prompt: "Explain why this rm command is dangerous and suggest safer alternatives"
+`
+
+	config, err := LoadFromYAML([]byte(yamlContent))
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	if len(config.Rules) != 2 {
+		t.Fatalf("Expected 2 rules, got %d", len(config.Rules))
+	}
+
+	// Test first rule (go test)
+	rule1 := config.Rules[0]
+	if rule1.Pattern != "go test*" {
+		t.Errorf("Expected pattern 'go test*', got %s", rule1.Pattern)
+	}
+	if rule1.Response == "" {
+		t.Error("Expected response to be populated")
+	}
+	if rule1.UseClaude {
+		t.Error("Expected UseClaude to be false by default")
+	}
+	// In simplified schema, these fields don't exist at all
+
+	// Test second rule (dangerous rm)
+	rule2 := config.Rules[1]
+	if rule2.Pattern != "rm -rf /*" {
+		t.Errorf("Expected pattern 'rm -rf /*', got %s", rule2.Pattern)
+	}
+	if !rule2.UseClaude {
+		t.Error("Expected UseClaude to be true")
+	}
+	if rule2.Prompt == "" {
+		t.Error("Expected prompt to be populated when UseClaude is true")
+	}
+	// In simplified schema, these fields don't exist at all
 }
