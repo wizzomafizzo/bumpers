@@ -24,18 +24,15 @@ func NewApp(configPath string) *App {
 
 	// Resolve config path relative to project root if it's relative
 	resolvedConfigPath := configPath
-	//nolint:nestif,revive // Config resolution requires nested conditions for YAML fallback
-	if projectRoot != "" && !filepath.IsAbs(configPath) {
+	shouldResolve := projectRoot != "" && !filepath.IsAbs(configPath)
+	if shouldResolve {
 		resolvedConfigPath = filepath.Join(projectRoot, configPath)
+	}
 
-		// If bumpers.yml doesn't exist, try bumpers.yaml
-		if configPath == "bumpers.yml" {
-			if _, err := os.Stat(resolvedConfigPath); os.IsNotExist(err) {
-				yamlPath := filepath.Join(projectRoot, "bumpers.yaml")
-				if _, err := os.Stat(yamlPath); err == nil {
-					resolvedConfigPath = yamlPath
-				}
-			}
+	// If using default config name, try different extensions in order
+	if shouldResolve && configPath == "bumpers.yml" {
+		if _, err := os.Stat(resolvedConfigPath); os.IsNotExist(err) {
+			resolvedConfigPath = findAlternativeConfig(projectRoot)
 		}
 	}
 
@@ -43,6 +40,17 @@ func NewApp(configPath string) *App {
 		configPath:  resolvedConfigPath,
 		projectRoot: projectRoot,
 	}
+}
+
+func findAlternativeConfig(projectRoot string) string {
+	extensions := []string{"yaml", "toml", "json"}
+	for _, ext := range extensions {
+		candidatePath := filepath.Join(projectRoot, "bumpers."+ext)
+		if _, err := os.Stat(candidatePath); err == nil {
+			return candidatePath
+		}
+	}
+	return filepath.Join(projectRoot, "bumpers.yml") // fallback to original
 }
 
 // NewAppWithWorkDir creates a new App instance with an injectable working directory.
