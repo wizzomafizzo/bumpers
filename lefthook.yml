@@ -4,7 +4,7 @@ pre-commit:
     # Format and lint Go code
     golint:
       glob: "*.go"
-      run: make lint
+      run: just lint
       fail_text: "Linting failed. Please fix the issues and try again."
       stage_fixed: true
 
