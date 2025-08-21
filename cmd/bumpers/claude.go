@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -83,6 +84,22 @@ func createRootCommand() *cobra.Command {
 	return rootCmd
 }
 
+// processHookCommand processes hook input and returns exit code and error message
+func processHookCommand(configPath string, input io.Reader, _ io.Writer) (code int, response string) {
+	app := cli.NewApp(configPath)
+
+	response, err := app.ProcessHook(input)
+	if err != nil {
+		return 1, fmt.Sprintf("Error: %v", err)
+	}
+
+	if response != "" {
+		return 2, response // Exit code 2 for Claude Code hook blocking
+	}
+
+	return 0, ""
+}
+
 // createMainRootCommand creates the main root command
 func createMainRootCommand() *cobra.Command {
 	cmd := &cobra.Command{
@@ -91,17 +108,15 @@ func createMainRootCommand() *cobra.Command {
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			configFlag, _ := cmd.PersistentFlags().GetString("config")
-			app := cli.NewApp(configFlag)
 
-			response, err := app.ProcessHook(cmd.InOrStdin())
-			if err != nil {
-				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Error: %v\n", err)
-				return errors.New("hook processing failed")
+			exitCode, message := processHookCommand(configFlag, cmd.InOrStdin(), cmd.ErrOrStderr())
+
+			if message != "" {
+				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "%s\n", message)
 			}
 
-			if response != "" {
-				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "%s\n", response)
-				return errors.New("command denied")
+			if exitCode != 0 {
+				os.Exit(exitCode) //nolint:revive // Claude Code hooks require specific exit codes
 			}
 
 			return nil

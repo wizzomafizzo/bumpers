@@ -34,7 +34,7 @@ func (a *App) ProcessHook(input io.Reader) (string, error) {
 	}
 
 	// Load config and match rules
-	cfg, err := config.LoadFromFile(a.configPath)
+	cfg, err := config.Load(a.configPath)
 	if err != nil {
 		return "", err //nolint:wrapcheck // Config file path is known from app context
 	}
@@ -63,7 +63,7 @@ func (a *App) ProcessHook(input io.Reader) (string, error) {
 
 func (a *App) TestCommand(command string) (string, error) {
 	// Load config and match rules
-	cfg, err := config.LoadFromFile(a.configPath)
+	cfg, err := config.Load(a.configPath)
 	if err != nil {
 		return "", err //nolint:wrapcheck // Config file path is known from app context
 	}
@@ -92,7 +92,7 @@ func (a *App) TestCommand(command string) (string, error) {
 
 func (a *App) ValidateConfig() (string, error) {
 	// Load config file
-	cfg, err := config.LoadFromFile(a.configPath)
+	cfg, err := config.Load(a.configPath)
 	if err != nil {
 		return "", err //nolint:wrapcheck // Config file path is known from app context
 	}

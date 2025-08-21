@@ -3,39 +3,51 @@ package config
 import (
 	"errors"
 	"fmt"
-	"os"
 	"regexp"
+	"strings"
 
-	"gopkg.in/yaml.v3"
+	"github.com/spf13/viper"
 )
 
 type Config struct {
-	ClaudeBinary string        `yaml:"claude_binary,omitempty"`
-	Rules        []Rule        `yaml:"rules"`
-	Logging      LoggingConfig `yaml:"logging,omitempty"`
+	ClaudeBinary string        `yaml:"claude_binary,omitempty" mapstructure:"claude_binary"`
+	Rules        []Rule        `yaml:"rules" mapstructure:"rules"`
+	Logging      LoggingConfig `yaml:"logging,omitempty" mapstructure:"logging"`
 }
 
 type LoggingConfig struct {
-	Level      string `yaml:"level,omitempty"`       // debug, info, warn, error
-	Path       string `yaml:"path,omitempty"`        // custom log file path
-	MaxSize    int    `yaml:"max_size,omitempty"`    // MB per file
-	MaxBackups int    `yaml:"max_backups,omitempty"` // number of old files to keep
-	MaxAge     int    `yaml:"max_age,omitempty"`     // days to keep old files
+	Level      string `yaml:"level,omitempty" mapstructure:"level"`             // debug, info, warn, error
+	Path       string `yaml:"path,omitempty" mapstructure:"path"`               // custom log file path
+	MaxSize    int    `yaml:"max_size,omitempty" mapstructure:"max_size"`       // MB per file
+	MaxBackups int    `yaml:"max_backups,omitempty" mapstructure:"max_backups"` // number of old files to keep
+	MaxAge     int    `yaml:"max_age,omitempty" mapstructure:"max_age"`         // days to keep old files
 }
 
 type Rule struct {
-	Pattern      string   `yaml:"pattern"`
-	Response     string   `yaml:"response,omitempty"`
-	Prompt       string   `yaml:"prompt,omitempty"`
-	Alternatives []string `yaml:"alternatives,omitempty"`
-	UseClaude    bool     `yaml:"use_claude,omitempty"`
+	Pattern      string   `yaml:"pattern" mapstructure:"pattern"`
+	Response     string   `yaml:"response,omitempty" mapstructure:"response"`
+	Prompt       string   `yaml:"prompt,omitempty" mapstructure:"prompt"`
+	Alternatives []string `yaml:"alternatives,omitempty" mapstructure:"alternatives"`
+	UseClaude    bool     `yaml:"use_claude,omitempty" mapstructure:"use_claude"`
 }
 
-func LoadFromYAML(data []byte) (*Config, error) {
+func Load(path string) (*Config, error) {
+	viperInstance := viper.New()
+	viperInstance.SetConfigFile(path)
+
+	// Set defaults for logging
+	viperInstance.SetDefault("logging.level", "info")
+	viperInstance.SetDefault("logging.max_size", 10)
+	viperInstance.SetDefault("logging.max_backups", 3)
+	viperInstance.SetDefault("logging.max_age", 30)
+
+	if err := viperInstance.ReadInConfig(); err != nil {
+		return nil, fmt.Errorf("failed to read config: %w", err)
+	}
+
 	var config Config
-	err := yaml.Unmarshal(data, &config)
-	if err != nil {
-		return nil, err //nolint:wrapcheck // YAML parsing errors are self-explanatory
+	if err := viperInstance.Unmarshal(&config); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
 	}
 
 	if err := config.Validate(); err != nil {
@@ -45,12 +57,36 @@ func LoadFromYAML(data []byte) (*Config, error) {
 	return &config, nil
 }
 
-func LoadFromFile(filename string) (*Config, error) {
-	data, err := os.ReadFile(filename) //nolint:gosec // Config file path is provided by user, not arbitrary
-	if err != nil {
-		return nil, err //nolint:wrapcheck // File read errors include filename context
+// LoadFromYAML loads config from YAML bytes - helper for tests
+func LoadFromYAML(data []byte) (*Config, error) {
+	viperInstance := viper.New()
+	viperInstance.SetConfigType("yaml")
+
+	// Set defaults for logging
+	viperInstance.SetDefault("logging.level", "info")
+	viperInstance.SetDefault("logging.max_size", 10)
+	viperInstance.SetDefault("logging.max_backups", 3)
+	viperInstance.SetDefault("logging.max_age", 30)
+
+	if err := viperInstance.ReadConfig(strings.NewReader(string(data))); err != nil {
+		return nil, fmt.Errorf("failed to read config: %w", err)
 	}
-	return LoadFromYAML(data)
+
+	var config Config
+	if err := viperInstance.Unmarshal(&config); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
+	}
+
+	if err := config.Validate(); err != nil {
+		return nil, fmt.Errorf("config validation failed: %w", err)
+	}
+
+	return &config, nil
+}
+
+// LoadFromFile loads config from file - alias for Load function
+func LoadFromFile(filename string) (*Config, error) {
+	return Load(filename)
 }
 
 // Validate performs comprehensive config validation

@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/wizzomafizzo/bumpers/configs"
 	"github.com/wizzomafizzo/bumpers/internal/claude/settings"
 	"github.com/wizzomafizzo/bumpers/internal/logger"
 )
@@ -32,7 +31,19 @@ func (a *App) Initialize() error {
 
 	// Create config file if it doesn't exist
 	if _, statErr := os.Stat(a.configPath); os.IsNotExist(statErr) {
-		writeErr := os.WriteFile(a.configPath, []byte(configs.DefaultConfig), 0o600)
+		defaultConfig := `rules:
+  - pattern: "^go test"
+    response: |
+      Use "make test" instead for TDD integration:
+      - make test                        # Run all tests
+      - make test PKG=./internal/claude  # Test only a specific package
+      See Makefile for more information.
+  - pattern: "^(gci|go vet|goimports|gofumpt|go fmt)"
+    response: Use "make lint-fix" instead to resolve lint/formatting issues.
+  - pattern: "^cd /tmp"
+    response: Create a "tmp" directory in the project root instead.
+`
+		writeErr := os.WriteFile(a.configPath, []byte(defaultConfig), 0o600)
 		if writeErr != nil {
 			return writeErr //nolint:wrapcheck // file operation error is self-explanatory
 		}

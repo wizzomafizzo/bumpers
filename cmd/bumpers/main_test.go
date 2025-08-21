@@ -183,31 +183,17 @@ func TestHookDeniedCommandOutputsToStderrAndExitsCode2(t *testing.T) { //nolint:
 		}
 	}`
 
-	// Test main hook processing
-	rootCmd := buildMainRootCommand()
-	rootCmd.SetArgs([]string{"--config", configPath})
+	// Test hook processing function directly
+	var stderr bytes.Buffer
+	exitCode, message := processHookCommand(configPath, strings.NewReader(hookInput), &stderr)
 
-	var stdout, stderr bytes.Buffer
-	rootCmd.SetOut(&stdout)
-	rootCmd.SetErr(&stderr)
-	rootCmd.SetIn(strings.NewReader(hookInput))
-
-	err = rootCmd.Execute()
-
-	// Should exit with code 2 (this will be an ExitError)
-	if err == nil {
-		t.Fatal("Expected command to exit with non-zero code")
+	// Should exit with code 2 for Claude Code hook blocking
+	if exitCode != 2 {
+		t.Fatalf("Expected exit code 2, got %d", exitCode)
 	}
 
-	// Check stderr contains the denial message
-	stderrOutput := stderr.String()
-	if !strings.Contains(stderrOutput, "Test command blocked") {
-		t.Errorf("Expected stderr to contain denial message, got: %s", stderrOutput)
-	}
-
-	// Check stdout is empty (message should go to stderr)
-	stdoutOutput := stdout.String()
-	if stdoutOutput != "" {
-		t.Errorf("Expected stdout to be empty, got: %s", stdoutOutput)
+	// Check message contains the denial message
+	if !strings.Contains(message, "Test command blocked") {
+		t.Errorf("Expected message to contain denial message, got: %s", message)
 	}
 }

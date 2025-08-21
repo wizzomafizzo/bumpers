@@ -10,12 +10,20 @@ import (
 func TestLoadConfig(t *testing.T) {
 	t.Parallel()
 
+	tempDir := t.TempDir()
+	configFile := filepath.Join(tempDir, "test.yaml")
+
 	yamlContent := `rules:
   - pattern: "go test.*"
     response: "Use make test instead"
 `
 
-	config, err := LoadFromYAML([]byte(yamlContent))
+	err := os.WriteFile(configFile, []byte(yamlContent), 0o600)
+	if err != nil {
+		t.Fatalf("Failed to write test config: %v", err)
+	}
+
+	config, err := Load(configFile)
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -33,6 +41,9 @@ func TestLoadConfig(t *testing.T) {
 func TestLoadConfigWithAlternatives(t *testing.T) {
 	t.Parallel()
 
+	tempDir := t.TempDir()
+	configFile := filepath.Join(tempDir, "test.yaml")
+
 	yamlContent := `rules:
   - pattern: "go test.*"
     response: "Use make test instead for better TDD integration"
@@ -42,7 +53,12 @@ func TestLoadConfigWithAlternatives(t *testing.T) {
     use_claude: false
 `
 
-	config, err := LoadFromYAML([]byte(yamlContent))
+	err := os.WriteFile(configFile, []byte(yamlContent), 0o600)
+	if err != nil {
+		t.Fatalf("Failed to write test config: %v", err)
+	}
+
+	config, err := Load(configFile)
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -68,11 +84,19 @@ func TestLoadConfigWithNewStructure(t *testing.T) {
       Try one of these alternatives:
       • make test          # Run all tests
       • make test-unit     # Run unit tests only
-    use_claude: "no"
+    use_claude: false
     prompt: "Explain why direct go test is discouraged"
 `
 
-	config, err := LoadFromYAML([]byte(yamlContent))
+	tempDir := t.TempDir()
+	configFile := filepath.Join(tempDir, "test.yaml")
+
+	err := os.WriteFile(configFile, []byte(yamlContent), 0o600)
+	if err != nil {
+		t.Fatalf("Failed to write test config: %v", err)
+	}
+
+	config, err := Load(configFile)
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -104,7 +128,15 @@ func TestSimplifiedSchemaHasNoActionConstants(t *testing.T) {
   - pattern: "test*"
     response: "Test response"
 `
-	config, err := LoadFromYAML([]byte(yamlContent))
+	tempDir := t.TempDir()
+	configFile := filepath.Join(tempDir, "test.yaml")
+
+	err := os.WriteFile(configFile, []byte(yamlContent), 0o600)
+	if err != nil {
+		t.Fatalf("Failed to write test config: %v", err)
+	}
+
+	config, err := Load(configFile)
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -141,7 +173,7 @@ func TestLoadConfigFromFile(t *testing.T) {
 		t.Fatalf("Failed to create temp config: %v", err)
 	}
 
-	config, err := LoadFromFile(configPath)
+	config, err := Load(configPath)
 	if err != nil {
 		t.Fatalf("Expected no error loading config file, got %v", err)
 	}
@@ -174,7 +206,15 @@ func TestLoadConfigSimplifiedSchema(t *testing.T) {
     prompt: "Explain why this rm command is dangerous and suggest safer alternatives"
 `
 
-	config, err := LoadFromYAML([]byte(yamlContent))
+	tempDir := t.TempDir()
+	configFile := filepath.Join(tempDir, "test.yaml")
+
+	err := os.WriteFile(configFile, []byte(yamlContent), 0o600)
+	if err != nil {
+		t.Fatalf("Failed to write test config: %v", err)
+	}
+
+	config, err := Load(configFile)
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -357,7 +397,15 @@ rules:
   - pattern: "go test.*"
     response: "Use make test instead"`
 
-	config, err := LoadFromYAML([]byte(yamlContent))
+	tempDir := t.TempDir()
+	configFile := filepath.Join(tempDir, "test.yaml")
+
+	err := os.WriteFile(configFile, []byte(yamlContent), 0o600)
+	if err != nil {
+		t.Fatalf("Failed to write test config: %v", err)
+	}
+
+	config, err := Load(configFile)
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
