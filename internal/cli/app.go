@@ -21,8 +21,9 @@ func NewAppWithWorkDir(configPath, workDir string) *App {
 }
 
 type App struct {
+	logger     *logger.Logger
 	configPath string
-	workDir    string // Injectable working directory for testing
+	workDir    string
 }
 
 func (a *App) ProcessHook(input io.Reader) (string, error) {
@@ -35,11 +36,14 @@ func (a *App) ProcessHook(input io.Reader) (string, error) {
 	// Load config and match rules
 	cfg, err := config.LoadFromFile(a.configPath)
 	if err != nil {
-		logger.Error("Failed to load config file", "path", a.configPath, "error", err)
 		return "", err //nolint:wrapcheck // Config file path is known from app context
 	}
 
-	ruleMatcher := matcher.NewRuleMatcher(cfg.Rules)
+	ruleMatcher, err := matcher.NewRuleMatcher(cfg.Rules)
+	if err != nil {
+		return "", err //nolint:wrapcheck // Regex validation errors are internal
+	}
+
 	rule, err := ruleMatcher.Match(event.ToolInput.Command)
 	if err != nil {
 		if errors.Is(err, matcher.ErrNoRuleMatch) {
@@ -64,7 +68,11 @@ func (a *App) TestCommand(command string) (string, error) {
 		return "", err //nolint:wrapcheck // Config file path is known from app context
 	}
 
-	ruleMatcher := matcher.NewRuleMatcher(cfg.Rules)
+	ruleMatcher, err := matcher.NewRuleMatcher(cfg.Rules)
+	if err != nil {
+		return "", err //nolint:wrapcheck // Regex validation errors are internal
+	}
+
 	rule, err := ruleMatcher.Match(command)
 	if err != nil {
 		if errors.Is(err, matcher.ErrNoRuleMatch) {
@@ -80,4 +88,20 @@ func (a *App) TestCommand(command string) (string, error) {
 
 	// This should never happen based on matcher logic, but Go requires a return
 	return "Command allowed", nil
+}
+
+func (a *App) ValidateConfig() (string, error) {
+	// Load config file
+	cfg, err := config.LoadFromFile(a.configPath)
+	if err != nil {
+		return "", err //nolint:wrapcheck // Config file path is known from app context
+	}
+
+	// Validate regex patterns by trying to create matcher
+	_, err = matcher.NewRuleMatcher(cfg.Rules)
+	if err != nil {
+		return "", err //nolint:wrapcheck // Regex validation errors are internal
+	}
+
+	return "Configuration is valid", nil
 }

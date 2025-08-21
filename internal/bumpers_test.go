@@ -28,7 +28,10 @@ func TestEndToEndHookProcessing(t *testing.T) {
 	}
 
 	// Create matcher
-	ruleMatcher := matcher.NewRuleMatcher(cfg.Rules)
+	ruleMatcher, err := matcher.NewRuleMatcher(cfg.Rules)
+	if err != nil {
+		t.Fatalf("Failed to create rule matcher: %v", err)
+	}
 
 	// Simulate hook input
 	hookInput := `{

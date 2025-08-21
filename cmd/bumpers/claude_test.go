@@ -99,9 +99,9 @@ func TestStatusCommandShouldHaveRunFunction(t *testing.T) {
 		t.Fatalf("Status command not found: %v", err)
 	}
 
-	// Status command should have a Run function to be functional
-	if statusCmd.Run == nil {
-		t.Error("Status command should have a Run function to be functional")
+	// Status command should have a RunE function to be functional
+	if statusCmd.RunE == nil {
+		t.Error("Status command should have a RunE function to be functional")
 	}
 }
 
@@ -286,8 +286,7 @@ func TestRestoreCommandActualImplementation(t *testing.T) {
 	}
 }
 
-func TestCLIBackupCommandWithCurrentDirectory(t *testing.T) {
-	t.Parallel()
+func TestCLIBackupCommandWithCurrentDirectory(t *testing.T) { //nolint:paralleltest // changes working directory
 	// Create a temporary directory and change to it
 	testDir := t.TempDir()
 	originalDir, err := os.Getwd()
@@ -325,8 +324,7 @@ func TestCLIBackupCommandWithCurrentDirectory(t *testing.T) {
 	}
 }
 
-func TestBackupCommandOutput(t *testing.T) {
-	t.Parallel()
+func TestBackupCommandOutput(t *testing.T) { //nolint:paralleltest // changes working directory
 	// Create a temporary directory and change to it
 	testDir := t.TempDir()
 	originalDir, err := os.Getwd()
@@ -454,5 +452,57 @@ func TestRestoreCommandExecution(t *testing.T) { //nolint:paralleltest // change
 	if string(restoredContent) != originalContent {
 		t.Errorf("Restore command did not restore content. Expected: %s, Got: %s",
 			originalContent, string(restoredContent))
+	}
+}
+
+func TestValidateCommandExistence(t *testing.T) {
+	t.Parallel()
+
+	rootCmd := buildMainRootCommand()
+
+	validateCmd, _, err := rootCmd.Find([]string{"validate"})
+	if err != nil {
+		t.Fatalf("validate command not found: %v", err)
+	}
+
+	if validateCmd.Use != "validate" {
+		t.Errorf("Expected command use 'validate', got %s", validateCmd.Use)
+	}
+
+	if validateCmd.Short == "" {
+		t.Error("validate command should have a short description")
+	}
+}
+
+func TestValidateCommandExecution(t *testing.T) {
+	t.Parallel()
+
+	// Create a temporary config file
+	tempDir := t.TempDir()
+	configContent := `rules:
+  - pattern: "^go test"
+    response: "Use make test instead"`
+
+	configPath := filepath.Join(tempDir, "test-config.yaml")
+	err := os.WriteFile(configPath, []byte(configContent), 0o600)
+	if err != nil {
+		t.Fatalf("Failed to create temp config: %v", err)
+	}
+
+	rootCmd := buildMainRootCommand()
+	rootCmd.SetArgs([]string{"validate", "--config", configPath})
+
+	var buf bytes.Buffer
+	rootCmd.SetOut(&buf)
+	rootCmd.SetErr(&buf)
+
+	err = rootCmd.Execute()
+	if err != nil {
+		t.Fatalf("validate command execution failed: %v", err)
+	}
+
+	output := buf.String()
+	if output != "Configuration is valid\n" {
+		t.Errorf("Expected 'Configuration is valid', got %q", output)
 	}
 }

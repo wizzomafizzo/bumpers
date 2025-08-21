@@ -343,6 +343,47 @@ func validateConfigTest(t *testing.T, tt configTestCase) {
 	}
 }
 
+// Test logging configuration
+func TestConfigWithLogging(t *testing.T) {
+	t.Parallel()
+
+	yamlContent := `logging:
+  level: debug
+  path: /custom/log/path.log
+  max_size: 5
+  max_backups: 3
+  max_age: 7
+rules:
+  - pattern: "go test.*"
+    response: "Use make test instead"`
+
+	config, err := LoadFromYAML([]byte(yamlContent))
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	// Check logging configuration
+	if config.Logging.Level != "debug" {
+		t.Errorf("Expected logging level 'debug', got %s", config.Logging.Level)
+	}
+
+	if config.Logging.Path != "/custom/log/path.log" {
+		t.Errorf("Expected logging path '/custom/log/path.log', got %s", config.Logging.Path)
+	}
+
+	if config.Logging.MaxSize != 5 {
+		t.Errorf("Expected max_size 5, got %d", config.Logging.MaxSize)
+	}
+
+	if config.Logging.MaxBackups != 3 {
+		t.Errorf("Expected max_backups 3, got %d", config.Logging.MaxBackups)
+	}
+
+	if config.Logging.MaxAge != 7 {
+		t.Errorf("Expected max_age 7, got %d", config.Logging.MaxAge)
+	}
+}
+
 // Helper function for substring checking
 func contains(s, substr string) bool {
 	return strings.Contains(s, substr)

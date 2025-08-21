@@ -34,14 +34,12 @@ func TestInstallCommandHasRunFunction(t *testing.T) {
 		t.Fatalf("Expected install command to exist, got error: %v", err)
 	}
 
-	if installCmd.Run == nil {
-		t.Error("Expected install command to have Run function")
+	if installCmd.RunE == nil {
+		t.Error("Expected install command to have RunE function")
 	}
 }
 
-func TestInstallCommandActuallyWorks(t *testing.T) {
-	t.Parallel()
-
+func TestInstallCommandActuallyWorks(t *testing.T) { //nolint:paralleltest // uses global logger state
 	// Test that install command actually initializes
 	tempDir := t.TempDir()
 	originalDir, err := os.Getwd()
@@ -69,9 +67,7 @@ func TestInstallCommandActuallyWorks(t *testing.T) {
 	}
 }
 
-func TestTestCommandActuallyWorks(t *testing.T) {
-	t.Parallel()
-
+func TestTestCommandActuallyWorks(t *testing.T) { //nolint:paralleltest // uses global logger state
 	// Test that test command tests rules
 	tempDir := t.TempDir()
 	originalDir, err := os.Getwd()
@@ -155,9 +151,7 @@ func TestConfigFlagWorks(t *testing.T) { //nolint:paralleltest // changes workin
 	}
 }
 
-func TestHookDeniedCommandOutputsToStderrAndExitsCode2(t *testing.T) {
-	t.Parallel()
-
+func TestHookDeniedCommandOutputsToStderrAndExitsCode2(t *testing.T) { //nolint:paralleltest // changes working dir
 	// Test that denied commands output to stderr and exit with code 2 for Claude Code hooks
 	tempDir := t.TempDir()
 	originalDir, err := os.Getwd()
@@ -182,7 +176,12 @@ func TestHookDeniedCommandOutputsToStderrAndExitsCode2(t *testing.T) {
 	}
 
 	// Create hook input
-	hookInput := `{"tool": "Bash", "command": "go test ./..."}`
+	hookInput := `{
+		"tool_input": {
+			"command": "go test ./...",
+			"description": "Run tests"
+		}
+	}`
 
 	// Test main hook processing
 	rootCmd := buildMainRootCommand()

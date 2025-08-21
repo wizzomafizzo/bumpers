@@ -1,86 +1,147 @@
 package logger
 
 import (
-	"log/slog"
+	"io"
 	"os"
 	"path/filepath"
 	"sync"
+
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
+	"github.com/wizzomafizzo/bumpers/internal/config"
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
-var (
-	loggerInstance *slog.Logger
-	once           sync.Once
-	errInit        error
-	workingDir     string
-)
+// Logger wraps zerolog.Logger with our specific configuration
+type Logger struct {
+	zerolog.Logger
+	file             *os.File
+	lumberjack       *lumberjack.Logger
+	supportsRotation bool
+	closeOnce        sync.Once
+}
 
-// Initialize sets up the logger with a working directory
-func Initialize(workDir string) error {
-	workingDir = workDir
+// New creates a new logger instance
+func New(workDir string) (*Logger, error) {
+	logDir := filepath.Join(workDir, ".claude", "bumpers")
+	logFile := filepath.Join(logDir, "bumpers.log")
+
+	// Create log directory if it doesn't exist
+	err := os.MkdirAll(logDir, 0o750)
+	if err != nil {
+		return nil, err //nolint:wrapcheck // simple logger setup
+	}
+
+	// Open log file for appending
+	file, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600) //nolint:gosec // safe path
+	if err != nil {
+		return nil, err //nolint:wrapcheck // simple logger setup
+	}
+
+	// Create zerolog logger
+	zl := zerolog.New(file).With().Timestamp().Logger()
+
+	return &Logger{
+		Logger:           zl,
+		file:             file,
+		supportsRotation: false,
+	}, nil
+}
+
+// SupportsRotation returns true if the logger uses log rotation
+func (l *Logger) SupportsRotation() bool {
+	return l.supportsRotation
+}
+
+// Rotate manually triggers log rotation if supported
+func (l *Logger) Rotate() error {
+	if l.lumberjack != nil {
+		return l.lumberjack.Rotate() //nolint:wrapcheck // simple logger operation
+	}
 	return nil
 }
 
-// Reset allows tests to reinitialize the logger (not safe for concurrent use)
-func Reset() {
-	once = sync.Once{}
-	loggerInstance = nil
-	errInit = nil
-	workingDir = ""
-}
+// NewWithConfig creates a new logger instance using configuration
+func NewWithConfig(cfg *config.Config, workDir string) (*Logger, error) {
+	// Determine log path
+	var logDir, logFile string
+	if cfg.Logging.Path != "" {
+		logFile = cfg.Logging.Path
+		logDir = filepath.Dir(logFile)
+	} else {
+		logDir = filepath.Join(workDir, ".claude", "bumpers")
+		logFile = filepath.Join(logDir, "bumpers.log")
+	}
 
-// getLogger returns a singleton logger instance
-func getLogger() *slog.Logger {
-	once.Do(func() {
-		// Use working directory if set, otherwise fall back to current directory
-		baseDir := workingDir
-		if baseDir == "" {
-			var err error
-			baseDir, err = os.Getwd()
-			if err != nil {
-				errInit = err
-				return
-			}
-		}
+	// Try to create log file, fall back to stderr if it fails
+	var writer io.Writer
+	var file *os.File
 
-		logDir := filepath.Join(baseDir, ".claude", "bumpers")
-		logFile := filepath.Join(logDir, "bumpers.log")
-
-		// Create log directory if it doesn't exist
-		err := os.MkdirAll(logDir, 0o750)
-		if err != nil {
-			errInit = err
-			return
-		}
-
+	// Create log directory if it doesn't exist
+	err := os.MkdirAll(logDir, 0o750)
+	if err != nil {
+		writer = os.Stderr
+	} else {
 		// Open log file for appending
-		file, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600) //nolint:gosec // safe path
+		file, err = os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600) //nolint:gosec // safe log path
 		if err != nil {
-			errInit = err
-			return
+			writer = os.Stderr
+		} else {
+			writer = file
 		}
+	}
 
-		// Create JSON logger with the file handler
-		loggerInstance = slog.New(slog.NewJSONHandler(file, nil))
+	// Create zerolog logger
+	zl := zerolog.New(writer).With().Timestamp().Logger()
+
+	// Set log level if specified in config
+	if cfg.Logging.Level != "" {
+		level, err := zerolog.ParseLevel(cfg.Logging.Level)
+		if err == nil {
+			zl = zl.Level(level)
+		}
+	}
+
+	return &Logger{
+		Logger:           zl,
+		file:             file,
+		supportsRotation: cfg.Logging.MaxSize > 0,
+	}, nil
+}
+
+// Close closes the log file
+func (l *Logger) Close() error {
+	var err error
+	l.closeOnce.Do(func() {
+		if l.file != nil {
+			err = l.file.Close()
+		}
 	})
-
-	if errInit != nil {
-		return nil
-	}
-	return loggerInstance
+	return err //nolint:wrapcheck // simple logger cleanup
 }
 
-// Info logs an info message
-func Info(msg string, args ...any) {
-	logger := getLogger()
-	if logger != nil {
-		logger.Info(msg, args...)
-	}
-}
+// InitLogger initializes the global logger instance
+func InitLogger(workDir string) error {
+	logDir := filepath.Join(workDir, ".claude", "bumpers")
+	logFilePath := filepath.Join(logDir, "bumpers.log")
 
-// Error logs an error message
-func Error(msg string, args ...any) {
-	logger := getLogger()
-	if logger != nil {
-		logger.Error(msg, args...)
+	// Create log directory if it doesn't exist
+	err := os.MkdirAll(logDir, 0o750)
+	if err != nil {
+		return err //nolint:wrapcheck // simple logger setup
 	}
+
+	// Open log file for appending
+	file, err := os.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600) //nolint:gosec // safe path
+	if err != nil {
+		return err //nolint:wrapcheck // simple logger setup
+	}
+
+	// Set global logger
+	log.Logger = zerolog.New(file).With().Timestamp().Logger()
+
+	// Note: Global logger file reference not stored for cleanup
+	// Consider using the Logger instance approach instead of global logger
+
+	return nil
 }

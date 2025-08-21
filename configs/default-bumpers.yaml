@@ -11,7 +11,7 @@
 # claude_binary: "/path/to/your/claude"
 
 rules:
-  - pattern: "go test"
+  - pattern: "^go test"
     response: |
       Use make test instead for better TDD integration
       
@@ -19,7 +19,7 @@ rules:
       - make test          # Run all tests
       - make test-unit     # Run unit tests only
 
-  - pattern: "rm -rf /*"
+  - pattern: "^rm -rf /"
     response: |
       ⚠️  Dangerous rm command detected
       

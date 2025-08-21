@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -82,86 +83,131 @@ func createRootCommand() *cobra.Command {
 	return rootCmd
 }
 
-// buildMainRootCommand creates the main root command with all subcommands.
-func buildMainRootCommand() *cobra.Command {
-	rootCmd := &cobra.Command{
-		Use:   "bumpers",
-		Short: "Claude Code hook guard",
-		Run: func(cmd *cobra.Command, _ []string) {
+// createMainRootCommand creates the main root command
+func createMainRootCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:          "bumpers",
+		Short:        "Claude Code hook guard",
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			configFlag, _ := cmd.PersistentFlags().GetString("config")
 			app := cli.NewApp(configFlag)
 
-			response, err := app.ProcessHook(os.Stdin)
+			response, err := app.ProcessHook(cmd.InOrStdin())
 			if err != nil {
-				_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-				os.Exit(1) //nolint:revive // CLI command exit is acceptable
+				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Error: %v\n", err)
+				return errors.New("hook processing failed")
 			}
 
 			if response != "" {
-				_, _ = fmt.Fprintf(os.Stderr, "%s\n", response)
-				os.Exit(2) //nolint:revive // CLI command exit is acceptable
+				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "%s\n", response)
+				return errors.New("command denied")
 			}
+
+			return nil
 		},
 	}
+	return cmd
+}
 
-	installCmd := &cobra.Command{
+// createInstallCommand creates the install subcommand
+func createInstallCommand() *cobra.Command {
+	return &cobra.Command{
 		Use:   "install",
 		Short: "Install bumpers configuration and Claude hooks",
-		Run: func(cmd *cobra.Command, _ []string) {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			configFlag, _ := cmd.Parent().PersistentFlags().GetString("config")
 			app := cli.NewApp(configFlag)
 
 			err := app.Initialize()
 			if err != nil {
-				_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-				os.Exit(1) //nolint:revive // CLI command exit is acceptable
+				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Error: %v\n", err)
+				return errors.New("installation failed")
 			}
 
-			_, _ = fmt.Println("Bumpers installed successfully!")
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Bumpers installed successfully!")
+			return nil
 		},
 	}
+}
 
-	testCmd := &cobra.Command{
+// createTestCommand creates the test subcommand
+func createTestCommand() *cobra.Command {
+	return &cobra.Command{
 		Use:   "test [command]",
 		Short: "Test a command against current rules",
 		Args:  cobra.ExactArgs(1),
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			configFlag, _ := cmd.Parent().PersistentFlags().GetString("config")
 			app := cli.NewApp(configFlag)
 
 			result, err := app.TestCommand(args[0])
 			if err != nil {
-				_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-				os.Exit(1) //nolint:revive // CLI command exit is acceptable
+				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Error: %v\n", err)
+				return errors.New("test command failed")
 			}
 
 			_, _ = fmt.Fprintln(cmd.OutOrStdout(), result)
+			return nil
 		},
 	}
+}
 
-	statusCmd := &cobra.Command{
+// createStatusCommand creates the status subcommand
+func createStatusCommand() *cobra.Command {
+	return &cobra.Command{
 		Use:   "status",
 		Short: "Check hook status",
-		Run: func(cmd *cobra.Command, _ []string) {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			configPath, _ := cmd.Flags().GetString("config")
 			app := cli.NewApp(configPath)
 			status, err := app.Status()
 			if err != nil {
 				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Error: %v\n", err)
-				os.Exit(1) //nolint:revive // CLI command exit is acceptable
+				return errors.New("status check failed")
 			}
 			_, _ = fmt.Fprintln(cmd.OutOrStdout(), status)
+			return nil
 		},
 	}
+}
 
-	// Create Claude commands group
-	claudeCmd := createClaudeCommandGroup()
+// createValidateCommand creates the validate subcommand
+func createValidateCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "validate",
+		Short: "Validate configuration file",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			configFlag, _ := cmd.Parent().PersistentFlags().GetString("config")
+			app := cli.NewApp(configFlag)
+
+			result, err := app.ValidateConfig()
+			if err != nil {
+				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Error: %v\n", err)
+				return errors.New("configuration validation failed")
+			}
+
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), result)
+			return nil
+		},
+	}
+}
+
+// buildMainRootCommand creates the main root command with all subcommands.
+func buildMainRootCommand() *cobra.Command {
+	rootCmd := createMainRootCommand()
 
 	// Add persistent config flag
 	rootCmd.PersistentFlags().StringP("config", "c", "bumpers.yml", "Path to config file")
 
 	// Add subcommands
-	rootCmd.AddCommand(installCmd, testCmd, statusCmd, claudeCmd)
+	rootCmd.AddCommand(
+		createInstallCommand(),
+		createTestCommand(),
+		createStatusCommand(),
+		createValidateCommand(),
+		createClaudeCommandGroup(),
+	)
 
 	return rootCmd
 }

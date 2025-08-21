@@ -10,8 +10,17 @@ import (
 )
 
 type Config struct {
-	ClaudeBinary string `yaml:"claude_binary,omitempty"`
-	Rules        []Rule `yaml:"rules"`
+	ClaudeBinary string        `yaml:"claude_binary,omitempty"`
+	Rules        []Rule        `yaml:"rules"`
+	Logging      LoggingConfig `yaml:"logging,omitempty"`
+}
+
+type LoggingConfig struct {
+	Level      string `yaml:"level,omitempty"`       // debug, info, warn, error
+	Path       string `yaml:"path,omitempty"`        // custom log file path
+	MaxSize    int    `yaml:"max_size,omitempty"`    // MB per file
+	MaxBackups int    `yaml:"max_backups,omitempty"` // number of old files to keep
+	MaxAge     int    `yaml:"max_age,omitempty"`     // days to keep old files
 }
 
 type Rule struct {

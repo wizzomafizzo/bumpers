@@ -2,16 +2,34 @@ package matcher
 
 import (
 	"errors"
-	"path/filepath"
-	"strings"
+	"regexp"
 
 	"github.com/wizzomafizzo/bumpers/internal/config"
 )
 
-var ErrNoRuleMatch = errors.New("no rule matched the command")
+var (
+	ErrNoRuleMatch  = errors.New("no rule matched the command")
+	ErrInvalidRegex = errors.New("invalid regex pattern")
+)
 
-func NewRuleMatcher(rules []config.Rule) *RuleMatcher {
-	return &RuleMatcher{rules: rules}
+func NewRuleMatcher(rules []config.Rule) (*RuleMatcher, error) {
+	// Validate all patterns can be compiled as regex
+	for _, rule := range rules {
+		if err := validatePattern(rule.Pattern); err != nil {
+			return nil, err
+		}
+	}
+
+	return &RuleMatcher{rules: rules}, nil
+}
+
+// validatePattern checks if a pattern can be used for matching
+func validatePattern(pattern string) error {
+	// Try to compile as regex to validate syntax
+	if _, err := regexp.Compile(pattern); err != nil {
+		return ErrInvalidRegex
+	}
+	return nil
 }
 
 type RuleMatcher struct {
@@ -20,51 +38,13 @@ type RuleMatcher struct {
 
 func (m *RuleMatcher) Match(command string) (*config.Rule, error) {
 	for i := range m.rules {
-		matched := matchPattern(m.rules[i].Pattern, command)
-		if matched {
+		re, err := regexp.Compile(m.rules[i].Pattern)
+		if err != nil {
+			continue
+		}
+		if re.MatchString(command) {
 			return &m.rules[i], nil
 		}
 	}
 	return nil, ErrNoRuleMatch
-}
-
-// matchPattern handles glob-style patterns with OR operations
-func matchPattern(pattern, command string) bool {
-	// Split pattern by OR operator
-	orPatterns := strings.Split(pattern, "|")
-
-	for _, p := range orPatterns {
-		p = strings.TrimSpace(p)
-		if matchSinglePattern(p, command) {
-			return true
-		}
-	}
-	return false
-}
-
-// matchSinglePattern matches a single pattern against a command
-func matchSinglePattern(pattern, command string) bool {
-	// Check if pattern contains wildcards
-	if strings.Contains(pattern, "*") {
-		return matchWildcardPattern(pattern, command)
-	}
-	// Partial match (contains)
-	return strings.Contains(command, pattern)
-}
-
-// matchWildcardPattern handles glob patterns with wildcards
-func matchWildcardPattern(pattern, command string) bool {
-	// For simple suffix wildcards, use prefix matching (more intuitive for command patterns)
-	if strings.HasSuffix(pattern, "*") && !strings.Contains(pattern[:len(pattern)-1], "*") {
-		prefix := strings.TrimSuffix(pattern, "*")
-		return strings.HasPrefix(command, prefix)
-	}
-
-	// Use filepath.Match for complex glob patterns
-	matched, err := filepath.Match(pattern, command)
-	if err != nil {
-		// If glob pattern is invalid, fall back to exact match
-		return pattern == command
-	}
-	return matched
 }
