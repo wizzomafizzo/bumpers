@@ -26,6 +26,18 @@ See Makefile for more information.`,
 				Response: `Create a "tmp" directory in the project root instead.`,
 			},
 		},
+		Commands: []Command{
+			{
+				Message: "Available commands:\\n!help - Show this help\\n!status - Show project status\\n" +
+					"!docs - Open documentation",
+			},
+			{
+				Message: "Project Status: All systems operational",
+			},
+			{
+				Message: "📚 Documentation: Visit https://github.com/wizzomafizzo/bumpers for usage guides and examples",
+			},
+		},
 		Logging: LoggingConfig{
 			Level:      "info",
 			MaxSize:    10,

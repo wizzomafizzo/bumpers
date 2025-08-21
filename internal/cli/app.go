@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -82,10 +83,21 @@ func (a *App) loadConfigAndMatcher() (*config.Config, *matcher.RuleMatcher, erro
 }
 
 func (a *App) ProcessHook(input io.Reader) (string, error) {
-	// Parse hook input to get command
-	event, err := hooks.ParseInput(input)
+	// Detect hook type and get raw JSON
+	hookType, rawJSON, err := hooks.DetectHookType(input)
 	if err != nil {
-		return "", fmt.Errorf("failed to parse hook input: %w", err)
+		return "", fmt.Errorf("failed to detect hook type: %w", err)
+	}
+
+	// Handle UserPromptSubmit hooks
+	if hookType == hooks.UserPromptSubmitHook {
+		return a.ProcessUserPrompt(rawJSON)
+	}
+
+	// Handle PreToolUse hooks (existing logic)
+	var event hooks.HookEvent
+	if unmarshalErr := json.Unmarshal(rawJSON, &event); unmarshalErr != nil {
+		return "", fmt.Errorf("failed to parse hook input: %w", unmarshalErr)
 	}
 
 	// Load config and match rules

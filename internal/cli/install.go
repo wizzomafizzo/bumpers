@@ -169,14 +169,25 @@ func (a *App) installClaudeHooks() error {
 		return err
 	}
 
-	// Try to add hook, if it already exists, remove and re-add it
+	// Try to add PreToolUse hook, if it already exists, remove and re-add it
 	err = claudeSettings.AddHook(settings.PreToolUseEvent, "Bash", hookCmd)
 	if err != nil {
 		// If hook already exists, remove it first then add the new one
 		_ = claudeSettings.RemoveHook(settings.PreToolUseEvent, "Bash")
 		err = claudeSettings.AddHook(settings.PreToolUseEvent, "Bash", hookCmd)
 		if err != nil {
-			return fmt.Errorf("failed to add bumpers hook to Claude settings: %w", err)
+			return fmt.Errorf("failed to add bumpers PreToolUse hook to Claude settings: %w", err)
+		}
+	}
+
+	// Try to add UserPromptSubmit hook, if it already exists, remove and re-add it
+	err = claudeSettings.AddHook(settings.UserPromptSubmitEvent, ".*", hookCmd)
+	if err != nil {
+		// If hook already exists, remove it first then add the new one
+		_ = claudeSettings.RemoveHook(settings.UserPromptSubmitEvent, ".*")
+		err = claudeSettings.AddHook(settings.UserPromptSubmitEvent, ".*", hookCmd)
+		if err != nil {
+			return fmt.Errorf("failed to add bumpers UserPromptSubmit hook to Claude settings: %w", err)
 		}
 	}
 

@@ -7,6 +7,25 @@ import (
 	"testing"
 )
 
+// Helper function to test config loading with basic rule validation
+func testConfigLoading(t *testing.T, configFile, expectedPattern string) {
+	t.Helper()
+
+	config, err := Load(configFile)
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	if len(config.Rules) != 1 {
+		t.Fatalf("Expected 1 rule, got %d", len(config.Rules))
+	}
+
+	rule := config.Rules[0]
+	if rule.Pattern != expectedPattern {
+		t.Errorf("Expected rule pattern '%s', got %s", expectedPattern, rule.Pattern)
+	}
+}
+
 func TestLoadConfig(t *testing.T) {
 	t.Parallel()
 
@@ -23,19 +42,7 @@ func TestLoadConfig(t *testing.T) {
 		t.Fatalf("Failed to write test config: %v", err)
 	}
 
-	config, err := Load(configFile)
-	if err != nil {
-		t.Fatalf("Expected no error, got %v", err)
-	}
-
-	if len(config.Rules) != 1 {
-		t.Fatalf("Expected 1 rule, got %d", len(config.Rules))
-	}
-
-	rule := config.Rules[0]
-	if rule.Pattern != "go test.*" {
-		t.Errorf("Expected rule pattern 'go test.*', got %s", rule.Pattern)
-	}
+	testConfigLoading(t, configFile, "go test.*")
 }
 
 func TestLoadConfigWithAlternatives(t *testing.T) {
@@ -499,6 +506,11 @@ func TestDefaultConfig(t *testing.T) {
 	}
 
 	validateLoggingDefaults(t, config)
+
+	// Check for example commands
+	if len(config.Commands) == 0 {
+		t.Error("Expected default config to have example commands")
+	}
 }
 
 func TestDefaultConfigYAML(t *testing.T) {
@@ -529,5 +541,64 @@ func TestDefaultConfigYAML(t *testing.T) {
 		if !strings.Contains(yamlStr, pattern) {
 			t.Errorf("Expected YAML to contain %q, got:\n%s", pattern, yamlStr)
 		}
+	}
+}
+
+// Test the Commands feature
+func TestConfigWithCommands(t *testing.T) {
+	t.Parallel()
+
+	yamlContent := `rules:
+  - pattern: "go test.*"
+    response: "Use make test instead"
+commands:
+  - message: "Available commands:\\n!help - Show this help\\n!status - Show project status"
+  - message: "Project Status: All systems operational"`
+
+	config, err := LoadFromYAML([]byte(yamlContent))
+	if err != nil {
+		t.Fatalf("Expected no error loading config with commands, got %v", err)
+	}
+
+	// Test rules are still loaded
+	if len(config.Rules) != 1 {
+		t.Fatalf("Expected 1 rule, got %d", len(config.Rules))
+	}
+
+	// Test commands are loaded
+	if len(config.Commands) != 2 {
+		t.Fatalf("Expected 2 commands, got %d", len(config.Commands))
+	}
+
+	expectedMessages := []string{
+		"Available commands:\\n!help - Show this help\\n!status - Show project status",
+		"Project Status: All systems operational",
+	}
+
+	for i, cmd := range config.Commands {
+		if cmd.Message != expectedMessages[i] {
+			t.Errorf("Expected command %d message %q, got %q", i, expectedMessages[i], cmd.Message)
+		}
+	}
+}
+
+// Test validation allows empty rules if commands are present
+func TestConfigValidationWithCommands(t *testing.T) {
+	t.Parallel()
+
+	yamlContent := `commands:
+  - message: "Help command response"`
+
+	config, err := LoadFromYAML([]byte(yamlContent))
+	if err != nil {
+		t.Fatalf("Expected no error loading config with commands only, got %v", err)
+	}
+
+	if len(config.Commands) != 1 {
+		t.Fatalf("Expected 1 command, got %d", len(config.Commands))
+	}
+
+	if len(config.Rules) != 0 {
+		t.Fatalf("Expected 0 rules, got %d", len(config.Rules))
 	}
 }
