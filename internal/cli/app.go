@@ -4,15 +4,45 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 
 	"github.com/wizzomafizzo/bumpers/internal/config"
 	"github.com/wizzomafizzo/bumpers/internal/hooks"
 	"github.com/wizzomafizzo/bumpers/internal/logger"
 	"github.com/wizzomafizzo/bumpers/internal/matcher"
+	"github.com/wizzomafizzo/bumpers/internal/project"
 )
 
 func NewApp(configPath string) *App {
-	return &App{configPath: configPath}
+	// Detect project root
+	projectRoot, err := project.FindRoot()
+	if err != nil {
+		// Fall back to current working directory if project root detection fails
+		projectRoot = ""
+	}
+
+	// Resolve config path relative to project root if it's relative
+	resolvedConfigPath := configPath
+	//nolint:nestif,revive // Config resolution requires nested conditions for YAML fallback
+	if projectRoot != "" && !filepath.IsAbs(configPath) {
+		resolvedConfigPath = filepath.Join(projectRoot, configPath)
+
+		// If bumpers.yml doesn't exist, try bumpers.yaml
+		if configPath == "bumpers.yml" {
+			if _, err := os.Stat(resolvedConfigPath); os.IsNotExist(err) {
+				yamlPath := filepath.Join(projectRoot, "bumpers.yaml")
+				if _, err := os.Stat(yamlPath); err == nil {
+					resolvedConfigPath = yamlPath
+				}
+			}
+		}
+	}
+
+	return &App{
+		configPath:  resolvedConfigPath,
+		projectRoot: projectRoot,
+	}
 }
 
 // NewAppWithWorkDir creates a new App instance with an injectable working directory.
@@ -22,9 +52,10 @@ func NewAppWithWorkDir(configPath, workDir string) *App {
 }
 
 type App struct {
-	logger     *logger.Logger
-	configPath string
-	workDir    string
+	logger      *logger.Logger
+	configPath  string
+	workDir     string
+	projectRoot string
 }
 
 // loadConfigAndMatcher loads configuration and creates a rule matcher

@@ -15,7 +15,5 @@ rules:
 # TODO: "reminders" list that adds context at start of session
 # TODO: guided cli setup for adding rules
 # TODO: block_paths or something to stop editing
-# TODO: use the project root env var from claude
 # TODO: Write(/tmp/asdf) ../../../../tmp/asdf
 # TODO: custom !commands
-# TODO: nolint audit

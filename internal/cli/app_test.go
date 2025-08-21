@@ -845,3 +845,146 @@ func TestInstallUsesPathConstants(t *testing.T) {
 		t.Errorf("Expected settings file to be created at %s (using paths.SettingsFilename)", expectedSettingsFile)
 	}
 }
+
+// setupProjectStructure creates a temporary project structure for testing
+func setupProjectStructure(t *testing.T, configFileName string) (projectDir, subDir string, cleanup func()) {
+	t.Helper()
+
+	tempDir := t.TempDir()
+	projectDir = filepath.Join(tempDir, "my-project")
+	subDir = filepath.Join(projectDir, "internal", "cli")
+
+	err := os.MkdirAll(subDir, 0o750)
+	if err != nil {
+		t.Fatalf("Failed to create test directory: %v", err)
+	}
+
+	// Create go.mod file to mark project root
+	goModPath := filepath.Join(projectDir, "go.mod")
+	err = os.WriteFile(goModPath, []byte("module example.com/myproject\n"), 0o600)
+	if err != nil {
+		t.Fatalf("Failed to create go.mod file: %v", err)
+	}
+
+	// Create config file at project root
+	configPath := filepath.Join(projectDir, configFileName)
+	configContent := `
+rules:
+  - pattern: ".*dangerous.*"
+    response: "This command looks dangerous!"
+`
+	err = os.WriteFile(configPath, []byte(configContent), 0o600)
+	if err != nil {
+		t.Fatalf("Failed to create config file: %v", err)
+	}
+
+	// Setup cleanup function
+	originalCwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get current directory: %v", err)
+	}
+
+	cleanup = func() {
+		if cdErr := os.Chdir(originalCwd); cdErr != nil {
+			t.Errorf("Failed to restore original directory: %v", cdErr)
+		}
+	}
+
+	return projectDir, subDir, cleanup
+}
+
+func TestNewApp_ProjectRootDetection(t *testing.T) {
+	t.Parallel()
+
+	_, subDir, cleanup := setupProjectStructure(t, "bumpers.yml")
+	defer cleanup()
+
+	err := os.Chdir(subDir)
+	if err != nil {
+		t.Fatalf("Failed to change directory: %v", err)
+	}
+
+	// Test with relative config path
+	app := NewApp("bumpers.yml")
+
+	// Verify that the app can find and load the config from project root
+	result, err := app.ValidateConfig()
+	if err != nil {
+		t.Fatalf("ValidateConfig failed: %v", err)
+	}
+
+	if result != "Configuration is valid" {
+		t.Errorf("Expected configuration to be valid, got: %s", result)
+	}
+}
+
+func TestInstall_UsesProjectRoot(t *testing.T) {
+	t.Parallel()
+
+	projectDir, subDir, cleanup := setupProjectStructure(t, "bumpers.yml")
+	defer cleanup()
+
+	// Create bin directory and dummy bumpers binary at project root
+	binDir := filepath.Join(projectDir, "bin")
+	err := os.MkdirAll(binDir, 0o750)
+	if err != nil {
+		t.Fatalf("Failed to create bin directory: %v", err)
+	}
+
+	bumpersPath := filepath.Join(binDir, "bumpers")
+	err = os.WriteFile(bumpersPath, []byte("#!/bin/bash\necho test"), 0o600)
+	if err != nil {
+		t.Fatalf("Failed to create dummy bumpers binary: %v", err)
+	}
+
+	err = os.Chdir(subDir)
+	if err != nil {
+		t.Fatalf("Failed to change directory: %v", err)
+	}
+
+	// Test with relative config path
+	app := NewApp("bumpers.yml")
+
+	// Initialize should create .claude directory at project root
+	err = app.Initialize()
+	if err != nil {
+		t.Fatalf("Initialize failed: %v", err)
+	}
+
+	// Verify .claude directory was created at project root, not in subdirectory
+	expectedClaudeDir := filepath.Join(projectDir, paths.ClaudeDir)
+	if _, err := os.Stat(expectedClaudeDir); os.IsNotExist(err) {
+		t.Errorf("Expected .claude directory to be created at project root %s", expectedClaudeDir)
+	}
+
+	// Verify .claude directory was NOT created in subdirectory
+	wrongClaudeDir := filepath.Join(subDir, paths.ClaudeDir)
+	if _, err := os.Stat(wrongClaudeDir); !os.IsNotExist(err) {
+		t.Errorf("Expected .claude directory to NOT be created in subdirectory %s", wrongClaudeDir)
+	}
+}
+
+func TestNewApp_AutoFindsConfigFile(t *testing.T) {
+	t.Parallel()
+
+	_, subDir, cleanup := setupProjectStructure(t, "bumpers.yaml")
+	defer cleanup()
+
+	err := os.Chdir(subDir)
+	if err != nil {
+		t.Fatalf("Failed to change directory: %v", err)
+	}
+
+	// Test with default config path (should auto-find bumpers.yaml)
+	app := NewApp("bumpers.yml") // Default name, but file is bumpers.yaml
+
+	// Verify that the app can find and load the .yaml config from project root
+	result, err := app.ValidateConfig()
+	if err != nil {
+		t.Fatalf("ValidateConfig failed: %v", err)
+	}
+
+	if result != "Configuration is valid" {
+		t.Errorf("Expected configuration to be valid, got: %s", result)
+	}
+}

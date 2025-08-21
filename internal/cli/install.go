@@ -14,8 +14,11 @@ import (
 
 // Initialize sets up bumpers configuration and installs Claude hooks.
 func (a *App) Initialize() error {
-	// Get working directory for logger initialization
-	workingDir := a.workDir
+	// Get working directory for logger initialization - prefer project root
+	workingDir := a.projectRoot
+	if workingDir == "" {
+		workingDir = a.workDir
+	}
 	if workingDir == "" {
 		cwd, err := os.Getwd()
 		if err != nil {
@@ -143,7 +146,11 @@ func (a *App) createHookCommand(workingDir string) (settings.HookCommand, error)
 
 // installClaudeHooks installs bumpers as a PreToolUse hook in Claude settings.
 func (a *App) installClaudeHooks() error {
-	workingDir := a.workDir
+	// Get working directory - prefer project root
+	workingDir := a.projectRoot
+	if workingDir == "" {
+		workingDir = a.workDir
+	}
 	if workingDir == "" {
 		var err error
 		workingDir, err = os.Getwd()
