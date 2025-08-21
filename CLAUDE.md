@@ -17,30 +17,31 @@ bumpers claude restore    # Restore Claude settings from backup
 
 ### Build & Development
 ```bash
-make build          # Build binary to bin/bumpers
-make install        # Install to $GOPATH/bin
-make all            # Lint, test, and build (default)
+just build          # Build binary to bin/bumpers
+just install        # Install to $GOPATH/bin
+just                # Lint, test, and build (default)
 ```
 
 ### Testing
 ```bash
-make test                           # Run all tests with coverage
-make test PKG=./internal/config    # Test specific package
-make test PKG=./internal/cli       # Test CLI package only
+just test                           # Run all tests with coverage
+just test ./internal/config        # Test specific package
+just test ./internal/cli           # Test CLI package only
+just test ./... false              # Run all tests without race detection
+just test ./internal/config true   # Test specific package with race detection
 ```
 
-**IMPORTANT**: Always use `make test` instead of `go test` to ensure proper TDD guard integration and consistent test execution.
+**IMPORTANT**: Always use `just test` instead of `go test` to ensure proper TDD guard integration and consistent test execution.
 
 ### Code Quality
 ```bash
-make lint           # Run golangci-lint
-make lint-fix       # Run golangci-lint with auto-fix
-make check          # Run lint + test (pre-commit check)
+just lint           # Run golangci-lint
+just lint fix       # Run golangci-lint with auto-fix
 ```
 
 ### Clean Up
 ```bash
-make clean          # Remove build artifacts, coverage files, and bin/
+just clean          # Remove build artifacts, coverage files, and bin/
 ```
 
 ## Architecture

@@ -15,11 +15,7 @@ rules:
 # TODO: "reminders" list that adds context at start of session
 # TODO: guided cli setup for adding rules
 # TODO: block_paths or something to stop editing
-# TODO: get rid of completion command
-# TODO: get rid of the "default-bumpers.yaml" file
 # TODO: use the project root env var from claude
 # TODO: Write(/tmp/asdf) ../../../../tmp/asdf
 # TODO: custom !commands
-# TODO: use viper for config
-# TODO: use just for builds script
 # TODO: nolint audit
