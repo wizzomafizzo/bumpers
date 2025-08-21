@@ -26,17 +26,5 @@ func TestLoadViperJSON(t *testing.T) {
 		t.Fatalf("Failed to write test config: %v", err)
 	}
 
-	config, err := Load(configFile)
-	if err != nil {
-		t.Fatalf("Expected no error, got %v", err)
-	}
-
-	if len(config.Rules) != 1 {
-		t.Fatalf("Expected 1 rule, got %d", len(config.Rules))
-	}
-
-	rule := config.Rules[0]
-	if rule.Pattern != "go test.*" {
-		t.Errorf("Expected rule pattern 'go test.*', got %s", rule.Pattern)
-	}
+	testConfigLoading(t, configFile, "go test.*")
 }

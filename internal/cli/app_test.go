@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -519,6 +520,59 @@ func TestInstallActuallyAddsHook(t *testing.T) {
 
 	if !strings.Contains(contentStr, "bumpers") {
 		t.Error("Expected hook command to contain bumpers")
+	}
+}
+
+func TestInstallCreatesBothHooks(t *testing.T) {
+	t.Parallel()
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "bumpers.yml")
+
+	// Create bin directory and dummy bumpers binary
+	binDir := filepath.Join(tempDir, "bin")
+	err := os.MkdirAll(binDir, 0o750)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	bumpersPath := filepath.Join(binDir, "bumpers")
+	err = os.WriteFile(bumpersPath, []byte("#!/bin/bash\necho test"), 0o750) //nolint:gosec // exec perms
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Use the new constructor with working directory
+	app := NewAppWithWorkDir(configPath, tempDir)
+
+	err = app.Initialize()
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	// Check that both PreToolUse and UserPromptSubmit hooks were added
+	claudeDir := filepath.Join(tempDir, ".claude")
+	localSettingsPath := filepath.Join(claudeDir, "settings.local.json")
+	content, err := os.ReadFile(localSettingsPath) //nolint:gosec // test file path
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	contentStr := string(content)
+
+	// Check for PreToolUse hook with Bash matcher
+	if !strings.Contains(contentStr, `"matcher": "Bash"`) {
+		t.Error("Expected PreToolUse Bash hook to be added to settings.local.json")
+	}
+
+	// Check for UserPromptSubmit hook with .* matcher
+	if !strings.Contains(contentStr, `"matcher": ".*"`) {
+		t.Error("Expected UserPromptSubmit hook with .* matcher to be added to settings.local.json")
+	}
+
+	// Check that both hooks contain bumpers command
+	bashHookCount := strings.Count(contentStr, "bumpers")
+	if bashHookCount < 2 {
+		t.Errorf("Expected at least 2 bumpers hooks (PreToolUse and UserPromptSubmit), found %d", bashHookCount)
 	}
 }
 
@@ -1137,4 +1191,100 @@ func createAppWithPrecedenceConfig(projectDir, subDir string) *App {
 	}
 	app.configPath = resolvedConfigPath
 	return app
+}
+
+func TestProcessHookRoutesUserPromptSubmit(t *testing.T) {
+	t.Parallel()
+
+	configContent := `rules:
+  - pattern: "go test"
+    response: "Use make test instead"
+commands:
+  - message: "Available commands:\\n!help - Show this help\\n!status - Show project status"
+  - message: "Project Status: All systems operational"`
+
+	configPath := createTempConfig(t, configContent)
+	app := NewApp(configPath)
+
+	// Test UserPromptSubmit hook routing
+	userPromptInput := `{
+		"prompt": "!0"
+	}`
+
+	result, err := app.ProcessHook(strings.NewReader(userPromptInput))
+	if err != nil {
+		t.Fatalf("ProcessHook failed for UserPromptSubmit: %v", err)
+	}
+
+	expectedJSON := `{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit",` +
+		`"additionalContext":"Available commands:\\n!help - Show this help\\n!status - Show project status"}}`
+	if result != expectedJSON {
+		t.Errorf("Expected %q, got %q", expectedJSON, result)
+	}
+}
+
+func TestProcessUserPrompt(t *testing.T) {
+	t.Parallel()
+
+	configContent := `rules:
+  - pattern: "go test"
+    response: "Use make test instead"
+commands:
+  - message: "Available commands:\\n!help - Show this help\\n!status - Show project status"
+  - message: "Project Status: All systems operational"`
+
+	configPath := createTempConfig(t, configContent)
+	app := NewApp(configPath)
+
+	tests := []struct {
+		name           string
+		promptJSON     string
+		expectedOutput string
+	}{
+		{
+			name: "Command 0 (!0)",
+			promptJSON: `{
+				"prompt": "!0"
+			}`,
+			expectedOutput: `{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit",` +
+				`"additionalContext":"Available commands:\\n!help - Show this help\\n!status - Show project status"}}`,
+		},
+		{
+			name: "Command 1 (!1)",
+			promptJSON: `{
+				"prompt": "!1"
+			}`,
+			expectedOutput: `{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit",` +
+				`"additionalContext":"Project Status: All systems operational"}}`,
+		},
+		{
+			name: "Non-command prompt",
+			promptJSON: `{
+				"prompt": "regular question"
+			}`,
+			expectedOutput: "",
+		},
+		{
+			name: "Invalid command index (!5)",
+			promptJSON: `{
+				"prompt": "!5"
+			}`,
+			expectedOutput: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			result, err := app.ProcessUserPrompt(json.RawMessage(tt.promptJSON))
+			if err != nil {
+				t.Fatalf("ProcessUserPrompt failed: %v", err)
+			}
+
+			if result != tt.expectedOutput {
+				t.Errorf("Expected %q, got %q", tt.expectedOutput, result)
+			}
+		})
+	}
 }

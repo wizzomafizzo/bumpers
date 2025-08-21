@@ -5,8 +5,8 @@ rules:
       - just test                    # Run all tests
       - just test ./internal/claude  # Test only a specific package
       See "just --list" for more information.
-  - pattern: "^(gci|go vet|goimports|gofumpt|go fmt)"
-    response: Use "make lint-fix" instead to resolve lint/formatting issues.
+  - pattern: "^(gci|go vet|goimports|gofumpt|go fmt|gofmt)"
+    response: Use "just lint fix" instead to resolve lint/formatting issues.
   - pattern: "^cd /tmp"
     response: Create a "tmp" directory in the project root instead.
 
