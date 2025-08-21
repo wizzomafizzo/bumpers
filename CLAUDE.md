@@ -60,7 +60,6 @@ The codebase follows standard Go project layout with clear separation of concern
 
 - **internal/matcher/** - Pattern matching engine using Go regex. Matches commands against configured rules.
 
-- **internal/response/** - Response generation for denied commands. Formats helpful alternative suggestions.
 
 - **internal/logger/** - Structured logging to .claude/bumpers/bumpers.log using slog with JSON format.
 
@@ -73,9 +72,9 @@ The codebase follows standard Go project layout with clear separation of concern
 ### Core Flow
 
 1. **Hook Input**: Claude Code sends JSON to stdin when a hook is triggered
-2. **Command Extraction**: `hooks.ParseHookInput()` extracts the command
+2. **Command Extraction**: `hooks.ParseInput()` extracts the command
 3. **Rule Matching**: `matcher.RuleMatcher` checks command against YAML rules
-4. **Response Generation**: If denied, `response.FormatResponse()` creates helpful guidance
+4. **Response Generation**: If denied, creates helpful guidance
 5. **Exit Codes**: 0 = allowed, 1 = denied (with message to stdout)
 
 ### Configuration System

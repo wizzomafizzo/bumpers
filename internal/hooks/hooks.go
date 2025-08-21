@@ -2,6 +2,7 @@ package hooks
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 )
 
@@ -14,12 +15,12 @@ type HookEvent struct {
 	ToolInput ToolInput `json:"tool_input"` //nolint:tagliatelle // API uses snake_case
 }
 
-func ParseHookInput(reader io.Reader) (*HookEvent, error) {
+func ParseInput(reader io.Reader) (*HookEvent, error) {
 	var event HookEvent
 	decoder := json.NewDecoder(reader)
 	err := decoder.Decode(&event)
 	if err != nil {
-		return nil, err //nolint:wrapcheck // JSON decode errors are self-descriptive
+		return nil, fmt.Errorf("failed to decode hook input JSON: %w", err)
 	}
 	return &event, nil
 }

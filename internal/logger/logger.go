@@ -1,7 +1,7 @@
 package logger
 
 import (
-	"io"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
@@ -9,42 +9,44 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/wizzomafizzo/bumpers/internal/config"
+	"github.com/wizzomafizzo/bumpers/internal/paths"
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 
-// Logger wraps zerolog.Logger with our specific configuration
+// Logger wraps zerolog.Logger with lumberjack for automatic log rotation
 type Logger struct {
 	zerolog.Logger
-	file             *os.File
 	lumberjack       *lumberjack.Logger
 	supportsRotation bool
 	closeOnce        sync.Once
 }
 
-// New creates a new logger instance
+// New creates a new logger instance with automatic log rotation
 func New(workDir string) (*Logger, error) {
-	logDir := filepath.Join(workDir, ".claude", "bumpers")
-	logFile := filepath.Join(logDir, "bumpers.log")
+	logDir := filepath.Join(workDir, paths.ClaudeDir, paths.AppSubDir)
+	logFile := filepath.Join(logDir, paths.LogFilename)
 
 	// Create log directory if it doesn't exist
 	err := os.MkdirAll(logDir, 0o750)
 	if err != nil {
-		return nil, err //nolint:wrapcheck // simple logger setup
+		return nil, fmt.Errorf("failed to create log directory %s: %w", logDir, err)
 	}
 
-	// Open log file for appending
-	file, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600) //nolint:gosec // safe path
-	if err != nil {
-		return nil, err //nolint:wrapcheck // simple logger setup
+	// Create lumberjack logger for automatic rotation
+	lj := &lumberjack.Logger{
+		Filename:   logFile,
+		MaxSize:    10, // MB
+		MaxBackups: 3,
+		MaxAge:     30, // days
 	}
 
 	// Create zerolog logger
-	zl := zerolog.New(file).With().Timestamp().Logger()
+	zl := zerolog.New(lj).With().Timestamp().Logger()
 
 	return &Logger{
 		Logger:           zl,
-		file:             file,
-		supportsRotation: false,
+		lumberjack:       lj,
+		supportsRotation: true,
 	}, nil
 }
 
@@ -56,43 +58,66 @@ func (l *Logger) SupportsRotation() bool {
 // Rotate manually triggers log rotation if supported
 func (l *Logger) Rotate() error {
 	if l.lumberjack != nil {
-		return l.lumberjack.Rotate() //nolint:wrapcheck // simple logger operation
+		err := l.lumberjack.Rotate()
+		if err != nil {
+			return fmt.Errorf("failed to rotate log file: %w", err)
+		}
 	}
 	return nil
 }
 
-// NewWithConfig creates a new logger instance using configuration
+// NewWithConfig creates a new logger instance using configuration with lumberjack rotation
+// If cfg is nil, uses default configuration
 func NewWithConfig(cfg *config.Config, workDir string) (*Logger, error) {
-	// Determine log path
-	var logDir, logFile string
-	if cfg.Logging.Path != "" {
-		logFile = cfg.Logging.Path
-		logDir = filepath.Dir(logFile)
-	} else {
-		logDir = filepath.Join(workDir, ".claude", "bumpers")
-		logFile = filepath.Join(logDir, "bumpers.log")
-	}
-
-	// Try to create log file, fall back to stderr if it fails
-	var writer io.Writer
-	var file *os.File
-
-	// Create log directory if it doesn't exist
-	err := os.MkdirAll(logDir, 0o750)
-	if err != nil {
-		writer = os.Stderr
-	} else {
-		// Open log file for appending
-		file, err = os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600) //nolint:gosec // safe log path
-		if err != nil {
-			writer = os.Stderr
-		} else {
-			writer = file
+	// Use default config if none provided
+	if cfg == nil {
+		cfg = &config.Config{
+			Logging: config.LoggingConfig{
+				Level:      "info",
+				Path:       "",
+				MaxSize:    10,
+				MaxBackups: 3,
+				MaxAge:     30,
+			},
 		}
 	}
 
+	// Set defaults for lumberjack if not specified
+	if cfg.Logging.MaxSize == 0 {
+		cfg.Logging.MaxSize = 10
+	}
+	if cfg.Logging.MaxBackups == 0 {
+		cfg.Logging.MaxBackups = 3
+	}
+	if cfg.Logging.MaxAge == 0 {
+		cfg.Logging.MaxAge = 30
+	}
+
+	// Determine log path
+	var logFile string
+	if cfg.Logging.Path != "" {
+		logFile = cfg.Logging.Path
+	} else {
+		logDir := filepath.Join(workDir, paths.ClaudeDir, paths.AppSubDir)
+		logFile = filepath.Join(logDir, paths.LogFilename)
+
+		// Create log directory if it doesn't exist
+		err := os.MkdirAll(logDir, 0o750)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create log directory %s: %w", logDir, err)
+		}
+	}
+
+	// Create lumberjack logger for automatic rotation
+	lj := &lumberjack.Logger{
+		Filename:   logFile,
+		MaxSize:    cfg.Logging.MaxSize,    // MB
+		MaxBackups: cfg.Logging.MaxBackups, // number of old files to keep
+		MaxAge:     cfg.Logging.MaxAge,     // days
+	}
+
 	// Create zerolog logger
-	zl := zerolog.New(writer).With().Timestamp().Logger()
+	zl := zerolog.New(lj).With().Timestamp().Logger()
 
 	// Set log level if specified in config
 	if cfg.Logging.Level != "" {
@@ -104,17 +129,17 @@ func NewWithConfig(cfg *config.Config, workDir string) (*Logger, error) {
 
 	return &Logger{
 		Logger:           zl,
-		file:             file,
-		supportsRotation: cfg.Logging.MaxSize > 0,
+		lumberjack:       lj,
+		supportsRotation: true,
 	}, nil
 }
 
-// Close closes the log file
+// Close closes the lumberjack logger
 func (l *Logger) Close() error {
 	var err error
 	l.closeOnce.Do(func() {
-		if l.file != nil {
-			err = l.file.Close()
+		if l.lumberjack != nil {
+			err = l.lumberjack.Close()
 		}
 	})
 	return err //nolint:wrapcheck // simple logger cleanup
@@ -122,19 +147,19 @@ func (l *Logger) Close() error {
 
 // InitLogger initializes the global logger instance
 func InitLogger(workDir string) error {
-	logDir := filepath.Join(workDir, ".claude", "bumpers")
-	logFilePath := filepath.Join(logDir, "bumpers.log")
+	logDir := filepath.Join(workDir, paths.ClaudeDir, paths.AppSubDir)
+	logFilePath := filepath.Join(logDir, paths.LogFilename)
 
 	// Create log directory if it doesn't exist
 	err := os.MkdirAll(logDir, 0o750)
 	if err != nil {
-		return err //nolint:wrapcheck // simple logger setup
+		return fmt.Errorf("failed to create log directory %s: %w", logDir, err)
 	}
 
 	// Open log file for appending
 	file, err := os.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600) //nolint:gosec // safe path
 	if err != nil {
-		return err //nolint:wrapcheck // simple logger setup
+		return fmt.Errorf("failed to open log file %s: %w", logFilePath, err)
 	}
 
 	// Set global logger

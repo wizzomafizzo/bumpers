@@ -264,7 +264,7 @@ func executeRestoreCommand(backupPath, targetPath string) error {
 func runBackupFromCurrentDirectory() (string, error) {
 	currentDir, err := os.Getwd()
 	if err != nil {
-		return "", err //nolint:wrapcheck // stdlib error
+		return "", fmt.Errorf("failed to get current working directory: %w", err)
 	}
 
 	return executeBackupCommand(currentDir)

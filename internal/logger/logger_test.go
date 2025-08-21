@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/rs/zerolog/log"
 	"github.com/wizzomafizzo/bumpers/internal/config"
+	"github.com/wizzomafizzo/bumpers/internal/paths"
 )
 
 // testLoggerSetup creates a new logger instance and returns the temp directory and log file path
@@ -225,36 +225,37 @@ func TestLoggerSupportsRotation(t *testing.T) {
 	}
 }
 
-func TestLoggerFallbackToStderr(t *testing.T) {
+func TestLoggerWithLumberjackPermissionHandling(t *testing.T) {
 	t.Parallel()
-
-	// Use a read-only directory to force file creation to fail
-	readOnlyDir := t.TempDir()
-	err := os.Chmod(readOnlyDir, 0o444) //nolint:gosec // test setup needs readable directory
-	if err != nil {
-		t.Fatalf("Failed to make directory read-only: %v", err)
-	}
-	// Restore permissions for cleanup
-	defer func() { _ = os.Chmod(readOnlyDir, 0o755) }() //nolint:gosec // test cleanup
+	tempDir := t.TempDir()
 
 	cfg := &config.Config{
 		Logging: config.LoggingConfig{
-			Path: filepath.Join(readOnlyDir, "cannot-create.log"),
+			Path:       filepath.Join(tempDir, "test.log"),
+			MaxSize:    1,
+			MaxBackups: 1,
+			MaxAge:     1,
 		},
 	}
 
-	// This should not fail even if file creation fails - should fall back to stderr
+	// Create logger with specific file path
 	logger, err := NewWithConfig(cfg, "")
 	if err != nil {
-		t.Fatalf("NewWithConfig should not fail even if file creation fails, got: %v", err)
+		t.Fatalf("NewWithConfig failed: %v", err)
 	}
 	defer func() { _ = logger.Close() }()
 
-	// Test that logger still works (logs to stderr)
+	// Test that logger works with lumberjack
 	logger.Info().Str("fallback_test", "true").Msg("fallback message")
 
-	// We can't easily verify stderr output in tests, but the fact that
-	// logger creation didn't fail shows that fallback is working
+	// Verify lumberjack is configured correctly
+	if !logger.SupportsRotation() {
+		t.Error("Logger should support rotation with lumberjack")
+	}
+
+	if logger.lumberjack == nil {
+		t.Error("Logger should have lumberjack instance")
+	}
 }
 
 func TestLoggerRotateMethod(t *testing.T) {
@@ -318,35 +319,71 @@ func TestLoggerCloseIdempotent(t *testing.T) {
 	}
 }
 
-func TestInitLogger(t *testing.T) { //nolint:paralleltest // modifies global logger state
+func TestNewWithConfig_NilConfig(t *testing.T) {
+	t.Parallel()
 	tempDir := t.TempDir()
 
-	// Initialize global logger
-	err := InitLogger(tempDir)
+	// Test that NewWithConfig works with nil config
+	logger, err := NewWithConfig(nil, tempDir)
 	if err != nil {
-		t.Fatalf("InitLogger failed: %v", err)
+		t.Fatalf("NewWithConfig with nil config failed: %v", err)
 	}
+	defer func() {
+		_ = logger.Close()
+	}()
 
-	// Verify log file was created
+	// Logger should work normally with defaults
+	logger.Info().Msg("test message")
+
+	// Verify log file was created with default path
 	logFile := filepath.Join(tempDir, ".claude", "bumpers", "bumpers.log")
 	if _, err := os.Stat(logFile); os.IsNotExist(err) {
 		t.Errorf("Expected log file to be created at %s", logFile)
 	}
 }
 
-func TestInitLoggerSetsGlobalLogger(t *testing.T) { //nolint:paralleltest // modifies global logger state
+func TestLoggerUsesPathConstants(t *testing.T) {
+	t.Parallel()
 	tempDir := t.TempDir()
 
-	// Initialize global logger
-	err := InitLogger(tempDir)
+	logger, err := New(tempDir)
 	if err != nil {
-		t.Fatalf("InitLogger failed: %v", err)
+		t.Fatalf("New logger failed: %v", err)
+	}
+	defer func() {
+		_ = logger.Close()
+	}()
+
+	// Test message
+	logger.Info().Msg("test path constants")
+
+	// Verify the log file was created at the expected path using constants
+	expectedLogFile := filepath.Join(tempDir, paths.ClaudeDir, paths.AppSubDir, paths.LogFilename)
+	if _, err := os.Stat(expectedLogFile); os.IsNotExist(err) {
+		t.Errorf("Expected log file to be created at %s (using path constants)", expectedLogFile)
+	}
+}
+
+func TestLoggerAlwaysUsesLumberjack(t *testing.T) {
+	t.Parallel()
+	tempDir := t.TempDir()
+
+	// Test with nil config (should use defaults with lumberjack)
+	logger, err := NewWithConfig(nil, tempDir)
+	if err != nil {
+		t.Fatalf("NewWithConfig failed: %v", err)
+	}
+	defer func() {
+		_ = logger.Close()
+	}()
+
+	// Logger should always support rotation when using lumberjack
+	if !logger.SupportsRotation() {
+		t.Error("Logger should always support rotation with lumberjack")
 	}
 
-	// Use global logger to write a message
-	log.Info().Str("test", "global").Msg("test global logger message")
-
-	// Verify message was written to log file
-	logFile := filepath.Join(tempDir, ".claude", "bumpers", "bumpers.log")
-	verifyLogContent(t, logFile, "test global logger message", "\"test\":\"global\"")
+	// Logger should have lumberjack instance
+	if logger.lumberjack == nil {
+		t.Error("Logger should always have lumberjack instance")
+	}
 }

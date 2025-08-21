@@ -10,13 +10,13 @@ import (
 func LoadFromFile(filename string) (*Settings, error) {
 	data, err := os.ReadFile(filename) // #nosec G304
 	if err != nil {
-		return nil, err //nolint:wrapcheck // stdlib error
+		return nil, fmt.Errorf("failed to read settings file %s: %w", filename, err)
 	}
 
 	var settings Settings
 	err = json.Unmarshal(data, &settings)
 	if err != nil {
-		return nil, err //nolint:wrapcheck // stdlib error
+		return nil, fmt.Errorf("failed to parse settings JSON from %s: %w", filename, err)
 	}
 
 	return &settings, nil
@@ -26,10 +26,14 @@ func LoadFromFile(filename string) (*Settings, error) {
 func SaveToFile(settings *Settings, filename string) error {
 	data, err := json.MarshalIndent(settings, "", "  ")
 	if err != nil {
-		return err //nolint:wrapcheck // stdlib error
+		return fmt.Errorf("failed to marshal settings to JSON: %w", err)
 	}
 
-	return os.WriteFile(filename, data, 0o600) //nolint:wrapcheck // stdlib error
+	err = os.WriteFile(filename, data, 0o600)
+	if err != nil {
+		return fmt.Errorf("failed to write settings to file %s: %w", filename, err)
+	}
+	return nil
 }
 
 // CreateBackup creates a simple .bak backup of the settings file.

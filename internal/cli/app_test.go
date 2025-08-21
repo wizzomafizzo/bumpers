@@ -8,6 +8,7 @@ import (
 
 	"github.com/wizzomafizzo/bumpers/internal/config"
 	"github.com/wizzomafizzo/bumpers/internal/logger"
+	"github.com/wizzomafizzo/bumpers/internal/paths"
 )
 
 // createTempConfig creates a temporary config file for testing
@@ -309,6 +310,45 @@ func TestStatus(t *testing.T) {
 
 	if status == "" {
 		t.Error("Expected non-empty status message")
+	}
+}
+
+func TestStatusEnhanced(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "bumpers.yml")
+
+	// Create a config file
+	configContent := `rules:
+  - pattern: "go test"
+    response: "Use make test instead"`
+
+	err := os.WriteFile(configPath, []byte(configContent), 0o600)
+	if err != nil {
+		t.Fatalf("Failed to write config file: %v", err)
+	}
+
+	app := NewAppWithWorkDir(configPath, tempDir)
+
+	status, err := app.Status()
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	// Should contain status information
+	if !strings.Contains(status, "Bumpers Status:") {
+		t.Error("Expected status to contain 'Bumpers Status:'")
+	}
+
+	// Should show config file status
+	if !strings.Contains(status, "Config file: EXISTS") {
+		t.Error("Expected status to show config file exists")
+	}
+
+	// Should show config location
+	if !strings.Contains(status, configPath) {
+		t.Error("Expected status to show config file path")
 	}
 }
 
@@ -751,21 +791,57 @@ func TestValidateConfig(t *testing.T) {
 	}
 }
 
-func TestGlobalLoggerPattern(t *testing.T) {
+func TestInstallUsesPathConstants(t *testing.T) {
 	t.Parallel()
 	tempDir := t.TempDir()
 
-	// Test the global logger pattern we want to migrate to
-	err := logger.InitLogger(tempDir)
+	// Create a simple config file
+	configContent := `rules:
+  - pattern: "dangerous"
+    response: "Use safer alternatives"`
+	configPath := createTempConfig(t, configContent)
+
+	// Create bin directory and bumpers binary (required by Initialize)
+	binDir := filepath.Join(tempDir, "bin")
+	err := os.MkdirAll(binDir, 0o750)
 	if err != nil {
-		t.Fatalf("InitLogger failed: %v", err)
+		t.Fatalf("Failed to create bin directory: %v", err)
+	}
+	bumpersPath := filepath.Join(binDir, "bumpers")
+	err = os.WriteFile(bumpersPath, []byte("#!/bin/sh\necho 'bumpers'"), 0o600)
+	if err != nil {
+		t.Fatalf("Failed to create bumpers binary: %v", err)
 	}
 
-	// Import and use the global logger
-	// This test shows the desired pattern
-	// For now, we just test that InitLogger works correctly
-	logFile := filepath.Join(tempDir, ".claude", "bumpers", "bumpers.log")
-	if _, err := os.Stat(logFile); os.IsNotExist(err) {
-		t.Errorf("Expected log file to be created at %s", logFile)
+	// Change to temp directory for the test
+	oldDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get current directory: %v", err)
+	}
+	err = os.Chdir(tempDir)
+	if err != nil {
+		t.Fatalf("Failed to change to temp directory: %v", err)
+	}
+	defer func() {
+		_ = os.Chdir(oldDir)
+	}()
+
+	app := NewAppWithWorkDir(configPath, tempDir)
+
+	// Initialize should create Claude directory structure using path constants
+	err = app.Initialize()
+	if err != nil {
+		t.Fatalf("Initialize failed: %v", err)
+	}
+
+	// Verify that directories were created using the path constants
+	expectedClaudeDir := filepath.Join(tempDir, paths.ClaudeDir)
+	if _, err := os.Stat(expectedClaudeDir); os.IsNotExist(err) {
+		t.Errorf("Expected Claude directory to be created at %s (using paths.ClaudeDir)", expectedClaudeDir)
+	}
+
+	expectedSettingsFile := filepath.Join(expectedClaudeDir, paths.SettingsFilename)
+	if _, err := os.Stat(expectedSettingsFile); os.IsNotExist(err) {
+		t.Errorf("Expected settings file to be created at %s (using paths.SettingsFilename)", expectedSettingsFile)
 	}
 }

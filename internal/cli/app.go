@@ -2,6 +2,7 @@ package cli
 
 import (
 	"errors"
+	"fmt"
 	"io"
 
 	"github.com/wizzomafizzo/bumpers/internal/config"
@@ -26,22 +27,32 @@ type App struct {
 	workDir    string
 }
 
-func (a *App) ProcessHook(input io.Reader) (string, error) {
-	// Parse hook input to get command
-	event, err := hooks.ParseHookInput(input)
-	if err != nil {
-		return "", err //nolint:wrapcheck // Error context is clear from function name
-	}
-
-	// Load config and match rules
+// loadConfigAndMatcher loads configuration and creates a rule matcher
+func (a *App) loadConfigAndMatcher() (*config.Config, *matcher.RuleMatcher, error) {
 	cfg, err := config.Load(a.configPath)
 	if err != nil {
-		return "", err //nolint:wrapcheck // Config file path is known from app context
+		return nil, nil, fmt.Errorf("failed to load config from %s: %w", a.configPath, err)
 	}
 
 	ruleMatcher, err := matcher.NewRuleMatcher(cfg.Rules)
 	if err != nil {
-		return "", err //nolint:wrapcheck // Regex validation errors are internal
+		return nil, nil, fmt.Errorf("failed to create rule matcher: %w", err)
+	}
+
+	return cfg, ruleMatcher, nil
+}
+
+func (a *App) ProcessHook(input io.Reader) (string, error) {
+	// Parse hook input to get command
+	event, err := hooks.ParseInput(input)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse hook input: %w", err)
+	}
+
+	// Load config and match rules
+	_, ruleMatcher, err := a.loadConfigAndMatcher()
+	if err != nil {
+		return "", err
 	}
 
 	rule, err := ruleMatcher.Match(event.ToolInput.Command)
@@ -50,7 +61,7 @@ func (a *App) ProcessHook(input io.Reader) (string, error) {
 			// No rule matched, command is allowed
 			return "", nil
 		}
-		return "", err //nolint:wrapcheck // Rule matching errors are internal
+		return "", fmt.Errorf("failed to match rule for command '%s': %w", event.ToolInput.Command, err)
 	}
 
 	if rule != nil {
@@ -63,14 +74,9 @@ func (a *App) ProcessHook(input io.Reader) (string, error) {
 
 func (a *App) TestCommand(command string) (string, error) {
 	// Load config and match rules
-	cfg, err := config.Load(a.configPath)
+	_, ruleMatcher, err := a.loadConfigAndMatcher()
 	if err != nil {
-		return "", err //nolint:wrapcheck // Config file path is known from app context
-	}
-
-	ruleMatcher, err := matcher.NewRuleMatcher(cfg.Rules)
-	if err != nil {
-		return "", err //nolint:wrapcheck // Regex validation errors are internal
+		return "", err
 	}
 
 	rule, err := ruleMatcher.Match(command)
@@ -79,7 +85,7 @@ func (a *App) TestCommand(command string) (string, error) {
 			// No rule matched, command is allowed
 			return "Command allowed", nil
 		}
-		return "", err //nolint:wrapcheck // Rule matching errors are internal
+		return "", fmt.Errorf("failed to match rule for command '%s': %w", command, err)
 	}
 
 	if rule != nil {
@@ -94,13 +100,13 @@ func (a *App) ValidateConfig() (string, error) {
 	// Load config file
 	cfg, err := config.Load(a.configPath)
 	if err != nil {
-		return "", err //nolint:wrapcheck // Config file path is known from app context
+		return "", fmt.Errorf("failed to load config from %s: %w", a.configPath, err)
 	}
 
 	// Validate regex patterns by trying to create matcher
 	_, err = matcher.NewRuleMatcher(cfg.Rules)
 	if err != nil {
-		return "", err //nolint:wrapcheck // Regex validation errors are internal
+		return "", fmt.Errorf("failed to validate config rules: %w", err)
 	}
 
 	return "Configuration is valid", nil

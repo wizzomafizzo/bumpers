@@ -7,7 +7,9 @@ import (
 	"strings"
 
 	"github.com/wizzomafizzo/bumpers/internal/claude/settings"
+	"github.com/wizzomafizzo/bumpers/internal/config"
 	"github.com/wizzomafizzo/bumpers/internal/logger"
+	"github.com/wizzomafizzo/bumpers/internal/paths"
 )
 
 // Initialize sets up bumpers configuration and installs Claude hooks.
@@ -17,35 +19,28 @@ func (a *App) Initialize() error {
 	if workingDir == "" {
 		cwd, err := os.Getwd()
 		if err != nil {
-			return err //nolint:wrapcheck // os error is descriptive
+			return fmt.Errorf("failed to get current working directory: %w", err)
 		}
 		workingDir = cwd
 	}
 
 	// Create logger instance for this app
 	var err error
-	a.logger, err = logger.New(workingDir)
+	a.logger, err = logger.NewWithConfig(nil, workingDir)
 	if err != nil {
-		return err //nolint:wrapcheck // logger initialization error is descriptive
+		return fmt.Errorf("failed to initialize logger in %s: %w", workingDir, err)
 	}
 
 	// Create config file if it doesn't exist
 	if _, statErr := os.Stat(a.configPath); os.IsNotExist(statErr) {
-		defaultConfig := `rules:
-  - pattern: "^go test"
-    response: |
-      Use "make test" instead for TDD integration:
-      - make test                        # Run all tests
-      - make test PKG=./internal/claude  # Test only a specific package
-      See Makefile for more information.
-  - pattern: "^(gci|go vet|goimports|gofumpt|go fmt)"
-    response: Use "make lint-fix" instead to resolve lint/formatting issues.
-  - pattern: "^cd /tmp"
-    response: Create a "tmp" directory in the project root instead.
-`
-		writeErr := os.WriteFile(a.configPath, []byte(defaultConfig), 0o600)
+		defaultConfigBytes, configErr := config.DefaultConfigYAML()
+		if configErr != nil {
+			return fmt.Errorf("failed to generate default config: %w", configErr)
+		}
+
+		writeErr := os.WriteFile(a.configPath, defaultConfigBytes, 0o600)
 		if writeErr != nil {
-			return writeErr //nolint:wrapcheck // file operation error is self-explanatory
+			return fmt.Errorf("failed to write config file to %s: %w", a.configPath, writeErr)
 		}
 	}
 
@@ -59,27 +54,38 @@ func (a *App) Initialize() error {
 }
 
 // Status returns the current status of bumpers configuration.
-func (*App) Status() (string, error) {
-	return "Bumpers status: configured", nil
-}
+func (a *App) Status() (string, error) {
+	var status strings.Builder
 
-// getWorkingDirectory returns the working directory, falling back to current dir
-func (a *App) getWorkingDirectory() (string, error) {
-	if a.workDir != "" {
-		return a.workDir, nil
+	// strings.Builder.WriteString never returns error, but satisfying linter
+	writeString := func(s string) {
+		_, _ = status.WriteString(s)
 	}
-	return os.Getwd() //nolint:wrapcheck // os error is descriptive
+
+	writeString("Bumpers Status:\n")
+	writeString("===============\n\n")
+
+	// Check config file
+	if _, err := os.Stat(a.configPath); os.IsNotExist(err) {
+		writeString("Config file: NOT FOUND\n")
+		writeString(fmt.Sprintf("   Expected: %s\n", a.configPath))
+	} else {
+		writeString("Config file: EXISTS\n")
+		writeString(fmt.Sprintf("   Location: %s\n", a.configPath))
+	}
+
+	return status.String(), nil
 }
 
 // setupClaudeDirectory ensures .claude directory exists and returns settings
 func (*App) setupClaudeDirectory(workingDir string) (*settings.Settings, string, error) {
-	claudeDir := filepath.Join(workingDir, ".claude")
-	localPath := filepath.Join(claudeDir, "settings.local.json")
+	claudeDir := filepath.Join(workingDir, paths.ClaudeDir)
+	localPath := filepath.Join(claudeDir, paths.SettingsFilename)
 
 	// Ensure .claude directory exists
 	err := os.MkdirAll(claudeDir, 0o750)
 	if err != nil {
-		return nil, "", err //nolint:wrapcheck // directory creation error is descriptive
+		return nil, "", fmt.Errorf("failed to create Claude directory %s: %w", claudeDir, err)
 	}
 
 	// Load or create settings
@@ -90,12 +96,12 @@ func (*App) setupClaudeDirectory(workingDir string) (*settings.Settings, string,
 		// Create backup before modifying existing settings
 		_, backupErr := settings.CreateBackup(localPath)
 		if backupErr != nil {
-			return nil, "", backupErr //nolint:wrapcheck // backup errors are already descriptive
+			return nil, "", fmt.Errorf("failed to create backup of Claude settings: %w", backupErr)
 		}
 
 		claudeSettings, err = settings.LoadFromFile(localPath)
 		if err != nil {
-			return nil, "", err //nolint:wrapcheck // settings loading error is descriptive
+			return nil, "", fmt.Errorf("failed to load Claude settings from %s: %w", localPath, err)
 		}
 	}
 
@@ -137,9 +143,13 @@ func (a *App) createHookCommand(workingDir string) (settings.HookCommand, error)
 
 // installClaudeHooks installs bumpers as a PreToolUse hook in Claude settings.
 func (a *App) installClaudeHooks() error {
-	workingDir, err := a.getWorkingDirectory()
-	if err != nil {
-		return err
+	workingDir := a.workDir
+	if workingDir == "" {
+		var err error
+		workingDir, err = os.Getwd()
+		if err != nil {
+			return fmt.Errorf("failed to get current working directory: %w", err)
+		}
 	}
 
 	claudeSettings, localPath, err := a.setupClaudeDirectory(workingDir)
@@ -159,10 +169,14 @@ func (a *App) installClaudeHooks() error {
 		_ = claudeSettings.RemoveHook(settings.PreToolUseEvent, "Bash")
 		err = claudeSettings.AddHook(settings.PreToolUseEvent, "Bash", hookCmd)
 		if err != nil {
-			return err //nolint:wrapcheck // hook addition error is descriptive
+			return fmt.Errorf("failed to add bumpers hook to Claude settings: %w", err)
 		}
 	}
 
 	// Save settings
-	return settings.SaveToFile(claudeSettings, localPath) //nolint:wrapcheck // settings save error is descriptive
+	err = settings.SaveToFile(claudeSettings, localPath)
+	if err != nil {
+		return fmt.Errorf("failed to save Claude settings to %s: %w", localPath, err)
+	}
+	return nil
 }

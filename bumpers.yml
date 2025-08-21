@@ -1,10 +1,10 @@
 rules:
   - pattern: "^go test"
     response: |
-      Use "make test" instead for TDD integration:
-      - make test                        # Run all tests
-      - make test PKG=./internal/claude  # Test only a specific package
-      See Makefile for more information.
+      Use "just test" instead for TDD integration:
+      - just test                    # Run all tests
+      - just test ./internal/claude  # Test only a specific package
+      See "just --list" for more information.
   - pattern: "^(gci|go vet|goimports|gofumpt|go fmt)"
     response: Use "make lint-fix" instead to resolve lint/formatting issues.
   - pattern: "^cd /tmp"

@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestParseHookInput(t *testing.T) {
+func TestParseInput(t *testing.T) {
 	t.Parallel()
 
 	jsonInput := `{
@@ -15,7 +15,7 @@ func TestParseHookInput(t *testing.T) {
 		}
 	}`
 
-	event, err := ParseHookInput(strings.NewReader(jsonInput))
+	event, err := ParseInput(strings.NewReader(jsonInput))
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}

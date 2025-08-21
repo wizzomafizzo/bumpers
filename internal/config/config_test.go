@@ -436,3 +436,98 @@ rules:
 func contains(s, substr string) bool {
 	return strings.Contains(s, substr)
 }
+
+// checkRulePattern validates a specific rule pattern and response
+func checkRulePattern(t *testing.T, rule *Rule, patternName, expectedPattern, expectedResponse string) bool {
+	if strings.Contains(rule.Pattern, expectedPattern) {
+		if !strings.Contains(rule.Response, expectedResponse) {
+			t.Errorf("Expected %s rule to mention %s", patternName, expectedResponse)
+		}
+		return true
+	}
+	return false
+}
+
+// validateLoggingDefaults checks the default logging configuration
+func validateLoggingDefaults(t *testing.T, config *Config) {
+	if config.Logging.Level != "info" {
+		t.Errorf("Expected default log level 'info', got %s", config.Logging.Level)
+	}
+	if config.Logging.MaxSize != 10 {
+		t.Errorf("Expected default max size 10, got %d", config.Logging.MaxSize)
+	}
+}
+
+func TestDefaultConfig(t *testing.T) {
+	t.Parallel()
+
+	config := DefaultConfig()
+
+	// Verify default config has expected rules
+	if len(config.Rules) == 0 {
+		t.Fatal("Expected default config to have rules")
+	}
+
+	// Check for expected rule patterns
+	foundGoTest := false
+	foundLint := false
+	foundTmp := false
+
+	for _, rule := range config.Rules {
+		if checkRulePattern(t, &rule, "go test", "go test", "make test") {
+			foundGoTest = true
+		}
+		if checkRulePattern(t, &rule, "lint", "gci|go vet", "make lint-fix") {
+			foundLint = true
+		}
+		if strings.Contains(rule.Pattern, "cd /tmp") {
+			foundTmp = true
+			if !strings.Contains(rule.Response, "tmp") {
+				t.Errorf("Expected tmp rule to mention tmp, got: %s", rule.Response)
+			}
+		}
+	}
+
+	if !foundGoTest {
+		t.Error("Expected default config to have go test rule")
+	}
+	if !foundLint {
+		t.Error("Expected default config to have lint rule")
+	}
+	if !foundTmp {
+		t.Error("Expected default config to have tmp rule")
+	}
+
+	validateLoggingDefaults(t, config)
+}
+
+func TestDefaultConfigYAML(t *testing.T) {
+	t.Parallel()
+
+	yamlBytes, err := DefaultConfigYAML()
+	if err != nil {
+		t.Fatalf("DefaultConfigYAML failed: %v", err)
+	}
+
+	if len(yamlBytes) == 0 {
+		t.Fatal("Expected YAML bytes, got empty")
+	}
+
+	// Verify the YAML contains expected patterns
+	yamlStr := string(yamlBytes)
+	expectedPatterns := []string{
+		"rules:",
+		"pattern: ^go test",
+		"make test",
+		"gci|go vet",
+		"make lint-fix",
+		"cd /tmp",
+		"tmp",
+	}
+
+	for _, pattern := range expectedPatterns {
+		if !strings.Contains(yamlStr, pattern) {
+			t.Errorf("Expected YAML to contain %q, got:\n%s", pattern, yamlStr)
+		}
+	}
+}

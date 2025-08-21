@@ -84,11 +84,6 @@ func LoadFromYAML(data []byte) (*Config, error) {
 	return &config, nil
 }
 
-// LoadFromFile loads config from file - alias for Load function
-func LoadFromFile(filename string) (*Config, error) {
-	return Load(filename)
-}
-
 // Validate performs comprehensive config validation
 func (c *Config) Validate() error {
 	if len(c.Rules) == 0 {

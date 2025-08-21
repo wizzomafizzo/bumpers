@@ -42,7 +42,7 @@ func TestEndToEndHookProcessing(t *testing.T) {
 	}`
 
 	// Parse hook event
-	event, err := hooks.ParseHookInput(strings.NewReader(hookInput))
+	event, err := hooks.ParseInput(strings.NewReader(hookInput))
 	if err != nil {
 		t.Fatalf("Failed to parse hook input: %v", err)
 	}
