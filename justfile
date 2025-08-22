@@ -15,8 +15,8 @@ build:
     mkdir -p bin
     go build -o bin/bumpers ./cmd/bumpers
 
-# Run tests with optional package targeting and race flag
-test package="./..." race="auto":
+# Run tests with optional package targeting, test name filtering, and race flag
+test package="./..." run="" race="auto":
     #!/usr/bin/env bash
     set -euo pipefail
 
@@ -27,12 +27,19 @@ test package="./..." race="auto":
         *)     echo "Invalid race option: {{race}}" >&2; exit 1 ;;
     esac
 
+    # Add -run flag if specified
+    if [ -n "{{run}}" ]; then
+        RUN_FLAG="-run {{run}}"
+    else
+        RUN_FLAG=""
+    fi
+
     # Run tests with or without TDD Guard
     if command -v tdd-guard-go >/dev/null 2>&1; then
-        go test -json -v $RACE_FLAG -coverprofile=coverage.txt -covermode=atomic {{package}} 2>&1 | \
+        go test -json -v $RACE_FLAG $RUN_FLAG -coverprofile=coverage.txt -covermode=atomic {{package}} 2>&1 | \
             tdd-guard-go -project-root {{justfile_directory()}}
     else
-        go test -v $RACE_FLAG -coverprofile=coverage.txt -covermode=atomic {{package}}
+        go test -v $RACE_FLAG $RUN_FLAG -coverprofile=coverage.txt -covermode=atomic {{package}}
     fi
 
 # Install the bumpers binary

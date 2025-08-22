@@ -221,6 +221,12 @@ func (a *App) installClaudeHooks() error {
 		return fmt.Errorf("failed to add bumpers UserPromptSubmit hook to Claude settings: %w", err)
 	}
 
+	// Add SessionStart hook for startup and clear events
+	err = claudeSettings.AddOrAppendHook(settings.SessionStartEvent, "startup|clear", hookCmd)
+	if err != nil {
+		return fmt.Errorf("failed to add bumpers SessionStart hook to Claude settings: %w", err)
+	}
+
 	// Save settings using injected filesystem
 	fs := a.getFileSystem()
 	err = settings.SaveToFileWithFS(fs, claudeSettings, localPath)

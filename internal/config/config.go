@@ -13,6 +13,7 @@ type Config struct {
 	ClaudeBinary string        `yaml:"claude_binary,omitempty" mapstructure:"claude_binary"`
 	Rules        []Rule        `yaml:"rules" mapstructure:"rules"`
 	Commands     []Command     `yaml:"commands,omitempty" mapstructure:"commands"`
+	Notes        []Note        `yaml:"notes,omitempty" mapstructure:"notes"`
 	Logging      LoggingConfig `yaml:"logging,omitempty" mapstructure:"logging"`
 }
 
@@ -34,6 +35,10 @@ type Rule struct {
 
 type Command struct {
 	Name    string `yaml:"name" mapstructure:"name"`
+	Message string `yaml:"message" mapstructure:"message"`
+}
+
+type Note struct {
 	Message string `yaml:"message" mapstructure:"message"`
 }
 
@@ -92,8 +97,8 @@ func LoadFromYAML(data []byte) (*Config, error) {
 
 // Validate performs comprehensive config validation
 func (c *Config) Validate() error {
-	if len(c.Rules) == 0 && len(c.Commands) == 0 {
-		return errors.New("config must contain at least one rule or command")
+	if len(c.Rules) == 0 && len(c.Commands) == 0 && len(c.Notes) == 0 {
+		return errors.New("config must contain at least one rule, command, or note")
 	}
 
 	for i, rule := range c.Rules {

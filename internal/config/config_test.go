@@ -602,3 +602,77 @@ func TestConfigValidationWithCommands(t *testing.T) {
 		t.Fatalf("Expected 0 rules, got %d", len(config.Rules))
 	}
 }
+
+func TestConfigWithNotes(t *testing.T) {
+	t.Parallel()
+
+	yamlContent := `rules:
+  - pattern: "go test"
+    response: "Use just test instead"
+notes:
+  - message: "Remember to run tests first"
+  - message: "Check CLAUDE.md for project conventions"`
+
+	config, err := LoadFromYAML([]byte(yamlContent))
+	if err != nil {
+		t.Fatalf("Expected no error loading config with notes, got %v", err)
+	}
+
+	if len(config.Notes) != 2 {
+		t.Fatalf("Expected 2 notes, got %d", len(config.Notes))
+	}
+
+	expectedMessages := []string{
+		"Remember to run tests first",
+		"Check CLAUDE.md for project conventions",
+	}
+
+	for i, note := range config.Notes {
+		if note.Message != expectedMessages[i] {
+			t.Errorf("Expected note %d message %q, got %q", i, expectedMessages[i], note.Message)
+		}
+	}
+}
+
+func TestConfigValidationWithNotesOnly(t *testing.T) {
+	t.Parallel()
+
+	yamlContent := `notes:
+  - message: "Just a note"`
+
+	config, err := LoadFromYAML([]byte(yamlContent))
+	if err != nil {
+		t.Fatalf("Expected no error loading config with notes only, got %v", err)
+	}
+
+	if len(config.Notes) != 1 {
+		t.Fatalf("Expected 1 note, got %d", len(config.Notes))
+	}
+
+	if len(config.Rules) != 0 {
+		t.Fatalf("Expected 0 rules, got %d", len(config.Rules))
+	}
+}
+
+func TestDefaultConfigIncludesNotes(t *testing.T) {
+	t.Parallel()
+
+	config := DefaultConfig()
+
+	if len(config.Notes) == 0 {
+		t.Error("Expected default config to include example notes")
+	}
+
+	// Check that notes contain helpful messages
+	hasUsefulNote := false
+	for _, note := range config.Notes {
+		if note.Message != "" {
+			hasUsefulNote = true
+			break
+		}
+	}
+
+	if !hasUsefulNote {
+		t.Error("Expected at least one note with non-empty message")
+	}
+}

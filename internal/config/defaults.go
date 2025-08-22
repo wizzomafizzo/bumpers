@@ -38,6 +38,17 @@ See Makefile for more information.`,
 				Message: "📚 Documentation: Visit https://github.com/wizzomafizzo/bumpers for usage guides and examples",
 			},
 		},
+		Notes: []Note{
+			{
+				Message: "Use 'just test' instead of 'go test' for proper TDD integration",
+			},
+			{
+				Message: "Check CLAUDE.md for project conventions and guidelines",
+			},
+			{
+				Message: "Run 'just lint fix' to resolve formatting and linting issues",
+			},
+		},
 		Logging: LoggingConfig{
 			Level:      "info",
 			MaxSize:    10,

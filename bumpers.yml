@@ -1,3 +1,5 @@
+notes:
+  - message: "Today's date is: 2025-08-22"
 commands:
   - name: test
     message: Run "just test" to run all tests and fix ALL failing tests if any.
@@ -18,6 +20,8 @@ rules:
     response: Use a "tmp" directory in the project root instead.
   - pattern: "(git commit --no-verify|LEFTHOOK=0)"
     response: Pre-commit hooks must not be skipped.
+  - pattern: "fieldalignment"
+    response: Fix field alignment issues by adding names to struct fields and running "just lint fix".
 
 # TODO: post tool "not related to my changes"
 # TODO: some templating, like inserting file contents or shell output

@@ -61,6 +61,24 @@ func TestDetectHookType(t *testing.T) {
 			expected: PostToolUseHook,
 		},
 		{
+			name: "SessionStart hook with startup source",
+			jsonData: `{
+				"session_id": "abc123",
+				"hook_event_name": "SessionStart",
+				"source": "startup"
+			}`,
+			expected: SessionStartHook,
+		},
+		{
+			name: "SessionStart hook with clear source",
+			jsonData: `{
+				"session_id": "def456",
+				"hook_event_name": "SessionStart",
+				"source": "clear"
+			}`,
+			expected: SessionStartHook,
+		},
+		{
 			name:     "Unknown hook",
 			jsonData: `{"unknown_field": "value"}`,
 			expected: UnknownHook,

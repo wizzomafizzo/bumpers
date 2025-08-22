@@ -13,6 +13,7 @@ const (
 	PreToolUseHook
 	UserPromptSubmitHook
 	PostToolUseHook
+	SessionStartHook
 )
 
 type ToolInput struct {
@@ -56,6 +57,11 @@ func DetectHookType(reader io.Reader) (HookType, json.RawMessage, error) {
 	}
 	if _, ok := generic["tool_output"]; ok {
 		return PostToolUseHook, json.RawMessage(data), nil
+	}
+	if hookEventName, ok := generic["hook_event_name"]; ok {
+		if eventName, ok := hookEventName.(string); ok && eventName == "SessionStart" {
+			return SessionStartHook, json.RawMessage(data), nil
+		}
 	}
 
 	return UnknownHook, json.RawMessage(data), nil

@@ -662,10 +662,20 @@ func TestInstallCreatesBothHooks(t *testing.T) {
 		t.Error("Expected UserPromptSubmit hook to be added to settings.local.json")
 	}
 
-	// Check that both hooks contain bumpers command
+	// Check for SessionStart hook with startup|clear matcher
+	if !strings.Contains(contentStr, `"SessionStart"`) {
+		t.Error("Expected SessionStart hook to be added to settings.local.json")
+	}
+
+	if !strings.Contains(contentStr, `"matcher": "startup|clear"`) {
+		t.Error("Expected SessionStart hook to have startup|clear matcher in settings.local.json")
+	}
+
+	// Check that all three hooks contain bumpers command
 	bashHookCount := strings.Count(contentStr, "bumpers")
-	if bashHookCount < 2 {
-		t.Errorf("Expected at least 2 bumpers hooks (PreToolUse and UserPromptSubmit), found %d", bashHookCount)
+	if bashHookCount < 3 {
+		t.Errorf("Expected at least 3 bumpers hooks (PreToolUse, UserPromptSubmit, SessionStart), found %d",
+			bashHookCount)
 	}
 }
 
@@ -1535,5 +1545,124 @@ func TestProcessHookWorks(t *testing.T) {
 	_, err := app.ProcessHook(strings.NewReader(hookInput))
 	if err != nil {
 		t.Fatalf("ProcessHook failed: %v", err)
+	}
+}
+
+func TestProcessHookRoutesSessionStart(t *testing.T) {
+	t.Parallel()
+	setupTest(t)
+
+	configContent := `rules:
+  - pattern: "go test"
+    response: "Use just test instead"
+notes:
+  - message: "Remember to run tests first"
+  - message: "Check CLAUDE.md for project conventions"`
+
+	configPath := createTempConfig(t, configContent)
+	app := NewApp(configPath)
+
+	// Test SessionStart hook routing with startup source
+	sessionStartInput := `{
+		"session_id": "abc123",
+		"hook_event_name": "SessionStart",
+		"source": "startup"
+	}`
+
+	result, err := app.ProcessHook(strings.NewReader(sessionStartInput))
+	if err != nil {
+		t.Fatalf("ProcessHook failed for SessionStart: %v", err)
+	}
+
+	expectedJSON := `{"hookSpecificOutput":{"hookEventName":"SessionStart",` +
+		`"additionalContext":"Remember to run tests first\nCheck CLAUDE.md for project conventions"}}`
+	if result != expectedJSON {
+		t.Errorf("Expected %q, got %q", expectedJSON, result)
+	}
+}
+
+func TestProcessSessionStartWithDifferentNotes(t *testing.T) {
+	t.Parallel()
+	setupTest(t)
+
+	configContent := `rules:
+  - pattern: "go test"
+    response: "Use just test instead"
+notes:
+  - message: "Different message here"`
+
+	configPath := createTempConfig(t, configContent)
+	app := NewApp(configPath)
+
+	sessionStartInput := `{
+		"session_id": "abc123",
+		"hook_event_name": "SessionStart",
+		"source": "startup"
+	}`
+
+	result, err := app.ProcessHook(strings.NewReader(sessionStartInput))
+	if err != nil {
+		t.Fatalf("ProcessHook failed for SessionStart: %v", err)
+	}
+
+	expectedJSON := `{"hookSpecificOutput":{"hookEventName":"SessionStart",` +
+		`"additionalContext":"Different message here"}}`
+	if result != expectedJSON {
+		t.Errorf("Expected %q, got %q", expectedJSON, result)
+	}
+}
+
+func TestProcessSessionStartIgnoresResume(t *testing.T) {
+	t.Parallel()
+	setupTest(t)
+
+	configContent := `notes:
+  - message: "Should not appear"`
+
+	configPath := createTempConfig(t, configContent)
+	app := NewApp(configPath)
+
+	sessionStartInput := `{
+		"session_id": "abc123",
+		"hook_event_name": "SessionStart",
+		"source": "resume"
+	}`
+
+	result, err := app.ProcessHook(strings.NewReader(sessionStartInput))
+	if err != nil {
+		t.Fatalf("ProcessHook failed for SessionStart: %v", err)
+	}
+
+	// Should return empty string for resume source
+	if result != "" {
+		t.Errorf("Expected empty string for resume source, got %q", result)
+	}
+}
+
+func TestProcessSessionStartWorksWithClear(t *testing.T) {
+	t.Parallel()
+	setupTest(t)
+
+	configContent := `notes:
+  - message: "Clear message"`
+
+	configPath := createTempConfig(t, configContent)
+	app := NewApp(configPath)
+
+	sessionStartInput := `{
+		"session_id": "abc123",
+		"hook_event_name": "SessionStart",
+		"source": "clear"
+	}`
+
+	result, err := app.ProcessHook(strings.NewReader(sessionStartInput))
+	if err != nil {
+		t.Fatalf("ProcessHook failed for SessionStart: %v", err)
+	}
+
+	expectedJSON := `{"hookSpecificOutput":{"hookEventName":"SessionStart",` +
+		`"additionalContext":"Clear message"}}`
+	if result != expectedJSON {
+		t.Errorf("Expected %q, got %q", expectedJSON, result)
 	}
 }

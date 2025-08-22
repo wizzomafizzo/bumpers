@@ -114,6 +114,12 @@ func (a *App) ProcessHook(input io.Reader) (string, error) {
 		return a.ProcessUserPrompt(rawJSON)
 	}
 
+	// Handle SessionStart hooks
+	if hookType == hooks.SessionStartHook {
+		log.Info().Msg("Processing SessionStart hook")
+		return a.ProcessSessionStart(rawJSON)
+	}
+
 	// Handle PreToolUse hooks (existing logic)
 	var event hooks.HookEvent
 	if unmarshalErr := json.Unmarshal(rawJSON, &event); unmarshalErr != nil {
