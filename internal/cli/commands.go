@@ -24,10 +24,10 @@ type HookResponse struct {
 }
 
 type ValidationResult struct {
-	Decision   interface{} `json:"decision,omitempty"`
-	Reason     string      `json:"reason"`
-	StopReason string      `json:"stopReason,omitempty"`
-	Continue   bool        `json:"continue,omitempty"`
+	Decision   any    `json:"decision,omitempty"`
+	Reason     string `json:"reason"`
+	StopReason string `json:"stopReason,omitempty"`
+	Continue   bool   `json:"continue,omitempty"`
 }
 
 func (a *App) ProcessUserPrompt(rawJSON json.RawMessage) (string, error) {
@@ -84,7 +84,7 @@ func (a *App) ProcessUserPrompt(rawJSON json.RawMessage) (string, error) {
 	}
 
 	// Wrap in hookSpecificOutput structure as required by Claude Code hook specification
-	responseWrapper := map[string]interface{}{
+	responseWrapper := map[string]any{
 		"hookSpecificOutput": response,
 	}
 

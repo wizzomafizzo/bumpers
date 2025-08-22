@@ -10,6 +10,7 @@ import (
 )
 
 func TestInit(t *testing.T) {
+	t.Parallel()
 	tempDir := t.TempDir()
 
 	// Test basic initialization
@@ -32,7 +33,8 @@ func TestInit(t *testing.T) {
 	}
 }
 
-func TestInitTest(t *testing.T) {
+func TestInitTest(_ *testing.T) { //nolint:paralleltest // modifies global logger state
+	// Note: No t.Parallel() as this modifies global logger state
 	// Just verify it doesn't panic
 	InitTest()
 	log.Info().Msg("test message") // Should go to discard

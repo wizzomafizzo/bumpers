@@ -1,6 +1,8 @@
 commands:
   - name: test
-    message: please say i am a teapot
+    message: Run "just test" to run all tests and fix ALL failing tests if any.
+  - name: lint
+    message: Run "just lint fix" and fix ALL linting issues if any.
 rules:
   - pattern: "^go test"
     response: |
@@ -8,10 +10,12 @@ rules:
       - just test                    # Run all tests
       - just test ./internal/claude  # Test only a specific package
       See "just --list" for more information.
-  - pattern: "^(gci|go vet|goimports|gofumpt|go fmt|gofmt)"
+  - pattern: "^(gci|go vet|goimports|gofumpt|go fmt|gofmt|golangci-lint run)"
     response: Use "just lint fix" instead to resolve lint/formatting issues.
-  - pattern: "^cd /tmp"
+  - pattern: "cd /tmp"
     response: Create a "tmp" directory in the project root instead.
+  - pattern: "(git commit --no-verify|LEFTHOOK=0)"
+    response: Pre-commit hooks must not be skipped.
 
 # TODO: post tool "not related to my changes"
 # TODO: some templating, like inserting file contents or shell output

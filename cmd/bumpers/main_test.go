@@ -197,3 +197,50 @@ func TestHookDeniedCommandOutputsToStderrAndExitsCode2(t *testing.T) { //nolint:
 		t.Errorf("Expected message to contain denial message, got: %s", message)
 	}
 }
+
+func TestRunFunctionWrapsCommandExecutionErrors(t *testing.T) { //nolint:paralleltest // changes working directory
+	// Test that run() function properly wraps errors from command execution
+	tempDir := t.TempDir()
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Chdir(originalDir) }()
+
+	err = os.Chdir(tempDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Use an invalid flag to force command execution to fail
+	originalArgs := os.Args
+	defer func() { os.Args = originalArgs }()
+	os.Args = []string{"bumpers", "--invalid-flag"}
+
+	// Call run() directly to test error wrapping
+	err = run()
+	// Should return an error that wraps the underlying command error
+	if err == nil {
+		t.Fatal("Expected run() to return an error for invalid command, got nil")
+	}
+
+	// Error message should provide context about what failed (not just the raw cobra error)
+	errorMsg := err.Error()
+	if errorMsg == "" {
+		t.Error("Expected non-empty error message")
+	}
+
+	// Check that the error message contains contextual information, not just the raw error
+	// The wrapped error should contain additional context like "command execution failed"
+	if errorMsg == "unknown flag: --invalid-flag" {
+		t.Error("Error should be wrapped with context, but got raw cobra error")
+	}
+
+	// Should contain some kind of context about command execution
+	hasCommand := strings.Contains(errorMsg, "command")
+	hasExecution := strings.Contains(errorMsg, "execution")
+	hasFailed := strings.Contains(errorMsg, "failed")
+	if !hasCommand && !hasExecution && !hasFailed {
+		t.Errorf("Expected error to contain contextual information, got: %s", errorMsg)
+	}
+}

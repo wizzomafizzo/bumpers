@@ -26,7 +26,7 @@ func NewMemoryFileSystem() *MemoryFileSystem {
 }
 
 // WriteFile stores data in memory
-func (fs *MemoryFileSystem) WriteFile(name string, data []byte, perm os.FileMode) error {
+func (fs *MemoryFileSystem) WriteFile(name string, data []byte, _ os.FileMode) error {
 	fs.files[name] = make([]byte, len(data))
 	copy(fs.files[name], data)
 	return nil
@@ -59,15 +59,15 @@ type memoryFileInfo struct {
 	size int64
 }
 
-func (fi *memoryFileInfo) Name() string       { return fi.name }
-func (fi *memoryFileInfo) Size() int64        { return fi.size }
-func (fi *memoryFileInfo) Mode() os.FileMode  { return 0o644 }
-func (fi *memoryFileInfo) ModTime() time.Time { return time.Time{} }
-func (fi *memoryFileInfo) IsDir() bool        { return false }
-func (fi *memoryFileInfo) Sys() interface{}   { return nil }
+func (fi *memoryFileInfo) Name() string    { return fi.name }
+func (fi *memoryFileInfo) Size() int64     { return fi.size }
+func (*memoryFileInfo) Mode() os.FileMode  { return 0o644 }
+func (*memoryFileInfo) ModTime() time.Time { return time.Time{} }
+func (*memoryFileInfo) IsDir() bool        { return false }
+func (*memoryFileInfo) Sys() any           { return nil }
 
 // MkdirAll creates directories recursively in memory (simple implementation for testing)
-func (fs *MemoryFileSystem) MkdirAll(path string, perm os.FileMode) error {
+func (*MemoryFileSystem) MkdirAll(_ string, _ os.FileMode) error {
 	// For in-memory filesystem, we just need to track that the directory exists
 	// This allows WriteFile to work in any "created" directory
 	return nil
@@ -82,21 +82,21 @@ func NewOSFileSystem() *OSFileSystem {
 }
 
 // WriteFile writes data to the real filesystem
-func (fs *OSFileSystem) WriteFile(name string, data []byte, perm os.FileMode) error {
+func (*OSFileSystem) WriteFile(name string, data []byte, perm os.FileMode) error {
 	return os.WriteFile(name, data, perm) //nolint:wrapcheck // direct os wrapper
 }
 
 // ReadFile reads data from the real filesystem
-func (fs *OSFileSystem) ReadFile(name string) ([]byte, error) {
+func (*OSFileSystem) ReadFile(name string) ([]byte, error) {
 	return os.ReadFile(name) //nolint:wrapcheck,gosec // direct os wrapper, controlled by caller
 }
 
 // Stat returns file info from the real filesystem
-func (fs *OSFileSystem) Stat(name string) (os.FileInfo, error) {
-	return os.Stat(name) //nolint:wrapcheck,gosec // direct os wrapper, controlled by caller
+func (*OSFileSystem) Stat(name string) (os.FileInfo, error) {
+	return os.Stat(name) //nolint:wrapcheck // direct os wrapper, controlled by caller
 }
 
 // MkdirAll creates directories recursively using the real filesystem
-func (fs *OSFileSystem) MkdirAll(path string, perm os.FileMode) error {
-	return os.MkdirAll(path, perm) //nolint:wrapcheck,gosec // direct os wrapper, controlled by caller
+func (*OSFileSystem) MkdirAll(path string, perm os.FileMode) error {
+	return os.MkdirAll(path, perm) //nolint:wrapcheck // direct os wrapper, controlled by caller
 }

@@ -78,73 +78,76 @@ func TestOSFileSystemBasicOperations(t *testing.T) {
 func TestFileSystemMkdirAll(t *testing.T) {
 	t.Parallel()
 
-	// Test MemoryFileSystem MkdirAll
 	t.Run("MemoryFileSystem", func(t *testing.T) {
 		t.Parallel()
-		fs := NewMemoryFileSystem()
-
-		// Test creating nested directories
-		err := fs.MkdirAll("path/to/nested/dir", 0o750)
-		if err != nil {
-			t.Fatalf("MkdirAll failed: %v", err)
-		}
-
-		// In memory filesystem, we should be able to create files in created directory
-		testFile := "path/to/nested/dir/test.txt"
-		testContent := []byte("test in nested dir")
-		err = fs.WriteFile(testFile, testContent, 0o644)
-		if err != nil {
-			t.Fatalf("WriteFile in created directory failed: %v", err)
-		}
-
-		content, err := fs.ReadFile(testFile)
-		if err != nil {
-			t.Fatalf("ReadFile from created directory failed: %v", err)
-		}
-
-		if !bytes.Equal(content, testContent) {
-			t.Errorf("Expected content %q, got %q", string(testContent), string(content))
-		}
+		testMemoryFileSystemMkdirAll(t)
 	})
 
-	// Test OSFileSystem MkdirAll
 	t.Run("OSFileSystem", func(t *testing.T) {
 		t.Parallel()
-		fs := NewOSFileSystem()
-		tempDir := t.TempDir()
-
-		// Test creating nested directories
-		nestedPath := filepath.Join(tempDir, "path", "to", "nested", "dir")
-		err := fs.MkdirAll(nestedPath, 0o750)
-		if err != nil {
-			t.Fatalf("MkdirAll failed: %v", err)
-		}
-
-		// Verify directory was created
-		info, err := fs.Stat(nestedPath)
-		if err != nil {
-			t.Fatalf("Stat on created directory failed: %v", err)
-		}
-
-		if !info.IsDir() {
-			t.Error("Expected created path to be a directory")
-		}
-
-		// Test creating files in the created directory
-		testFile := filepath.Join(nestedPath, "test.txt")
-		testContent := []byte("test in nested dir")
-		err = fs.WriteFile(testFile, testContent, 0o644)
-		if err != nil {
-			t.Fatalf("WriteFile in created directory failed: %v", err)
-		}
-
-		content, err := fs.ReadFile(testFile)
-		if err != nil {
-			t.Fatalf("ReadFile from created directory failed: %v", err)
-		}
-
-		if !bytes.Equal(content, testContent) {
-			t.Errorf("Expected content %q, got %q", string(testContent), string(content))
-		}
+		testOSFileSystemMkdirAll(t)
 	})
+}
+
+func testMemoryFileSystemMkdirAll(t *testing.T) {
+	t.Helper()
+	fs := NewMemoryFileSystem()
+
+	err := fs.MkdirAll("path/to/nested/dir", 0o750)
+	if err != nil {
+		t.Fatalf("MkdirAll failed: %v", err)
+	}
+
+	testFile := "path/to/nested/dir/test.txt"
+	testContent := []byte("test in nested dir")
+	err = fs.WriteFile(testFile, testContent, 0o644)
+	if err != nil {
+		t.Fatalf("WriteFile in created directory failed: %v", err)
+	}
+
+	content, err := fs.ReadFile(testFile)
+	if err != nil {
+		t.Fatalf("ReadFile from created directory failed: %v", err)
+	}
+
+	if !bytes.Equal(content, testContent) {
+		t.Errorf("Expected content %q, got %q", string(testContent), string(content))
+	}
+}
+
+func testOSFileSystemMkdirAll(t *testing.T) {
+	t.Helper()
+	fs := NewOSFileSystem()
+	tempDir := t.TempDir()
+
+	nestedPath := filepath.Join(tempDir, "path", "to", "nested", "dir")
+	err := fs.MkdirAll(nestedPath, 0o750)
+	if err != nil {
+		t.Fatalf("MkdirAll failed: %v", err)
+	}
+
+	info, err := fs.Stat(nestedPath)
+	if err != nil {
+		t.Fatalf("Stat on created directory failed: %v", err)
+	}
+
+	if !info.IsDir() {
+		t.Error("Expected created path to be a directory")
+	}
+
+	testFile := filepath.Join(nestedPath, "test.txt")
+	testContent := []byte("test in nested dir")
+	err = fs.WriteFile(testFile, testContent, 0o644)
+	if err != nil {
+		t.Fatalf("WriteFile in created directory failed: %v", err)
+	}
+
+	content, err := fs.ReadFile(testFile)
+	if err != nil {
+		t.Fatalf("ReadFile from created directory failed: %v", err)
+	}
+
+	if !bytes.Equal(content, testContent) {
+		t.Errorf("Expected content %q, got %q", string(testContent), string(content))
+	}
 }

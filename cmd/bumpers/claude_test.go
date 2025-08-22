@@ -531,20 +531,23 @@ func TestProcessHookCommandExitCodes(t *testing.T) {
 		shouldContainJSON bool
 	}{
 		{
-			name:              "HookSpecificOutput should return exit code 0",
-			input:             `{"session_id":"test-session","transcript_path":"/tmp/test.jsonl","cwd":"/tmp","hook_event_name":"UserPromptSubmit","prompt":"%test"}`,
+			name: "HookSpecificOutput should return exit code 0",
+			input: `{"session_id":"test-session","transcript_path":"/tmp/test.jsonl",` +
+				`"cwd":"/tmp","hook_event_name":"UserPromptSubmit","prompt":"%test"}`,
 			expectedExitCode:  0,
 			shouldContainJSON: true,
 		},
 		{
-			name:             "Non-command prompt should return exit code 0",
-			input:            `{"session_id":"test-session","transcript_path":"/tmp/test.jsonl","cwd":"/tmp","hook_event_name":"UserPromptSubmit","prompt":"regular prompt"}`,
+			name: "Non-command prompt should return exit code 0",
+			input: `{"session_id":"test-session","transcript_path":"/tmp/test.jsonl",` +
+				`"cwd":"/tmp","hook_event_name":"UserPromptSubmit","prompt":"regular prompt"}`,
 			expectedExitCode: 0,
 			expectedResponse: "",
 		},
 		{
-			name:             "Unknown command should return exit code 0",
-			input:            `{"session_id":"test-session","transcript_path":"/tmp/test.jsonl","cwd":"/tmp","hook_event_name":"UserPromptSubmit","prompt":"%unknown"}`,
+			name: "Unknown command should return exit code 0",
+			input: `{"session_id":"test-session","transcript_path":"/tmp/test.jsonl",` +
+				`"cwd":"/tmp","hook_event_name":"UserPromptSubmit","prompt":"%unknown"}`,
 			expectedExitCode: 0,
 			expectedResponse: "",
 		},
@@ -578,7 +581,20 @@ func TestProcessHookCommandExitCodes(t *testing.T) {
 // to prevent potential exposure of sensitive user input
 
 func TestMainCommandOutputStreams(t *testing.T) {
-	// Create a temporary config file with a command
+	t.Parallel()
+	configPath := setupTempConfigForOutputStreams(t)
+	tests := getOutputStreamsTestCases()
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			runOutputStreamTest(t, configPath, tt)
+		})
+	}
+}
+
+func setupTempConfigForOutputStreams(t *testing.T) string {
+	t.Helper()
 	tempDir := t.TempDir()
 	configContent := `commands:
   - name: test
@@ -589,58 +605,65 @@ func TestMainCommandOutputStreams(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp config: %v", err)
 	}
+	return configPath
+}
 
-	tests := []struct {
-		name           string
-		input          string
-		expectedStdout string
-		expectedStderr string
-	}{
+type outputStreamTest struct {
+	name           string
+	input          string
+	expectedStdout string
+	expectedStderr string
+}
+
+func getOutputStreamsTestCases() []outputStreamTest {
+	return []outputStreamTest{
 		{
-			name:           "HookSpecificOutput should go to stdout",
-			input:          `{"session_id":"test-session","transcript_path":"/tmp/test.jsonl","cwd":"/tmp","hook_event_name":"UserPromptSubmit","prompt":"%test"}`,
-			expectedStdout: `{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"Hello World"}}` + "\n",
+			name: "HookSpecificOutput should go to stdout",
+			input: `{"session_id":"test-session","transcript_path":"/tmp/test.jsonl",` +
+				`"cwd":"/tmp","hook_event_name":"UserPromptSubmit","prompt":"%test"}`,
+			expectedStdout: `{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit",` +
+				`"additionalContext":"Hello World"}}` + "\n",
 			expectedStderr: "",
 		},
 		{
-			name:           "Non-command should have no output",
-			input:          `{"session_id":"test-session","transcript_path":"/tmp/test.jsonl","cwd":"/tmp","hook_event_name":"UserPromptSubmit","prompt":"regular prompt"}`,
+			name: "Non-command should have no output",
+			input: `{"session_id":"test-session","transcript_path":"/tmp/test.jsonl",` +
+				`"cwd":"/tmp","hook_event_name":"UserPromptSubmit","prompt":"regular prompt"}`,
 			expectedStdout: "",
 			expectedStderr: "",
 		},
 	}
+}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Create the main command
-			rootCmd := createMainRootCommand()
-			rootCmd.PersistentFlags().StringP("config", "c", configPath, "Path to config file")
+func runOutputStreamTest(t *testing.T, configPath string, test outputStreamTest) {
+	t.Helper()
+	rootCmd := createMainRootCommand()
+	rootCmd.PersistentFlags().StringP("config", "c", configPath, "Path to config file")
 
-			// Capture stdout and stderr
-			var stdout, stderr bytes.Buffer
-			rootCmd.SetOut(&stdout)
-			rootCmd.SetErr(&stderr)
-			rootCmd.SetIn(strings.NewReader(tt.input))
+	var stdout, stderr bytes.Buffer
+	rootCmd.SetOut(&stdout)
+	rootCmd.SetErr(&stderr)
+	rootCmd.SetIn(strings.NewReader(test.input))
 
-			// Execute the command
-			err := rootCmd.Execute()
-			if err != nil {
-				t.Fatalf("Command execution failed: %v", err)
-			}
+	err := rootCmd.Execute()
+	if err != nil {
+		t.Fatalf("Command execution failed: %v", err)
+	}
 
-			// Check stdout
-			if stdout.String() != tt.expectedStdout {
-				if tt.expectedStdout != "" {
-					t.Errorf("Expected stdout %q, got %q", tt.expectedStdout, stdout.String())
-				}
-			}
+	checkOutput(t, stdout.String(), test.expectedStdout, stderr.String(), test.expectedStderr)
+}
 
-			// Check stderr
-			if tt.expectedStderr == "" {
-				if strings.TrimSpace(stderr.String()) != "" {
-					t.Errorf("Expected empty stderr, got %q", stderr.String())
-				}
-			}
-		})
+func checkOutput(t *testing.T, actualStdout, expectedStdout, actualStderr, expectedStderr string) {
+	t.Helper()
+	if actualStdout != expectedStdout {
+		if expectedStdout != "" {
+			t.Errorf("Expected stdout %q, got %q", expectedStdout, actualStdout)
+		}
+	}
+
+	if expectedStderr == "" {
+		if strings.TrimSpace(actualStderr) != "" {
+			t.Errorf("Expected empty stderr, got %q", actualStderr)
+		}
 	}
 }

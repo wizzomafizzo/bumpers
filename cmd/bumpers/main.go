@@ -18,12 +18,15 @@ func main() {
 func run() error {
 	workingDir, err := project.FindRoot()
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to find project root: %w", err)
 	}
 
 	if err := logger.Init(workingDir); err != nil {
-		return err
+		return fmt.Errorf("logger init failed: %w", err)
 	}
 
-	return buildMainRootCommand().Execute()
+	if err := buildMainRootCommand().Execute(); err != nil {
+		return fmt.Errorf("command execution failed: %w", err)
+	}
+	return nil
 }

@@ -19,11 +19,11 @@ func (a *App) Initialize() error {
 		workingDir = a.workDir
 	}
 	if workingDir == "" {
-		cwd, err := os.Getwd()
+		var err error
+		workingDir, err = os.Getwd() //nolint:ineffassign,staticcheck // workingDir is used in logger initialization
 		if err != nil {
 			return fmt.Errorf("failed to get current working directory: %w", err)
 		}
-		workingDir = cwd
 	}
 
 	// Get filesystem to use (either injected or default)

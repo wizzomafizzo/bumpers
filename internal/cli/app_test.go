@@ -6,11 +6,23 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/wizzomafizzo/bumpers/internal/constants"
 	"github.com/wizzomafizzo/bumpers/internal/filesystem"
+	"github.com/wizzomafizzo/bumpers/internal/logger"
 )
+
+var loggerInitOnce sync.Once
+
+// setupTest initializes test logger to prevent race conditions
+func setupTest(t *testing.T) {
+	t.Helper()
+	loggerInitOnce.Do(func() {
+		logger.InitTest()
+	})
+}
 
 // createTempConfig creates a temporary config file for testing
 func createTempConfig(t *testing.T, content string) string {
@@ -119,12 +131,13 @@ func TestAppInitializeWithMemoryFileSystem(t *testing.T) {
 	}
 
 	if !bytes.Equal(content, configContent) {
-		t.Errorf("Config content changed after Initialize")
+		t.Error("Config content changed after Initialize")
 	}
 }
 
 func TestInstallClaudeHooksWithWorkDir(t *testing.T) {
 	t.Parallel()
+	setupTest(t)
 
 	tempDir := t.TempDir()
 	configPath := filepath.Join(tempDir, "bumpers.yml")
@@ -160,6 +173,7 @@ func TestInstallClaudeHooksWithWorkDir(t *testing.T) {
 
 func TestProcessHook(t *testing.T) {
 	t.Parallel()
+	setupTest(t)
 
 	configContent := `rules:
   - pattern: "go test"
@@ -196,6 +210,7 @@ func TestProcessHook(t *testing.T) {
 
 func TestProcessHookAllowed(t *testing.T) {
 	t.Parallel()
+	setupTest(t)
 
 	configContent := `rules:
   - pattern: "go test"
@@ -224,6 +239,7 @@ func TestProcessHookAllowed(t *testing.T) {
 
 func TestProcessHookDangerousCommand(t *testing.T) {
 	t.Parallel()
+	setupTest(t)
 
 	configContent := `rules:
   - pattern: "rm -rf /*"
@@ -257,6 +273,7 @@ func TestProcessHookDangerousCommand(t *testing.T) {
 
 func TestProcessHookPatternMatching(t *testing.T) {
 	t.Parallel()
+	setupTest(t)
 
 	configContent := `rules:
   - pattern: "go test"
@@ -293,6 +310,7 @@ func TestProcessHookPatternMatching(t *testing.T) {
 
 func TestConfigurationIsUsed(t *testing.T) {
 	t.Parallel()
+	setupTest(t)
 
 	// This test ensures we're actually using the config file by checking for
 	// a specific message from the config rather than hardcoded responses
@@ -437,6 +455,7 @@ func TestStatusEnhanced(t *testing.T) {
 
 func TestInstallUsesProjectClaudeDirectory(t *testing.T) {
 	t.Parallel()
+	setupTest(t)
 	tempDir := t.TempDir()
 	configPath := filepath.Join(tempDir, "bumpers.yml")
 
@@ -803,6 +822,7 @@ func TestInstallHandlesMissingBumpersBinary(t *testing.T) {
 
 func TestHookInstallationDoesNotIncludeTimeout(t *testing.T) {
 	t.Parallel()
+	setupTest(t)
 	tempDir := t.TempDir()
 	configPath := filepath.Join(tempDir, "bumpers.yml")
 
@@ -1138,16 +1158,19 @@ func testNewAppAutoFindsConfigFile(t *testing.T, configFileName string) {
 
 func TestNewApp_AutoFindsConfigFile(t *testing.T) {
 	t.Parallel()
+	setupTest(t)
 	testNewAppAutoFindsConfigFile(t, "bumpers.yaml")
 }
 
 func TestNewApp_AutoFindsTomlConfigFile(t *testing.T) {
 	t.Parallel()
+	setupTest(t)
 	testNewAppAutoFindsConfigFile(t, "bumpers.toml")
 }
 
 func TestNewApp_AutoFindsJsonConfigFile(t *testing.T) {
 	t.Parallel()
+	setupTest(t)
 	testNewAppAutoFindsConfigFile(t, "bumpers.json")
 }
 
@@ -1250,6 +1273,7 @@ func createAppWithPrecedenceConfig(projectDir, subDir string) *App {
 
 func TestProcessHookRoutesUserPromptSubmit(t *testing.T) {
 	t.Parallel()
+	setupTest(t)
 
 	configContent := `rules:
   - pattern: "go test"
@@ -1273,7 +1297,8 @@ commands:
 		t.Fatalf("ProcessHook failed for UserPromptSubmit: %v", err)
 	}
 
-	expectedJSON := `{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"Available commands:\\n%help - Show this help\\n%status - Show project status"}}`
+	expectedJSON := `{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit",` +
+		`"additionalContext":"Available commands:\\n%help - Show this help\\n%status - Show project status"}}`
 	if result != expectedJSON {
 		t.Errorf("Expected %q, got %q", expectedJSON, result)
 	}
@@ -1304,14 +1329,16 @@ commands:
 			promptJSON: `{
 				"prompt": "%help"
 			}`,
-			expectedOutput: `{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"Available commands:\\n%help - Show this help\\n%status - Show project status"}}`,
+			expectedOutput: `{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit",` +
+				`"additionalContext":"Available commands:\\n%help - Show this help\\n%status - Show project status"}}`,
 		},
 		{
 			name: "Status command (%status)",
 			promptJSON: `{
 				"prompt": "%status"
 			}`,
-			expectedOutput: `{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"Project Status: All systems operational"}}`,
+			expectedOutput: `{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit",` +
+				`"additionalContext":"Project Status: All systems operational"}}`,
 		},
 		{
 			name: "Non-command prompt",
@@ -1365,13 +1392,15 @@ commands:
 		t.Fatalf("ProcessUserPrompt failed: %v", err)
 	}
 
-	expectedOutput := `{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"Test command message"}}`
+	expectedOutput := `{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit",` +
+		`"additionalContext":"Test command message"}}`
 	if result != expectedOutput {
 		t.Errorf("Expected hookSpecificOutput format for named command %q, got %q", expectedOutput, result)
 	}
 }
 
-func TestInstallWithPathCommand(t *testing.T) {
+func TestInstallWithPathCommand(t *testing.T) { //nolint:paralleltest // modifies global os.Args
+	setupTest(t)
 	// Don't run in parallel as we modify global os.Args
 
 	// Save original args
@@ -1403,7 +1432,7 @@ func TestInstallWithPathCommand(t *testing.T) {
 	// Verify the hook command is just "bumpers"
 	claudeDir := filepath.Join(prodDir, ".claude")
 	localSettingsPath := filepath.Join(claudeDir, "settings.local.json")
-	content, err := os.ReadFile(localSettingsPath)
+	content, err := os.ReadFile(localSettingsPath) //nolint:gosec // test file, controlled path
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1469,7 +1498,7 @@ func TestInstallPreservesExistingHooks(t *testing.T) {
 	}
 
 	// Read the settings back
-	content, err := os.ReadFile(settingsPath)
+	content, err := os.ReadFile(settingsPath) //nolint:gosec // test file, controlled path
 	if err != nil {
 		t.Fatal(err)
 	}
