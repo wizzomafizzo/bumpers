@@ -110,3 +110,73 @@ func TestExecute_WithReadFileFunction(t *testing.T) {
 		t.Errorf("Expected %q, got %q", expected, result)
 	}
 }
+
+func TestExecute_WithTestPathFunction_NonExistentFile(t *testing.T) {
+	t.Parallel()
+
+	// Template that uses the testPath function to check a nonexistent file
+	templateStr := "File exists: {{testPath \"nonexistent.txt\"}}"
+	data := map[string]any{}
+
+	result, err := Execute(templateStr, data)
+	if err != nil {
+		t.Fatalf("Execute() failed: %v", err)
+	}
+
+	expected := "File exists: false"
+	if result != expected {
+		t.Errorf("Expected %q, got %q", expected, result)
+	}
+}
+
+func TestExecute_WithTestPathFunction_ExistingFile(t *testing.T) {
+	t.Parallel()
+	// Create a test file in the project root
+	testContent := "Test file for testPath"
+	err := os.WriteFile("../../testpath-test.txt", []byte(testContent), 0o600)
+	if err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+	defer func() {
+		_ = os.Remove("../../testpath-test.txt")
+	}()
+
+	// Template that uses the testPath function to check an existing file
+	templateStr := "File exists: {{testPath \"testpath-test.txt\"}}"
+	data := map[string]any{}
+
+	result, err := Execute(templateStr, data)
+	if err != nil {
+		t.Fatalf("Execute() failed: %v", err)
+	}
+
+	expected := "File exists: true"
+	if result != expected {
+		t.Errorf("Expected %q, got %q", expected, result)
+	}
+}
+
+func TestExecute_WithTestPathFunction_InConditional(t *testing.T) {
+	t.Parallel()
+	// Create a test file in the project root
+	err := os.WriteFile("../../config-test.yml", []byte("Config content"), 0o600)
+	if err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+	defer func() {
+		_ = os.Remove("../../config-test.yml")
+	}()
+
+	// Template that uses testPath in a conditional statement - different from ExistingFile test
+	templateStr := "{{if testPath \"config-test.yml\"}}Config found{{else}}No config{{end}}"
+
+	result, err := Execute(templateStr, nil)
+	if err != nil {
+		t.Fatalf("Execute() failed: %v", err)
+	}
+
+	expected := "Config found"
+	if result != expected {
+		t.Errorf("Expected %q, got %q", expected, result)
+	}
+}

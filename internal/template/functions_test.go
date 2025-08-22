@@ -113,3 +113,104 @@ func TestReadFile_DirectoryTraversal_WithRealFS_ReturnsEmpty(t *testing.T) {
 		t.Errorf("Directory traversal should return empty string, got %q", result)
 	}
 }
+
+func TestTestPath_FileNotFound_ReturnsFalse(t *testing.T) {
+	t.Parallel()
+	fs := filesystem.NewMemoryFileSystem()
+
+	// Test checking a file that doesn't exist
+	result := testPath(fs, "nonexistent.txt")
+	if result {
+		t.Error("Expected false for nonexistent file, got true")
+	}
+}
+
+func TestTestPath_FileExists_ReturnsTrue(t *testing.T) {
+	t.Parallel()
+	fs := filesystem.NewOSFileSystem()
+
+	// Create a temporary test file in the project root
+	err := os.WriteFile("../../test-exists.txt", []byte("test content"), 0o600)
+	if err != nil {
+		t.Fatalf("Failed to write test file: %v", err)
+	}
+	defer func() {
+		_ = os.Remove("../../test-exists.txt")
+	}()
+
+	// Test checking if the file exists
+	result := testPath(fs, "test-exists.txt")
+
+	if !result {
+		t.Error("Expected true for existing file, got false")
+	}
+}
+
+func TestTestPath_DirectoryExists_ReturnsTrue(t *testing.T) {
+	t.Parallel()
+	fs := filesystem.NewOSFileSystem()
+
+	// Create a temporary test directory in the project root
+	err := os.Mkdir("../../test-dir", 0o750)
+	if err != nil {
+		t.Fatalf("Failed to create test directory: %v", err)
+	}
+	defer func() {
+		_ = os.Remove("../../test-dir")
+	}()
+
+	// Test checking if the directory exists
+	result := testPath(fs, "test-dir")
+
+	if !result {
+		t.Error("Expected true for existing directory, got false")
+	}
+}
+
+//nolint:paralleltest // changes working directory
+func TestTestPath_DirectoryTraversal_WithRealFS_ReturnsFalse(t *testing.T) {
+	// This test uses the real filesystem to test security
+	fs := filesystem.NewOSFileSystem()
+
+	// Create a temporary directory to simulate project root
+	tempDir, err := os.MkdirTemp("", "bumpers-test")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer func() {
+		_ = os.RemoveAll(tempDir)
+	}()
+
+	// Create a test file inside the temp dir
+	testFile := filepath.Join(tempDir, "safe.txt")
+	err = os.WriteFile(testFile, []byte("safe content"), 0o600)
+	if err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	// Create a file outside the temp dir that should not be accessible
+	outsideFile := filepath.Join(filepath.Dir(tempDir), "outside.txt")
+	err = os.WriteFile(outsideFile, []byte("secret content"), 0o600)
+	if err != nil {
+		t.Fatalf("Failed to create outside file: %v", err)
+	}
+	defer func() {
+		_ = os.RemoveAll(outsideFile)
+	}()
+
+	// Change to the temp directory to simulate project context
+	oldDir, _ := os.Getwd()
+	err = os.Chdir(tempDir)
+	if err != nil {
+		t.Fatalf("Failed to change directory: %v", err)
+	}
+	defer func() {
+		_ = os.Chdir(oldDir)
+	}()
+
+	// Test directory traversal attempt
+	result := testPath(fs, "../outside.txt")
+	if result {
+		t.Error("Directory traversal should return false, got true")
+	}
+}

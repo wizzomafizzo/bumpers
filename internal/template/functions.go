@@ -18,6 +18,9 @@ func createFuncMap(fs filesystem.FileSystem) template.FuncMap {
 		"readFile": func(filename string) string {
 			return readFile(fs, filename)
 		},
+		"testPath": func(filename string) bool {
+			return testPath(fs, filename)
+		},
 	}
 }
 
@@ -69,4 +72,42 @@ func readFile(fs filesystem.FileSystem, filename string) string {
 	// Binary file - encode as base64 data URI
 	encoded := base64.StdEncoding.EncodeToString(content)
 	return fmt.Sprintf("data:application/octet-stream;base64,%s", encoded)
+}
+
+// testPath securely checks if a file or directory exists within the project root
+// Returns false if file doesn't exist, is outside project, or on error
+func testPath(fs filesystem.FileSystem, filename string) bool {
+	// Get project root
+	projectRoot, err := project.FindRoot()
+	if err != nil {
+		return false
+	}
+
+	// Clean the filename to prevent directory traversal
+	cleanFilename := filepath.Clean(filename)
+
+	// Convert to absolute path within project root
+	fullPath := filepath.Join(projectRoot, cleanFilename)
+
+	// Resolve any symlinks and get absolute path
+	resolvedPath, err := filepath.Abs(fullPath)
+	if err != nil {
+		return false
+	}
+
+	// Ensure the resolved path is still within the project root
+	resolvedProjectRoot, err := filepath.Abs(projectRoot)
+	if err != nil {
+		return false
+	}
+
+	// Check if resolved path is within project root
+	if !strings.HasPrefix(resolvedPath, resolvedProjectRoot+string(filepath.Separator)) &&
+		resolvedPath != resolvedProjectRoot {
+		return false
+	}
+
+	// Check if the file or directory exists
+	_, err = fs.Stat(resolvedPath)
+	return err == nil
 }
