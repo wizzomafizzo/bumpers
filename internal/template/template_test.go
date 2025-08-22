@@ -1,6 +1,7 @@
 package template
 
 import (
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -78,6 +79,33 @@ func TestExecute_WithTodayVariable(t *testing.T) {
 
 	expectedDate := time.Now().Format("2006-01-02")
 	expected := "Today is " + expectedDate
+	if result != expected {
+		t.Errorf("Expected %q, got %q", expected, result)
+	}
+}
+
+func TestExecute_WithReadFileFunction(t *testing.T) {
+	t.Parallel()
+	// Create a test file in the project root
+	testContent := "File content from readFile"
+	err := os.WriteFile("../../readfile-test.txt", []byte(testContent), 0o600)
+	if err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+	defer func() {
+		_ = os.Remove("../../readfile-test.txt")
+	}()
+
+	// Template that uses the readFile function
+	templateStr := "Content: {{readFile \"readfile-test.txt\"}}"
+	data := map[string]any{}
+
+	result, err := Execute(templateStr, data)
+	if err != nil {
+		t.Fatalf("Execute() failed: %v", err)
+	}
+
+	expected := "Content: " + testContent
 	if result != expected {
 		t.Errorf("Expected %q, got %q", expected, result)
 	}
