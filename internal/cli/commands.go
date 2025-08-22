@@ -78,14 +78,10 @@ func (a *App) ProcessUserPrompt(rawJSON json.RawMessage) (string, error) {
 		return "", nil // Command not found, pass through
 	}
 
-	// Process template with command name as data
-	data := struct {
-		Name string
-	}{
-		Name: commandStr,
-	}
+	// Process template with command context including shared variables
+	context := template.BuildCommandContext(commandStr)
 
-	processedMessage, err := template.Execute(commandMessage, data)
+	processedMessage, err := template.Execute(commandMessage, context)
 	if err != nil {
 		log.Error().Err(err).Str("commandName", commandStr).Msg("Failed to process command template")
 		return "", fmt.Errorf("failed to process command template: %w", err)

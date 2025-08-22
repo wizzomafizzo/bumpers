@@ -3,6 +3,7 @@ package template
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestExecute_SimpleTemplate(t *testing.T) {
@@ -63,5 +64,21 @@ func TestExecute_ExecutionError(t *testing.T) {
 	// Check that error message mentions execution
 	if !strings.Contains(err.Error(), "failed to execute template") {
 		t.Errorf("Expected error to mention template execution, got: %v", err)
+	}
+}
+
+func TestExecute_WithTodayVariable(t *testing.T) {
+	t.Parallel()
+
+	context := BuildNoteContext()
+	result, err := Execute("Today is {{.Today}}", context)
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	expectedDate := time.Now().Format("2006-01-02")
+	expected := "Today is " + expectedDate
+	if result != expected {
+		t.Errorf("Expected %q, got %q", expected, result)
 	}
 }

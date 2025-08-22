@@ -41,8 +41,9 @@ func (a *App) ProcessSessionStart(rawJSON json.RawMessage) (string, error) {
 	// Process and concatenate all note messages
 	messages := make([]string, 0, len(cfg.Notes))
 	for _, note := range cfg.Notes {
-		// Process template with empty data for now
-		processedMessage, templateErr := template.Execute(note.Message, struct{}{})
+		// Process template with note context including shared variables
+		context := template.BuildNoteContext()
+		processedMessage, templateErr := template.Execute(note.Message, context)
 		if templateErr != nil {
 			return "", fmt.Errorf("failed to process note template: %w", templateErr)
 		}
