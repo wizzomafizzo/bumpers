@@ -1446,6 +1446,30 @@ commands:
 	}
 }
 
+func TestProcessUserPromptWithTemplate(t *testing.T) {
+	t.Parallel()
+	setupTest(t)
+
+	configContent := `commands:
+  - name: "hello"
+    message: "Hello {{.Name}}!"`
+
+	configPath := createTempConfig(t, configContent)
+	app := NewApp(configPath)
+
+	promptJSON := `{"prompt": "$hello"}`
+	result, err := app.ProcessUserPrompt(json.RawMessage(promptJSON))
+	if err != nil {
+		t.Fatalf("ProcessUserPrompt failed: %v", err)
+	}
+
+	expectedOutput := `{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit",` +
+		`"additionalContext":"Hello hello!"}}`
+	if result != expectedOutput {
+		t.Errorf("Expected templated message, got: %q", result)
+	}
+}
+
 func TestInstallWithPathCommand(t *testing.T) { //nolint:paralleltest // modifies global os.Args
 	setupTest(t)
 	// Don't run in parallel as we modify global os.Args
@@ -1701,5 +1725,63 @@ func TestProcessSessionStartWorksWithClear(t *testing.T) {
 		`"additionalContext":"Clear message"}}`
 	if result != expectedJSON {
 		t.Errorf("Expected %q, got %q", expectedJSON, result)
+	}
+}
+
+func TestProcessSessionStartWithTemplate(t *testing.T) {
+	t.Parallel()
+	setupTest(t)
+
+	configContent := `notes:
+  - message: "Hello from template!"`
+
+	configPath := createTempConfig(t, configContent)
+	app := NewApp(configPath)
+
+	sessionStartInput := `{
+		"session_id": "abc123",
+		"hook_event_name": "SessionStart",
+		"source": "startup"
+	}`
+
+	result, err := app.ProcessHook(strings.NewReader(sessionStartInput))
+	if err != nil {
+		t.Fatalf("ProcessHook failed for SessionStart: %v", err)
+	}
+
+	// The template should be processed (no template syntax, so it should pass through as-is)
+	expectedJSON := `{"hookSpecificOutput":{"hookEventName":"SessionStart",` +
+		`"additionalContext":"Hello from template!"}}`
+	if result != expectedJSON {
+		t.Errorf("Expected %q, got %q", expectedJSON, result)
+	}
+}
+
+func TestProcessHookWithTemplate(t *testing.T) {
+	t.Parallel()
+	setupTest(t)
+
+	configContent := `rules:
+  - pattern: "go test"
+    message: "Command blocked: {{.Command}}"`
+
+	configPath := createTempConfig(t, configContent)
+	app := NewApp(configPath)
+
+	hookInput := `{
+		"tool_input": {
+			"command": "go test ./...",
+			"description": "Run tests"
+		}
+	}`
+
+	response, err := app.ProcessHook(strings.NewReader(hookInput))
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	expectedMessage := "Command blocked: go test ./..."
+	if response != expectedMessage {
+		t.Errorf("Expected %q, got %q", expectedMessage, response)
 	}
 }

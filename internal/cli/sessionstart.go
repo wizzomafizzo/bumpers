@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/wizzomafizzo/bumpers/internal/config"
+	"github.com/wizzomafizzo/bumpers/internal/template"
 )
 
 type SessionStartEvent struct {
@@ -37,10 +38,15 @@ func (a *App) ProcessSessionStart(rawJSON json.RawMessage) (string, error) {
 		return "", nil
 	}
 
-	// Concatenate all note messages
+	// Process and concatenate all note messages
 	messages := make([]string, 0, len(cfg.Notes))
 	for _, note := range cfg.Notes {
-		messages = append(messages, note.Message)
+		// Process template with empty data for now
+		processedMessage, templateErr := template.Execute(note.Message, struct{}{})
+		if templateErr != nil {
+			return "", fmt.Errorf("failed to process note template: %w", templateErr)
+		}
+		messages = append(messages, processedMessage)
 	}
 
 	additionalContext := strings.Join(messages, "\n")
