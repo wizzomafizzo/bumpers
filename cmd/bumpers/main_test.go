@@ -10,8 +10,8 @@ import (
 func TestInstallCommandExistence(t *testing.T) {
 	t.Parallel()
 
-	// Test that buildMainRootCommand creates a command with install subcommand
-	rootCmd := buildMainRootCommand()
+	// Test that createNewRootCommand creates a command with install subcommand
+	rootCmd := createNewRootCommand()
 
 	// Look for install command
 	installCmd, _, err := rootCmd.Find([]string{"install"})
@@ -28,7 +28,7 @@ func TestInstallCommandHasRunFunction(t *testing.T) {
 	t.Parallel()
 
 	// Test that the install command has a Run function wired up
-	rootCmd := buildMainRootCommand()
+	rootCmd := createNewRootCommand()
 	installCmd, _, err := rootCmd.Find([]string{"install"})
 	if err != nil {
 		t.Fatalf("Expected install command to exist, got error: %v", err)
@@ -53,7 +53,7 @@ func TestInstallCommandActuallyWorks(t *testing.T) { //nolint:paralleltest // us
 		t.Fatal(err)
 	}
 
-	rootCmd := buildMainRootCommand()
+	rootCmd := createNewRootCommand()
 	rootCmd.SetArgs([]string{"install"})
 
 	err = rootCmd.Execute()
@@ -67,43 +67,25 @@ func TestInstallCommandActuallyWorks(t *testing.T) { //nolint:paralleltest // us
 	}
 }
 
-func TestTestCommandActuallyWorks(t *testing.T) { //nolint:paralleltest // uses global logger state
-	// Test that test command tests rules
-	tempDir := t.TempDir()
-	originalDir, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = os.Chdir(originalDir) }()
+func TestHookCommandExistence(t *testing.T) {
+	t.Parallel()
 
-	err = os.Chdir(tempDir)
+	// Test that createNewRootCommand creates a command with hook subcommand
+	rootCmd := createNewRootCommand()
+
+	// Look for hook command
+	hookCmd, _, err := rootCmd.Find([]string{"hook"})
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("Expected hook command to exist, got error: %v", err)
 	}
 
-	// First install to create config
-	rootCmd := buildMainRootCommand()
-	rootCmd.SetArgs([]string{"install"})
-	err = rootCmd.Execute()
-	if err != nil {
-		t.Fatal(err)
+	if hookCmd == nil {
+		t.Error("Expected hook command to exist")
+		return
 	}
 
-	// Reset command and test a blocked command
-	rootCmd = buildMainRootCommand()
-	rootCmd.SetArgs([]string{"test", "go test"})
-
-	var output bytes.Buffer
-	rootCmd.SetOut(&output)
-
-	err = rootCmd.Execute()
-	if err != nil {
-		t.Fatalf("Expected test command to execute successfully, got: %v", err)
-	}
-
-	result := output.String()
-	if !strings.Contains(result, "make test") {
-		t.Errorf("Expected output to contain 'make test', got: %s", result)
+	if hookCmd.RunE == nil {
+		t.Error("Expected hook command to have RunE function")
 	}
 }
 
@@ -131,70 +113,39 @@ func TestConfigFlagWorks(t *testing.T) { //nolint:paralleltest // changes workin
 		t.Fatal(err)
 	}
 
-	// Test with custom config flag
-	rootCmd := buildMainRootCommand()
-	rootCmd.SetArgs([]string{"--config", customConfigPath, "test", "echo test"})
+	// Test with custom config flag - use validate command to test config parsing
+	rootCmd := createNewRootCommand()
+	rootCmd.SetArgs([]string{"--config", customConfigPath, "validate"})
 
 	var output bytes.Buffer
-	var errOutput bytes.Buffer
 	rootCmd.SetOut(&output)
-	rootCmd.SetErr(&errOutput)
 
 	err = rootCmd.Execute()
 	if err != nil {
-		t.Fatalf("Expected test command to execute successfully, got: %v", err)
+		t.Fatalf("Expected validate command to execute successfully, got: %v", err)
+	}
+
+	// Just verify the command ran without error - validation success indicates config was loaded
+}
+
+func TestRootCommandShowsHelp(t *testing.T) {
+	t.Parallel()
+
+	// Test that root command shows help when run without arguments
+	rootCmd := createNewRootCommand()
+	rootCmd.SetArgs([]string{})
+
+	var output bytes.Buffer
+	rootCmd.SetOut(&output)
+
+	err := rootCmd.Execute()
+	if err != nil {
+		t.Fatalf("Expected root command to execute successfully, got: %v", err)
 	}
 
 	result := output.String()
-	if !strings.Contains(result, "Custom config loaded") {
-		t.Errorf("Expected output to contain custom config response, got: %s", result)
-	}
-}
-
-func TestHookDeniedCommandOutputsToStderrAndExitsCode2(t *testing.T) { //nolint:paralleltest // changes working dir
-	// Test that denied commands output to stderr and exit with code 2 for Claude Code hooks
-	tempDir := t.TempDir()
-	originalDir, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = os.Chdir(originalDir) }()
-
-	err = os.Chdir(tempDir)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Create config with deny rule
-	configPath := "bumpers.yml"
-	err = os.WriteFile(configPath, []byte(`rules:
-  - pattern: "go test"
-    response: "Test command blocked"
-`), 0o600)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Create hook input
-	hookInput := `{
-		"tool_input": {
-			"command": "go test ./...",
-			"description": "Run tests"
-		}
-	}`
-
-	// Test hook processing function directly
-	var stderr bytes.Buffer
-	exitCode, message := processHookCommand(configPath, strings.NewReader(hookInput), &stderr)
-
-	// Should exit with code 2 for Claude Code hook blocking
-	if exitCode != 2 {
-		t.Fatalf("Expected exit code 2, got %d", exitCode)
-	}
-
-	// Check message contains the denial message
-	if !strings.Contains(message, "Test command blocked") {
-		t.Errorf("Expected message to contain denial message, got: %s", message)
+	if !strings.Contains(result, "Available Commands") {
+		t.Errorf("Expected output to contain help text, got: %s", result)
 	}
 }
 

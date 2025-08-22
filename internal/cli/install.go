@@ -143,7 +143,7 @@ func (a *App) createHookCommand(workingDir string) (settings.HookCommand, error)
 
 	return settings.HookCommand{
 		Type:    "command",
-		Command: bumpersCommand,
+		Command: bumpersCommand + " hook",
 	}, nil
 }
 

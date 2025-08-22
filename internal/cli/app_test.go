@@ -1438,8 +1438,8 @@ func TestInstallWithPathCommand(t *testing.T) { //nolint:paralleltest // modifie
 	}
 
 	contentStr := string(content)
-	if !strings.Contains(contentStr, `"command": "bumpers"`) {
-		t.Error("Expected hook command to be just 'bumpers' when run from PATH")
+	if !strings.Contains(contentStr, `"command": "bumpers hook"`) {
+		t.Error("Expected hook command to be 'bumpers hook' when run from PATH")
 	}
 }
 
