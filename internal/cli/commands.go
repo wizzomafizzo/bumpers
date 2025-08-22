@@ -8,6 +8,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/wizzomafizzo/bumpers/internal/config"
 	"github.com/wizzomafizzo/bumpers/internal/constants"
+	"github.com/wizzomafizzo/bumpers/internal/template"
 )
 
 type UserPromptEvent struct {
@@ -77,10 +78,17 @@ func (a *App) ProcessUserPrompt(rawJSON json.RawMessage) (string, error) {
 		return "", nil // Command not found, pass through
 	}
 
+	// Process template with command context including shared variables
+	processedMessage, err := template.ExecuteCommandTemplate(commandMessage, commandStr)
+	if err != nil {
+		log.Error().Err(err).Str("commandName", commandStr).Msg("Failed to process command template")
+		return "", fmt.Errorf("failed to process command template: %w", err)
+	}
+
 	// Create hook response that replaces the prompt and continues processing
 	response := HookSpecificOutput{
-		HookEventName:     "UserPromptSubmit",
-		AdditionalContext: commandMessage,
+		HookEventName:     constants.UserPromptSubmitEvent,
+		AdditionalContext: processedMessage,
 	}
 
 	// Wrap in hookSpecificOutput structure as required by Claude Code hook specification

@@ -222,7 +222,8 @@ func (a *App) installClaudeHooks() error {
 	}
 
 	// Add SessionStart hook for startup and clear events
-	err = claudeSettings.AddOrAppendHook(settings.SessionStartEvent, "startup|clear", hookCmd)
+	sessionMatcher := constants.SessionSourceStartup + "|" + constants.SessionSourceClear
+	err = claudeSettings.AddOrAppendHook(settings.SessionStartEvent, sessionMatcher, hookCmd)
 	if err != nil {
 		return fmt.Errorf("failed to add bumpers SessionStart hook to Claude settings: %w", err)
 	}

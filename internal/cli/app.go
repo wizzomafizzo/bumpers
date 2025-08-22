@@ -14,6 +14,7 @@ import (
 	"github.com/wizzomafizzo/bumpers/internal/hooks"
 	"github.com/wizzomafizzo/bumpers/internal/matcher"
 	"github.com/wizzomafizzo/bumpers/internal/project"
+	"github.com/wizzomafizzo/bumpers/internal/template"
 )
 
 func NewApp(configPath string) *App {
@@ -142,7 +143,13 @@ func (a *App) ProcessHook(input io.Reader) (string, error) {
 	}
 
 	if rule != nil {
-		return rule.Message, nil
+		// Process template with rule context including shared variables
+		processedMessage, err := template.ExecuteRuleTemplate(rule.Message, event.ToolInput.Command)
+		if err != nil {
+			return "", fmt.Errorf("failed to process rule template: %w", err)
+		}
+
+		return processedMessage, nil
 	}
 
 	// This should never happen based on matcher logic, but Go requires a return
@@ -166,7 +173,13 @@ func (a *App) TestCommand(command string) (string, error) {
 	}
 
 	if rule != nil {
-		return rule.Message, nil
+		// Process template with rule context including shared variables
+		processedMessage, err := template.ExecuteRuleTemplate(rule.Message, command)
+		if err != nil {
+			return "", fmt.Errorf("failed to process rule template: %w", err)
+		}
+
+		return processedMessage, nil
 	}
 
 	// This should never happen based on matcher logic, but Go requires a return

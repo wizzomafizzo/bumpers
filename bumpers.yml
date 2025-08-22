@@ -1,5 +1,5 @@
 notes:
-  - message: "Today's date is: 2025-08-22"
+  - message: "Today's date is: {{.Today}}"
 commands:
   - name: test
     message: Run "just test" to run all tests and fix ALL failing tests if any.

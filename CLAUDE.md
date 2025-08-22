@@ -4,108 +4,70 @@
 
 Bumpers is a Claude Code hook guard utility that intercepts hook events and provides intelligent command guarding with positive guidance. Instead of just blocking commands, it suggests better alternatives using encouraging, educational messaging.
 
-## Core Commands
+## CLI Commands
 
-### CLI Usage
 ```bash
 bumpers                    # Process hook input (main command)
 bumpers install           # Install configuration and Claude hooks
-bumpers test [command]    # Test a command against current rules
-bumpers claude backup     # Backup Claude settings.json
-bumpers claude restore    # Restore Claude settings from backup
+bumpers hook              # Process hook events from Claude Code
+bumpers status            # Show current configuration status
+bumpers validate          # Validate configuration files
 ```
 
-### Build & Development
+## Development Tools (justfile)
+
 ```bash
-just build          # Build binary to bin/bumpers
-just install        # Install to $GOPATH/bin
-just                # Lint, test, and build (default)
+just                      # List all available commands
+just build               # Build binary to bin/bumpers
+just install             # Install to $GOPATH/bin
+just test                # Run all tests with coverage and TDD guard
+just test ./internal/cli # Test specific package
+just test "" "TestName"  # Run specific test by name
+just test "./..." false  # Run tests without race detection
+just lint                # Run golangci-lint
+just lint fix            # Run golangci-lint with auto-fix
+just clean               # Remove build artifacts and coverage files
+just coverage            # Show test coverage in browser
 ```
 
-### Testing
-```bash
-just test                           # Run all tests with coverage
-just test ./internal/config        # Test specific package
-just test ./internal/cli           # Test CLI package only
-just test ./... false              # Run all tests without race detection
-just test ./internal/config true   # Test specific package with race detection
+**Note**: Always use `just test` instead of `go test` for TDD guard integration.
+
+## Project Structure
+
+```
+cmd/bumpers/           # CLI entry point with Cobra commands
+internal/
+├── cli/               # Application orchestrator and command logic
+├── config/            # YAML configuration management
+├── hooks/             # Hook event processing and JSON parsing
+├── matcher/           # Pattern matching engine for rules
+├── logger/            # Structured logging to .claude/bumpers/
+├── claude/            # Claude binary detection and settings
+│   └── settings/      # Claude settings.json management
+├── constants/         # Shared constants and paths
+├── filesystem/        # File system operations
+└── project/           # Project root detection
 ```
 
-**IMPORTANT**: Always use `just test` instead of `go test` to ensure proper TDD guard integration and consistent test execution.
+## Core Architecture
 
-### Code Quality
-```bash
-just lint           # Run golangci-lint
-just lint fix       # Run golangci-lint with auto-fix
-```
+1. **Hook Processing**: Parse JSON input from Claude Code hooks
+2. **Rule Matching**: Check commands against YAML pattern rules
+3. **Response Generation**: Provide helpful guidance for blocked commands
+4. **Exit Codes**: 0 = allowed, 1 = denied (with message)
 
-### Clean Up
-```bash
-just clean          # Remove build artifacts, coverage files, and bin/
-```
+## Configuration
 
-## Architecture
-
-### Package Structure
-
-The codebase follows standard Go project layout with clear separation of concerns:
-
-- **cmd/bumpers/** - Minimal CLI entry point using Cobra framework. Contains only command definitions and basic orchestration.
-
-- **internal/cli/** - Application orchestrator that coordinates between all internal packages. Handles the main business logic flow.
-
-- **internal/config/** - YAML configuration management. Loads and validates bumpers.yaml files containing rule definitions.
-
-- **internal/hooks/** - Hook event processing. Parses JSON input from Claude Code hooks and extracts command information.
-
-- **internal/matcher/** - Pattern matching engine using Go regex. Matches commands against configured rules.
-
-
-- **internal/logger/** - Structured logging to .claude/bumpers/bumpers.log using slog with JSON format.
-
-- **internal/claude/** - Claude binary detection and execution:
-  - **launcher.go** - Auto-detects Claude binary location with smart fallback
-  - **settings/** - Claude settings.json management for hook configuration
-
-- **configs/** - Embedded default configuration (default-bumpers.yaml) for installation.
-
-### Core Flow
-
-1. **Hook Input**: Claude Code sends JSON to stdin when a hook is triggered
-2. **Command Extraction**: `hooks.ParseInput()` extracts the command
-3. **Rule Matching**: `matcher.RuleMatcher` checks command against YAML rules
-4. **Response Generation**: If denied, creates helpful guidance
-5. **Exit Codes**: 0 = allowed, 1 = denied (with message to stdout)
-
-### Configuration System
-
-Rules are defined in YAML with regex patterns:
-- **pattern**: Regex to match commands (any match results in denial)
+Rules defined in `bumpers.yml` with regex patterns:
+- **pattern**: Regex to match commands (matches result in denial)
 - **message**: User-friendly explanation and alternatives
-- **generate**: Enable AI tool integration for dynamic responses (values: "off", "once", "session", "always")
-- **prompt**: Custom prompt for AI tool when generate is enabled
-
-Installation creates bumpers.yaml and configures .claude/settings.local.json hooks automatically.
-
-### Testing Approach
-
-The project uses strict TDD with comprehensive test coverage:
-- Unit tests for all packages in `*_test.go` files
-- Integration test in `internal/bumpers_test.go`
-- Tests automatically integrate with tdd-guard-go if available
-- Coverage target: >75% for all internal packages
+- **generate**: AI tool integration ("off", "once", "session", "always")
+- **prompt**: Custom prompt for AI responses
 
 ## Key Patterns
 
-- **Value Types**: Uses value types instead of pointers for better performance
-- **Error Handling**: Clean error propagation without excessive wrapping
-- **Minimal CLI**: Cobra commands are thin wrappers around internal/cli
-- **Thread Safety**: Launcher uses mutex for cached path management
-- **Configuration**: YAML-based with validation on load
-
-## Development Notes
-
-- Lefthook is configured for pre-commit hooks (lint, go mod tidy)
-- golangci-lint is used for comprehensive linting
-- The project avoids external dependencies where possible (no Viper, minimal deps)
-- Focus on positive, educational messaging in all user-facing output
+- **Value Types**: Prefer values over pointers for performance
+- **Clean Error Handling**: Minimal error wrapping
+- **Comprehensive Testing**: >75% coverage with TDD integration
+- **Minimal Dependencies**: Avoid external deps where possible
+- **Positive Messaging**: Educational, encouraging user guidance
