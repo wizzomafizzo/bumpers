@@ -8,9 +8,10 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/rs/zerolog/log"
 	"github.com/wizzomafizzo/bumpers/internal/config"
+	"github.com/wizzomafizzo/bumpers/internal/filesystem"
 	"github.com/wizzomafizzo/bumpers/internal/hooks"
-	"github.com/wizzomafizzo/bumpers/internal/logger"
 	"github.com/wizzomafizzo/bumpers/internal/matcher"
 	"github.com/wizzomafizzo/bumpers/internal/project"
 )
@@ -37,10 +38,12 @@ func NewApp(configPath string) *App {
 		}
 	}
 
-	return &App{
+	app := &App{
 		configPath:  resolvedConfigPath,
 		projectRoot: projectRoot,
 	}
+
+	return app
 }
 
 func findAlternativeConfig(projectRoot string) string {
@@ -60,8 +63,18 @@ func NewAppWithWorkDir(configPath, workDir string) *App {
 	return &App{configPath: configPath, workDir: workDir}
 }
 
+// NewAppWithFileSystem creates a new App instance with injectable filesystem.
+// This enables parallel testing by using in-memory filesystem instead of real I/O.
+func NewAppWithFileSystem(configPath, workDir string, fs filesystem.FileSystem) *App {
+	return &App{
+		configPath: configPath,
+		workDir:    workDir,
+		fileSystem: fs,
+	}
+}
+
 type App struct {
-	logger      *logger.Logger
+	fileSystem  filesystem.FileSystem
 	configPath  string
 	workDir     string
 	projectRoot string
@@ -83,14 +96,21 @@ func (a *App) loadConfigAndMatcher() (*config.Config, *matcher.RuleMatcher, erro
 }
 
 func (a *App) ProcessHook(input io.Reader) (string, error) {
+	// Log that we're processing a hook
+	log.Info().Msg("Processing hook input")
+
 	// Detect hook type and get raw JSON
 	hookType, rawJSON, err := hooks.DetectHookType(input)
 	if err != nil {
+		log.Error().Err(err).Msg("Failed to detect hook type")
 		return "", fmt.Errorf("failed to detect hook type: %w", err)
 	}
 
+	log.Info().Int("hookType", int(hookType)).Msg("Detected hook type")
+
 	// Handle UserPromptSubmit hooks
 	if hookType == hooks.UserPromptSubmitHook {
+		log.Info().Msg("Processing UserPromptSubmit hook")
 		return a.ProcessUserPrompt(rawJSON)
 	}
 
@@ -161,4 +181,12 @@ func (a *App) ValidateConfig() (string, error) {
 	}
 
 	return "Configuration is valid", nil
+}
+
+// getFileSystem returns the filesystem to use - either injected or defaults to OS
+func (a *App) getFileSystem() filesystem.FileSystem {
+	if a.fileSystem != nil {
+		return a.fileSystem
+	}
+	return filesystem.NewOSFileSystem()
 }

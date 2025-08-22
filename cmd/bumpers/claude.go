@@ -86,15 +86,27 @@ func createRootCommand() *cobra.Command {
 
 // processHookCommand processes hook input and returns exit code and error message
 func processHookCommand(configPath string, input io.Reader, _ io.Writer) (code int, response string) {
+	// Read input for processing
+	inputBytes, err := io.ReadAll(input)
+	if err != nil {
+		return 1, fmt.Sprintf("Error reading input: %v", err)
+	}
+
 	app := cli.NewApp(configPath)
 
-	response, err := app.ProcessHook(input)
+	// Create a new reader from the bytes we just read
+	response, err = app.ProcessHook(strings.NewReader(string(inputBytes)))
 	if err != nil {
 		return 1, fmt.Sprintf("Error: %v", err)
 	}
 
 	if response != "" {
-		return 2, response // Exit code 2 for Claude Code hook blocking
+		// Check if response is hookSpecificOutput format (should exit 0 and print to stdout)
+		if strings.Contains(response, "hookEventName") {
+			return 0, response
+		}
+		// Otherwise it's a blocking response (exit code 2)
+		return 2, response
 	}
 
 	return 0, ""
@@ -112,7 +124,12 @@ func createMainRootCommand() *cobra.Command {
 			exitCode, message := processHookCommand(configFlag, cmd.InOrStdin(), cmd.ErrOrStderr())
 
 			if message != "" {
-				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "%s\n", message)
+				// Check if this is a hookSpecificOutput response that should go to stdout
+				if strings.Contains(message, "hookEventName") {
+					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s\n", message)
+				} else {
+					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "%s\n", message)
+				}
 			}
 
 			if exitCode != 0 {

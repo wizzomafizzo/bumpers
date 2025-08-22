@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -504,5 +505,142 @@ func TestValidateCommandExecution(t *testing.T) {
 	output := buf.String()
 	if output != "Configuration is valid\n" {
 		t.Errorf("Expected 'Configuration is valid', got %q", output)
+	}
+}
+
+func TestProcessHookCommandExitCodes(t *testing.T) {
+	t.Parallel()
+
+	// Create a temporary config file with a command
+	tempDir := t.TempDir()
+	configContent := `commands:
+  - name: test
+    message: "Hello World"`
+
+	configPath := filepath.Join(tempDir, "bumpers.yml")
+	err := os.WriteFile(configPath, []byte(configContent), 0o600)
+	if err != nil {
+		t.Fatalf("Failed to create temp config: %v", err)
+	}
+
+	tests := []struct {
+		name              string
+		input             string
+		expectedResponse  string
+		expectedExitCode  int
+		shouldContainJSON bool
+	}{
+		{
+			name:              "HookSpecificOutput should return exit code 0",
+			input:             `{"session_id":"test-session","transcript_path":"/tmp/test.jsonl","cwd":"/tmp","hook_event_name":"UserPromptSubmit","prompt":"%test"}`,
+			expectedExitCode:  0,
+			shouldContainJSON: true,
+		},
+		{
+			name:             "Non-command prompt should return exit code 0",
+			input:            `{"session_id":"test-session","transcript_path":"/tmp/test.jsonl","cwd":"/tmp","hook_event_name":"UserPromptSubmit","prompt":"regular prompt"}`,
+			expectedExitCode: 0,
+			expectedResponse: "",
+		},
+		{
+			name:             "Unknown command should return exit code 0",
+			input:            `{"session_id":"test-session","transcript_path":"/tmp/test.jsonl","cwd":"/tmp","hook_event_name":"UserPromptSubmit","prompt":"%unknown"}`,
+			expectedExitCode: 0,
+			expectedResponse: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			input := bytes.NewBufferString(tt.input)
+			var output bytes.Buffer
+
+			exitCode, response := processHookCommand(configPath, input, &output)
+
+			if exitCode != tt.expectedExitCode {
+				t.Errorf("Expected exit code %d, got %d", tt.expectedExitCode, exitCode)
+			}
+
+			if tt.shouldContainJSON && !bytes.Contains([]byte(response), []byte("hookEventName")) {
+				t.Errorf("Expected response to contain hookEventName JSON, got: %s", response)
+			}
+
+			if tt.expectedResponse != "" && response != tt.expectedResponse {
+				t.Errorf("Expected response %q, got %q", tt.expectedResponse, response)
+			}
+		})
+	}
+}
+
+// TestProcessHookCommandDebugLogging removed - debug logging was removed for security reasons
+// to prevent potential exposure of sensitive user input
+
+func TestMainCommandOutputStreams(t *testing.T) {
+	// Create a temporary config file with a command
+	tempDir := t.TempDir()
+	configContent := `commands:
+  - name: test
+    message: "Hello World"`
+
+	configPath := filepath.Join(tempDir, "bumpers.yml")
+	err := os.WriteFile(configPath, []byte(configContent), 0o600)
+	if err != nil {
+		t.Fatalf("Failed to create temp config: %v", err)
+	}
+
+	tests := []struct {
+		name           string
+		input          string
+		expectedStdout string
+		expectedStderr string
+	}{
+		{
+			name:           "HookSpecificOutput should go to stdout",
+			input:          `{"session_id":"test-session","transcript_path":"/tmp/test.jsonl","cwd":"/tmp","hook_event_name":"UserPromptSubmit","prompt":"%test"}`,
+			expectedStdout: `{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"Hello World"}}` + "\n",
+			expectedStderr: "",
+		},
+		{
+			name:           "Non-command should have no output",
+			input:          `{"session_id":"test-session","transcript_path":"/tmp/test.jsonl","cwd":"/tmp","hook_event_name":"UserPromptSubmit","prompt":"regular prompt"}`,
+			expectedStdout: "",
+			expectedStderr: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create the main command
+			rootCmd := createMainRootCommand()
+			rootCmd.PersistentFlags().StringP("config", "c", configPath, "Path to config file")
+
+			// Capture stdout and stderr
+			var stdout, stderr bytes.Buffer
+			rootCmd.SetOut(&stdout)
+			rootCmd.SetErr(&stderr)
+			rootCmd.SetIn(strings.NewReader(tt.input))
+
+			// Execute the command
+			err := rootCmd.Execute()
+			if err != nil {
+				t.Fatalf("Command execution failed: %v", err)
+			}
+
+			// Check stdout
+			if stdout.String() != tt.expectedStdout {
+				if tt.expectedStdout != "" {
+					t.Errorf("Expected stdout %q, got %q", tt.expectedStdout, stdout.String())
+				}
+			}
+
+			// Check stderr
+			if tt.expectedStderr == "" {
+				if strings.TrimSpace(stderr.String()) != "" {
+					t.Errorf("Expected empty stderr, got %q", stderr.String())
+				}
+			}
+		})
 	}
 }

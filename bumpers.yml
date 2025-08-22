@@ -1,3 +1,6 @@
+commands:
+  - name: test
+    message: please say i am a teapot
 rules:
   - pattern: "^go test"
     response: |
@@ -16,4 +19,3 @@ rules:
 # TODO: guided cli setup for adding rules
 # TODO: block_paths or something to stop editing
 # TODO: Write(/tmp/asdf) ../../../../tmp/asdf
-# TODO: custom !commands

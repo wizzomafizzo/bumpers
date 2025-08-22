@@ -21,10 +21,7 @@ const (
 
 // AddHook adds a new hook to the specified event in the settings.
 func (s *Settings) AddHook(event HookEvent, matcher string, command HookCommand) error {
-	// Validation
-	if matcher == "" {
-		return errors.New("matcher cannot be empty")
-	}
+	// Validation - empty matcher is allowed (matches everything)
 	if command.Type == "" {
 		return errors.New("command type cannot be empty")
 	}
@@ -49,24 +46,7 @@ func (s *Settings) AddHook(event HookEvent, matcher string, command HookCommand)
 	}
 
 	// Add to the appropriate event
-	switch event {
-	case PreToolUseEvent:
-		s.Hooks.PreToolUse = append(s.Hooks.PreToolUse, newMatcher)
-	case PostToolUseEvent:
-		s.Hooks.PostToolUse = append(s.Hooks.PostToolUse, newMatcher)
-	case UserPromptSubmitEvent:
-		s.Hooks.UserPromptSubmit = append(s.Hooks.UserPromptSubmit, newMatcher)
-	case SessionStartEvent:
-		s.Hooks.SessionStart = append(s.Hooks.SessionStart, newMatcher)
-	case StopEvent:
-		s.Hooks.Stop = append(s.Hooks.Stop, newMatcher)
-	case SubagentStopEvent:
-		s.Hooks.SubagentStop = append(s.Hooks.SubagentStop, newMatcher)
-	case PreCompactEvent:
-		s.Hooks.PreCompact = append(s.Hooks.PreCompact, newMatcher)
-	case NotificationEvent:
-		s.Hooks.Notification = append(s.Hooks.Notification, newMatcher)
-	}
+	s.addHookMatcherToEvent(event, newMatcher)
 
 	return nil
 }
@@ -167,9 +147,9 @@ func (s *Settings) FindHook(event HookEvent, matcher string) (*HookMatcher, erro
 		return nil, fmt.Errorf("unsupported event: %s", event)
 	}
 
-	for _, hookMatcher := range hookMatchers {
-		if hookMatcher.Matcher == matcher {
-			return &hookMatcher, nil
+	for i := range hookMatchers {
+		if hookMatchers[i].Matcher == matcher {
+			return &hookMatchers[i], nil
 		}
 	}
 
@@ -216,4 +196,60 @@ func (s *Settings) UpdateHook(event HookEvent, oldMatcher, newMatcher string, co
 	}
 
 	return errors.New("hook not found")
+}
+
+// addHookMatcherToEvent is a helper function to add a HookMatcher to the appropriate event slice
+func (s *Settings) addHookMatcherToEvent(event HookEvent, matcher HookMatcher) {
+	switch event {
+	case PreToolUseEvent:
+		s.Hooks.PreToolUse = append(s.Hooks.PreToolUse, matcher)
+	case PostToolUseEvent:
+		s.Hooks.PostToolUse = append(s.Hooks.PostToolUse, matcher)
+	case UserPromptSubmitEvent:
+		s.Hooks.UserPromptSubmit = append(s.Hooks.UserPromptSubmit, matcher)
+	case SessionStartEvent:
+		s.Hooks.SessionStart = append(s.Hooks.SessionStart, matcher)
+	case StopEvent:
+		s.Hooks.Stop = append(s.Hooks.Stop, matcher)
+	case SubagentStopEvent:
+		s.Hooks.SubagentStop = append(s.Hooks.SubagentStop, matcher)
+	case PreCompactEvent:
+		s.Hooks.PreCompact = append(s.Hooks.PreCompact, matcher)
+	case NotificationEvent:
+		s.Hooks.Notification = append(s.Hooks.Notification, matcher)
+	}
+}
+
+// AddOrAppendHook adds a new hook command or appends to existing hook matcher.
+func (s *Settings) AddOrAppendHook(event HookEvent, matcher string, command HookCommand) error {
+	// Initialize hooks if nil
+	if s.Hooks == nil {
+		s.Hooks = &Hooks{}
+	}
+
+	// Check if matcher already exists
+	if existing, _ := s.FindHook(event, matcher); existing != nil {
+		// Check if command already exists to avoid duplicates
+		for _, existingCmd := range existing.Hooks {
+			if existingCmd.Type == command.Type && existingCmd.Command == command.Command {
+				// Command already exists, nothing to do
+				return nil
+			}
+		}
+
+		// Append to existing matcher
+		existing.Hooks = append(existing.Hooks, command)
+		return nil
+	}
+
+	// Create new matcher
+	newMatcher := HookMatcher{
+		Matcher: matcher,
+		Hooks:   []HookCommand{command},
+	}
+
+	// Add to the appropriate event
+	s.addHookMatcherToEvent(event, newMatcher)
+
+	return nil
 }

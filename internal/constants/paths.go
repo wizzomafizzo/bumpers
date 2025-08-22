@@ -1,5 +1,5 @@
 // Package paths contains constants for common directory and file paths used by bumpers.
-package paths
+package constants
 
 const (
 	// ClaudeDir is the primary Claude configuration directory name (.claude).

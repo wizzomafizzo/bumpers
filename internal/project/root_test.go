@@ -6,9 +6,7 @@ import (
 	"testing"
 )
 
-func TestFindRoot_FallbackToCwd(t *testing.T) {
-	t.Parallel()
-
+func TestFindRoot_FallbackToCwd(t *testing.T) { //nolint:paralleltest // changes working directory and environment variables
 	// Unset CLAUDE_PROJECT_DIR
 	originalEnv := os.Getenv("CLAUDE_PROJECT_DIR")
 	defer func() {
@@ -115,9 +113,7 @@ func setupTestProjectWithMarker(t *testing.T, markerName, markerContent string) 
 	return projectDir, cleanup
 }
 
-func TestFindRoot_WithGoMod(t *testing.T) {
-	t.Parallel()
-
+func TestFindRoot_WithGoMod(t *testing.T) { //nolint:paralleltest // changes working directory via setupTestProjectWithMarker
 	projectDir, cleanup := setupTestProjectWithMarker(t, "go.mod", "module example.com/myproject\n")
 	defer cleanup()
 
@@ -141,9 +137,7 @@ func TestFindRoot_WithGoMod(t *testing.T) {
 	}
 }
 
-func TestFindRoot_WithPackageJSON(t *testing.T) {
-	t.Parallel()
-
+func TestFindRoot_WithPackageJSON(t *testing.T) { //nolint:paralleltest // changes working directory via setupTestProjectWithMarker
 	projectDir, cleanup := setupTestProjectWithMarker(t, "package.json", `{"name": "my-project", "version": "1.0.0"}`)
 	defer cleanup()
 

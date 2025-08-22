@@ -33,6 +33,7 @@ type Rule struct {
 }
 
 type Command struct {
+	Name    string `yaml:"name" mapstructure:"name"`
 	Message string `yaml:"message" mapstructure:"message"`
 }
 

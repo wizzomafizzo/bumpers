@@ -1,15 +1,15 @@
 package cli
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/wizzomafizzo/bumpers/internal/config"
-	"github.com/wizzomafizzo/bumpers/internal/logger"
-	"github.com/wizzomafizzo/bumpers/internal/paths"
+	"github.com/wizzomafizzo/bumpers/internal/constants"
+	"github.com/wizzomafizzo/bumpers/internal/filesystem"
 )
 
 // createTempConfig creates a temporary config file for testing
@@ -38,6 +38,88 @@ func TestNewAppWithWorkDir(t *testing.T) {
 
 	if app.workDir != workDir {
 		t.Errorf("Expected workDir %s, got %s", workDir, app.workDir)
+	}
+}
+
+// TestAppWithMemoryFileSystem tests App initialization with in-memory filesystem for parallel testing
+func TestAppWithMemoryFileSystem(t *testing.T) {
+	t.Parallel()
+
+	// Setup in-memory filesystem with test config
+	fs := filesystem.NewMemoryFileSystem()
+	configContent := []byte(`rules:
+  - pattern: "rm -rf"
+    response: "Use safer alternatives"`)
+	configPath := "/test/bumpers.yml"
+
+	err := fs.WriteFile(configPath, configContent, 0o600)
+	if err != nil {
+		t.Fatalf("Failed to setup test config: %v", err)
+	}
+
+	// Create app with injected filesystem - this should work without real file I/O
+	app := NewAppWithFileSystem(configPath, "/test/workdir", fs)
+
+	if app == nil {
+		t.Fatal("Expected app to be created")
+	}
+
+	// Test that the filesystem was properly injected
+	if app.fileSystem != fs {
+		t.Error("Expected FileSystem to be properly injected")
+	}
+
+	// Test that config file is accessible via injected filesystem
+	content, err := app.fileSystem.ReadFile(configPath)
+	if err != nil {
+		t.Errorf("Failed to read config via injected filesystem: %v", err)
+	}
+
+	if !bytes.Equal(content, configContent) {
+		t.Errorf("Expected config content %q, got %q", string(configContent), string(content))
+	}
+}
+
+// TestAppInitializeWithMemoryFileSystem tests that Initialize works with injected filesystem
+func TestAppInitializeWithMemoryFileSystem(t *testing.T) {
+	t.Parallel()
+
+	// Setup in-memory filesystem with test config
+	fs := filesystem.NewMemoryFileSystem()
+	configContent := []byte(`rules:
+  - pattern: "rm -rf"
+    response: "Use safer alternatives"`)
+	configPath := "/test/bumpers.yml"
+
+	err := fs.WriteFile(configPath, configContent, 0o600)
+	if err != nil {
+		t.Fatalf("Failed to setup test config: %v", err)
+	}
+
+	// Add bumpers binary to memory filesystem (needed for validateBumpersPath)
+	bumpersPath := "/test/workdir/bin/bumpers"
+	err = fs.WriteFile(bumpersPath, []byte("fake bumpers binary"), 0o755)
+	if err != nil {
+		t.Fatalf("Failed to setup fake bumpers binary: %v", err)
+	}
+
+	// Create app with injected filesystem
+	app := NewAppWithFileSystem(configPath, "/test/workdir", fs)
+
+	// Initialize should work without real filesystem operations
+	err = app.Initialize()
+	if err != nil {
+		t.Errorf("Initialize failed with memory filesystem: %v", err)
+	}
+
+	// Verify config can still be loaded after Initialize
+	content, err := app.fileSystem.ReadFile(configPath)
+	if err != nil {
+		t.Errorf("Failed to read config after Initialize: %v", err)
+	}
+
+	if !bytes.Equal(content, configContent) {
+		t.Errorf("Config content changed after Initialize")
 	}
 }
 
@@ -451,14 +533,6 @@ func TestProcessHookLogsErrors(t *testing.T) {
 
 	// Create logger for the app
 	var err error
-	// Use default config for logger in tests
-	cfg := &config.Config{
-		Logging: config.LoggingConfig{},
-	}
-	app.logger, err = logger.NewWithConfig(cfg, tempDir)
-	if err != nil {
-		t.Fatalf("Logger creation failed: %v", err)
-	}
 
 	hookInput := `{
 		"tool_input": {
@@ -564,9 +638,9 @@ func TestInstallCreatesBothHooks(t *testing.T) {
 		t.Error("Expected PreToolUse Bash hook to be added to settings.local.json")
 	}
 
-	// Check for UserPromptSubmit hook with .* matcher
-	if !strings.Contains(contentStr, `"matcher": ".*"`) {
-		t.Error("Expected UserPromptSubmit hook with .* matcher to be added to settings.local.json")
+	// Check for UserPromptSubmit hook with empty matcher (omitted from JSON)
+	if !strings.Contains(contentStr, `"UserPromptSubmit"`) {
+		t.Error("Expected UserPromptSubmit hook to be added to settings.local.json")
 	}
 
 	// Check that both hooks contain bumpers command
@@ -802,25 +876,6 @@ func TestInitializeInitializesLogger(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
-
-	// Verify logger was initialized by attempting to log something
-	app.logger.Info().Bool("initialized", true).Msg("test log message")
-
-	// Check if log file was created in the correct directory
-	logFile := filepath.Join(tempDir, ".claude", "bumpers", "bumpers.log")
-	content, err := os.ReadFile(logFile) //nolint:gosec // controlled log file path in test
-	if err != nil {
-		t.Fatalf("Expected log file to be created at %s: %v", logFile, err)
-	}
-
-	contentStr := string(content)
-	if !strings.Contains(contentStr, "test log message") {
-		t.Error("Expected log file to contain 'test log message'")
-	}
-
-	if !strings.Contains(contentStr, "\"initialized\":true") {
-		t.Error("Expected log file to contain structured data")
-	}
 }
 
 func TestValidateConfig(t *testing.T) {
@@ -889,12 +944,12 @@ func TestInstallUsesPathConstants(t *testing.T) {
 	}
 
 	// Verify that directories were created using the path constants
-	expectedClaudeDir := filepath.Join(tempDir, paths.ClaudeDir)
+	expectedClaudeDir := filepath.Join(tempDir, constants.ClaudeDir)
 	if _, err := os.Stat(expectedClaudeDir); os.IsNotExist(err) {
 		t.Errorf("Expected Claude directory to be created at %s (using paths.ClaudeDir)", expectedClaudeDir)
 	}
 
-	expectedSettingsFile := filepath.Join(expectedClaudeDir, paths.SettingsFilename)
+	expectedSettingsFile := filepath.Join(expectedClaudeDir, constants.SettingsFilename)
 	if _, err := os.Stat(expectedSettingsFile); os.IsNotExist(err) {
 		t.Errorf("Expected settings file to be created at %s (using paths.SettingsFilename)", expectedSettingsFile)
 	}
@@ -1029,13 +1084,13 @@ func TestInstall_UsesProjectRoot(t *testing.T) {
 	}
 
 	// Verify .claude directory was created at project root, not in subdirectory
-	expectedClaudeDir := filepath.Join(projectDir, paths.ClaudeDir)
+	expectedClaudeDir := filepath.Join(projectDir, constants.ClaudeDir)
 	if _, err := os.Stat(expectedClaudeDir); os.IsNotExist(err) {
 		t.Errorf("Expected .claude directory to be created at project root %s", expectedClaudeDir)
 	}
 
 	// Verify .claude directory was NOT created in subdirectory
-	wrongClaudeDir := filepath.Join(subDir, paths.ClaudeDir)
+	wrongClaudeDir := filepath.Join(subDir, constants.ClaudeDir)
 	if _, err := os.Stat(wrongClaudeDir); !os.IsNotExist(err) {
 		t.Errorf("Expected .claude directory to NOT be created in subdirectory %s", wrongClaudeDir)
 	}
@@ -1200,15 +1255,17 @@ func TestProcessHookRoutesUserPromptSubmit(t *testing.T) {
   - pattern: "go test"
     response: "Use make test instead"
 commands:
-  - message: "Available commands:\\n!help - Show this help\\n!status - Show project status"
-  - message: "Project Status: All systems operational"`
+  - name: "help"
+    message: "Available commands:\\n%help - Show this help\\n%status - Show project status"
+  - name: "status"
+    message: "Project Status: All systems operational"`
 
 	configPath := createTempConfig(t, configContent)
 	app := NewApp(configPath)
 
 	// Test UserPromptSubmit hook routing
 	userPromptInput := `{
-		"prompt": "!0"
+		"prompt": "%help"
 	}`
 
 	result, err := app.ProcessHook(strings.NewReader(userPromptInput))
@@ -1216,8 +1273,7 @@ commands:
 		t.Fatalf("ProcessHook failed for UserPromptSubmit: %v", err)
 	}
 
-	expectedJSON := `{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit",` +
-		`"additionalContext":"Available commands:\\n!help - Show this help\\n!status - Show project status"}}`
+	expectedJSON := `{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"Available commands:\\n%help - Show this help\\n%status - Show project status"}}`
 	if result != expectedJSON {
 		t.Errorf("Expected %q, got %q", expectedJSON, result)
 	}
@@ -1230,8 +1286,10 @@ func TestProcessUserPrompt(t *testing.T) {
   - pattern: "go test"
     response: "Use make test instead"
 commands:
-  - message: "Available commands:\\n!help - Show this help\\n!status - Show project status"
-  - message: "Project Status: All systems operational"`
+  - name: "help"
+    message: "Available commands:\\n%help - Show this help\\n%status - Show project status"
+  - name: "status"
+    message: "Project Status: All systems operational"`
 
 	configPath := createTempConfig(t, configContent)
 	app := NewApp(configPath)
@@ -1242,20 +1300,18 @@ commands:
 		expectedOutput string
 	}{
 		{
-			name: "Command 0 (!0)",
+			name: "Help command (%help)",
 			promptJSON: `{
-				"prompt": "!0"
+				"prompt": "%help"
 			}`,
-			expectedOutput: `{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit",` +
-				`"additionalContext":"Available commands:\\n!help - Show this help\\n!status - Show project status"}}`,
+			expectedOutput: `{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"Available commands:\\n%help - Show this help\\n%status - Show project status"}}`,
 		},
 		{
-			name: "Command 1 (!1)",
+			name: "Status command (%status)",
 			promptJSON: `{
-				"prompt": "!1"
+				"prompt": "%status"
 			}`,
-			expectedOutput: `{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit",` +
-				`"additionalContext":"Project Status: All systems operational"}}`,
+			expectedOutput: `{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"Project Status: All systems operational"}}`,
 		},
 		{
 			name: "Non-command prompt",
@@ -1265,9 +1321,9 @@ commands:
 			expectedOutput: "",
 		},
 		{
-			name: "Invalid command index (!5)",
+			name: "Invalid command index (%5)",
 			promptJSON: `{
-				"prompt": "!5"
+				"prompt": "%5"
 			}`,
 			expectedOutput: "",
 		},
@@ -1286,5 +1342,169 @@ commands:
 				t.Errorf("Expected %q, got %q", tt.expectedOutput, result)
 			}
 		})
+	}
+}
+
+func TestProcessUserPromptValidationResult(t *testing.T) {
+	t.Parallel()
+
+	// Create temporary config with named commands
+	configContent := `
+commands:
+  - name: "test"
+    message: "Test command message"
+`
+
+	configPath := createTempConfig(t, configContent)
+	app := NewApp(configPath)
+
+	// Test that named command prompts work
+	promptJSON := `{"prompt": "%test"}`
+	result, err := app.ProcessUserPrompt(json.RawMessage(promptJSON))
+	if err != nil {
+		t.Fatalf("ProcessUserPrompt failed: %v", err)
+	}
+
+	expectedOutput := `{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"Test command message"}}`
+	if result != expectedOutput {
+		t.Errorf("Expected hookSpecificOutput format for named command %q, got %q", expectedOutput, result)
+	}
+}
+
+func TestInstallWithPathCommand(t *testing.T) {
+	// Don't run in parallel as we modify global os.Args
+
+	// Save original args
+	originalArgs := os.Args
+	defer func() { os.Args = originalArgs }()
+
+	// Simulate running from PATH
+	os.Args = []string{"bumpers", "install"}
+
+	// Use a production-like directory name to avoid test environment detection
+	tempDir := t.TempDir()
+	prodDir := filepath.Join(tempDir, "production-env")
+	err := os.MkdirAll(prodDir, 0o750)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	configPath := filepath.Join(prodDir, "bumpers.yml")
+
+	// Use the new constructor with working directory
+	app := NewAppWithWorkDir(configPath, prodDir)
+
+	// This should NOT fail because PATH validation should be skipped
+	err = app.Initialize()
+	if err != nil {
+		t.Fatalf("Expected no error when using PATH command, got %v", err)
+	}
+
+	// Verify the hook command is just "bumpers"
+	claudeDir := filepath.Join(prodDir, ".claude")
+	localSettingsPath := filepath.Join(claudeDir, "settings.local.json")
+	content, err := os.ReadFile(localSettingsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	contentStr := string(content)
+	if !strings.Contains(contentStr, `"command": "bumpers"`) {
+		t.Error("Expected hook command to be just 'bumpers' when run from PATH")
+	}
+}
+
+func TestInstallPreservesExistingHooks(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "bumpers.yml")
+
+	app := NewAppWithWorkDir(configPath, tempDir)
+
+	// Create Claude directory and settings with existing hooks
+	claudeDir := filepath.Join(tempDir, ".claude")
+	err := os.MkdirAll(claudeDir, 0o750)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	settingsPath := filepath.Join(claudeDir, "settings.local.json")
+	existingSettings := `{
+		"hooks": {
+			"PreToolUse": [
+				{
+					"matcher": "Bash",
+					"hooks": [
+						{
+							"type": "command",
+							"command": "tdd-guard-go"
+						}
+					]
+				}
+			],
+			"UserPromptSubmit": [
+				{
+					"matcher": "",
+					"hooks": [
+						{
+							"type": "command", 
+							"command": "other-tool"
+						}
+					]
+				}
+			]
+		}
+	}`
+
+	err = os.WriteFile(settingsPath, []byte(existingSettings), 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Run install - this should preserve existing hooks
+	err = app.Initialize()
+	if err != nil {
+		t.Fatalf("Initialize failed: %v", err)
+	}
+
+	// Read the settings back
+	content, err := os.ReadFile(settingsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	contentStr := string(content)
+
+	// Should contain both the existing tool AND bumpers
+	if !strings.Contains(contentStr, "tdd-guard-go") {
+		t.Error("Expected existing tdd-guard-go hook to be preserved")
+	}
+	if !strings.Contains(contentStr, "other-tool") {
+		t.Error("Expected existing other-tool hook to be preserved")
+	}
+	if !strings.Contains(contentStr, "bumpers") {
+		t.Error("Expected bumpers hook to be added")
+	}
+}
+
+func TestProcessHookWorks(t *testing.T) {
+	t.Parallel()
+
+	configContent := `rules:
+  - pattern: "go test"
+    response: "Use make test instead"`
+
+	configPath := createTempConfig(t, configContent)
+	app := NewApp(configPath)
+
+	hookInput := `{
+		"hookEventName": "PreToolUse",
+		"toolInput": {"command": "ls"}
+	}`
+
+	_, err := app.ProcessHook(strings.NewReader(hookInput))
+	if err != nil {
+		t.Fatalf("ProcessHook failed: %v", err)
 	}
 }

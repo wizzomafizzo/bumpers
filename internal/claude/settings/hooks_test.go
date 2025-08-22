@@ -105,10 +105,10 @@ func TestSettings_AddHook_Validation(t *testing.T) {
 	t.Parallel()
 	settings := &Settings{}
 
-	// Test empty matcher
+	// Test empty matcher (now allowed - matches everything)
 	err := settings.AddHook(PreToolUseEvent, "", HookCommand{Type: "command", Command: "test"})
-	if err == nil {
-		t.Error("Expected error for empty matcher")
+	if err != nil {
+		t.Errorf("Unexpected error for empty matcher (should be allowed): %v", err)
 	}
 
 	// Test empty command type
@@ -525,5 +525,126 @@ func TestRemoveHook_UnusedParameterBehavior(t *testing.T) {
 
 	if len(settings.Hooks.PreToolUse) != 0 {
 		t.Errorf("Expected 0 hooks after second removal, got %d", len(settings.Hooks.PreToolUse))
+	}
+}
+
+func TestSettings_AddOrAppendHook(t *testing.T) {
+	t.Parallel()
+
+	// Test adding a hook to a new matcher
+	settings := &Settings{}
+
+	command1 := HookCommand{
+		Type:    "command",
+		Command: "echo 'first'",
+	}
+
+	err := settings.AddOrAppendHook(PreToolUseEvent, "Bash", command1)
+	if err != nil {
+		t.Fatalf("Failed to add first hook: %v", err)
+	}
+
+	// Verify hook was added
+	if len(settings.Hooks.PreToolUse) != 1 {
+		t.Errorf("Expected 1 matcher, got %d", len(settings.Hooks.PreToolUse))
+	}
+	if len(settings.Hooks.PreToolUse[0].Hooks) != 1 {
+		t.Errorf("Expected 1 command, got %d", len(settings.Hooks.PreToolUse[0].Hooks))
+	}
+	if settings.Hooks.PreToolUse[0].Hooks[0].Command != "echo 'first'" {
+		t.Errorf("Expected 'echo 'first'', got %s", settings.Hooks.PreToolUse[0].Hooks[0].Command)
+	}
+
+	// Test appending to existing matcher
+	command2 := HookCommand{
+		Type:    "command",
+		Command: "echo 'second'",
+	}
+
+	err = settings.AddOrAppendHook(PreToolUseEvent, "Bash", command2)
+	if err != nil {
+		t.Fatalf("Failed to append second hook: %v", err)
+	}
+
+	// Verify both commands exist
+	if len(settings.Hooks.PreToolUse) != 1 {
+		t.Errorf("Expected still 1 matcher, got %d", len(settings.Hooks.PreToolUse))
+	}
+	if len(settings.Hooks.PreToolUse[0].Hooks) != 2 {
+		t.Errorf("Expected 2 commands, got %d", len(settings.Hooks.PreToolUse[0].Hooks))
+	}
+
+	// Verify commands are preserved
+	commands := settings.Hooks.PreToolUse[0].Hooks
+	if commands[0].Command != "echo 'first'" {
+		t.Errorf("Expected first command 'echo 'first'', got %s", commands[0].Command)
+	}
+	if commands[1].Command != "echo 'second'" {
+		t.Errorf("Expected second command 'echo 'second'', got %s", commands[1].Command)
+	}
+}
+
+func TestSettings_AddOrAppendHook_PreventsDuplicates(t *testing.T) {
+	t.Parallel()
+
+	settings := &Settings{}
+
+	command := HookCommand{
+		Type:    "command",
+		Command: "bumpers",
+	}
+
+	// Add command first time
+	err := settings.AddOrAppendHook(PreToolUseEvent, "Bash", command)
+	if err != nil {
+		t.Fatalf("Failed to add hook: %v", err)
+	}
+
+	// Try to add same command again
+	err = settings.AddOrAppendHook(PreToolUseEvent, "Bash", command)
+	if err != nil {
+		t.Fatalf("AddOrAppendHook should not error on duplicate: %v", err)
+	}
+
+	// Verify only one command exists
+	if len(settings.Hooks.PreToolUse[0].Hooks) != 1 {
+		t.Errorf("Expected 1 command after duplicate attempt, got %d", len(settings.Hooks.PreToolUse[0].Hooks))
+	}
+}
+
+func TestSettings_AddOrAppendHook_UserPromptSubmit(t *testing.T) {
+	t.Parallel()
+
+	// Test with empty matcher (UserPromptSubmit case)
+	settings := &Settings{}
+
+	command1 := HookCommand{
+		Type:    "command",
+		Command: "tdd-guard-go",
+	}
+
+	command2 := HookCommand{
+		Type:    "command",
+		Command: "bumpers",
+	}
+
+	// Add first command with empty matcher
+	err := settings.AddOrAppendHook(UserPromptSubmitEvent, "", command1)
+	if err != nil {
+		t.Fatalf("Failed to add first hook: %v", err)
+	}
+
+	// Add second command to same empty matcher
+	err = settings.AddOrAppendHook(UserPromptSubmitEvent, "", command2)
+	if err != nil {
+		t.Fatalf("Failed to append second hook: %v", err)
+	}
+
+	// Verify both commands exist
+	if len(settings.Hooks.UserPromptSubmit) != 1 {
+		t.Errorf("Expected 1 matcher, got %d", len(settings.Hooks.UserPromptSubmit))
+	}
+	if len(settings.Hooks.UserPromptSubmit[0].Hooks) != 2 {
+		t.Errorf("Expected 2 commands, got %d", len(settings.Hooks.UserPromptSubmit[0].Hooks))
 	}
 }

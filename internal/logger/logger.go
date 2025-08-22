@@ -2,6 +2,7 @@ package logger
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sync"
@@ -9,7 +10,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/wizzomafizzo/bumpers/internal/config"
-	"github.com/wizzomafizzo/bumpers/internal/paths"
+	"github.com/wizzomafizzo/bumpers/internal/constants"
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 
@@ -23,8 +24,8 @@ type Logger struct {
 
 // New creates a new logger instance with automatic log rotation
 func New(workDir string) (*Logger, error) {
-	logDir := filepath.Join(workDir, paths.ClaudeDir, paths.AppSubDir)
-	logFile := filepath.Join(logDir, paths.LogFilename)
+	logDir := filepath.Join(workDir, constants.ClaudeDir, constants.AppSubDir)
+	logFile := filepath.Join(logDir, constants.LogFilename)
 
 	// Create log directory if it doesn't exist
 	err := os.MkdirAll(logDir, 0o750)
@@ -98,8 +99,8 @@ func NewWithConfig(cfg *config.Config, workDir string) (*Logger, error) {
 	if cfg.Logging.Path != "" {
 		logFile = cfg.Logging.Path
 	} else {
-		logDir := filepath.Join(workDir, paths.ClaudeDir, paths.AppSubDir)
-		logFile = filepath.Join(logDir, paths.LogFilename)
+		logDir := filepath.Join(workDir, constants.ClaudeDir, constants.AppSubDir)
+		logFile = filepath.Join(logDir, constants.LogFilename)
 
 		// Create log directory if it doesn't exist
 		err := os.MkdirAll(logDir, 0o750)
@@ -147,8 +148,8 @@ func (l *Logger) Close() error {
 
 // InitLogger initializes the global logger instance
 func InitLogger(workDir string) error {
-	logDir := filepath.Join(workDir, paths.ClaudeDir, paths.AppSubDir)
-	logFilePath := filepath.Join(logDir, paths.LogFilename)
+	logDir := filepath.Join(workDir, constants.ClaudeDir, constants.AppSubDir)
+	logFilePath := filepath.Join(logDir, constants.LogFilename)
 
 	// Create log directory if it doesn't exist
 	err := os.MkdirAll(logDir, 0o750)
@@ -169,4 +170,34 @@ func InitLogger(workDir string) error {
 	// Consider using the Logger instance approach instead of global logger
 
 	return nil
+}
+
+// Init initializes the global logger with lumberjack rotation
+func Init(workDir string) error {
+	logDir := filepath.Join(workDir, constants.ClaudeDir, constants.AppSubDir)
+	logFile := filepath.Join(logDir, constants.LogFilename)
+
+	// Create log directory if it doesn't exist
+	err := os.MkdirAll(logDir, 0o750)
+	if err != nil {
+		return fmt.Errorf("failed to create log directory %s: %w", logDir, err)
+	}
+
+	// Create lumberjack logger for automatic rotation
+	lj := &lumberjack.Logger{
+		Filename:   logFile,
+		MaxSize:    10, // MB
+		MaxBackups: 3,  // number of old files to keep
+		MaxAge:     30, // days
+	}
+
+	// Create and set global zerolog logger
+	log.Logger = zerolog.New(lj).With().Timestamp().Logger()
+
+	return nil
+}
+
+// InitTest initializes logger for testing (outputs to discard)
+func InitTest() {
+	log.Logger = zerolog.New(io.Discard)
 }
