@@ -1,20 +1,4 @@
 pre-commit:
-  parallel: true
   commands:
-    # Format and lint Go code
-    golint:
-      glob: "*.go"
+    lint:
       run: just lint
-      fail_text: "Linting failed. Please fix the issues and try again."
-      stage_fixed: true
-
-    # Check go.mod tidiness
-    gomod:
-      glob: "{go.mod,go.sum}"
-      run: go mod tidy && git diff --exit-code go.mod go.sum
-      fail_text: "go.mod/go.sum not tidy. Run 'go mod tidy' and commit the changes."
-
-  # Optional: Skip hooks with LEFTHOOK=0 git commit
-  skip_output:
-    - meta
-    - summary

@@ -22,10 +22,3 @@ rules:
     response: Pre-commit hooks must not be skipped.
   - pattern: "fieldalignment"
     response: Fix field alignment issues by adding names to struct fields and running "just lint fix".
-
-# TODO: post tool "not related to my changes"
-# TODO: some templating, like inserting file contents or shell output
-# TODO: "reminders" list that adds context at start of session
-# TODO: guided cli setup for adding rules
-# TODO: block_paths or something to stop editing
-# TODO: Write(/tmp/asdf) ../../../../tmp/asdf

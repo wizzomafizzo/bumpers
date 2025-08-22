@@ -20,7 +20,6 @@ go.work.sum
 .idea/
 .vscode/
 .claude/
-/docs/plans
 
 bin/
 /bumpers
