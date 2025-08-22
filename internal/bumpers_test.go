@@ -16,11 +16,7 @@ func TestEndToEndHookProcessing(t *testing.T) {
 	// Create config in memory
 	configContent := `rules:
   - pattern: "go test"
-    response: "Use make test instead for better TDD integration"
-    alternatives:
-      - "make test          # Run all tests"
-      - "make test-unit     # Run unit tests only"
-    use_claude: false`
+    message: "Use just test instead for better TDD integration"`
 
 	cfg, err := config.LoadFromYAML([]byte(configContent))
 	if err != nil {
@@ -61,12 +57,12 @@ func TestEndToEndHookProcessing(t *testing.T) {
 	}
 
 	// Generate response
-	resp := rule.Response
+	resp := rule.Message
 	if resp == "" {
-		t.Fatal("Expected non-empty response")
+		t.Fatal("Expected non-empty message")
 	}
 
-	if !strings.Contains(resp, "make test") {
-		t.Error("Response should suggest make test alternative")
+	if !strings.Contains(resp, "just test") {
+		t.Error("Message should suggest just test alternative")
 	}
 }

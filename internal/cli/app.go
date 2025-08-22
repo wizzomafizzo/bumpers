@@ -142,7 +142,7 @@ func (a *App) ProcessHook(input io.Reader) (string, error) {
 	}
 
 	if rule != nil {
-		return rule.Response, nil
+		return rule.Message, nil
 	}
 
 	// This should never happen based on matcher logic, but Go requires a return
@@ -166,7 +166,7 @@ func (a *App) TestCommand(command string) (string, error) {
 	}
 
 	if rule != nil {
-		return rule.Response, nil
+		return rule.Message, nil
 	}
 
 	// This should never happen based on matcher logic, but Go requires a return

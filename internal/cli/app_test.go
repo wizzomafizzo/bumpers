@@ -61,7 +61,7 @@ func TestAppWithMemoryFileSystem(t *testing.T) {
 	fs := filesystem.NewMemoryFileSystem()
 	configContent := []byte(`rules:
   - pattern: "rm -rf"
-    response: "Use safer alternatives"`)
+    message: "Use safer alternatives"`)
 	configPath := "/test/bumpers.yml"
 
 	err := fs.WriteFile(configPath, configContent, 0o600)
@@ -100,7 +100,7 @@ func TestAppInitializeWithMemoryFileSystem(t *testing.T) {
 	fs := filesystem.NewMemoryFileSystem()
 	configContent := []byte(`rules:
   - pattern: "rm -rf"
-    response: "Use safer alternatives"`)
+    message: "Use safer alternatives"`)
 	configPath := "/test/bumpers.yml"
 
 	err := fs.WriteFile(configPath, configContent, 0o600)
@@ -177,7 +177,7 @@ func TestProcessHook(t *testing.T) {
 
 	configContent := `rules:
   - pattern: "go test"
-    response: "Use make test instead for better TDD integration"
+    message: "Use just test instead for better TDD integration"
     alternatives:
       - "make test          # Run all tests"
       - "make test-unit     # Run unit tests only"
@@ -203,8 +203,8 @@ func TestProcessHook(t *testing.T) {
 		t.Error("Expected non-empty response for blocked command")
 	}
 
-	if !strings.Contains(response, "make test") {
-		t.Error("Response should suggest make test alternative")
+	if !strings.Contains(response, "just test") {
+		t.Error("Response should suggest just test alternative")
 	}
 }
 
@@ -214,7 +214,7 @@ func TestProcessHookAllowed(t *testing.T) {
 
 	configContent := `rules:
   - pattern: "go test"
-    response: "Use make test instead for better TDD integration"`
+    message: "Use just test instead for better TDD integration"`
 
 	configPath := createTempConfig(t, configContent)
 	app := NewApp(configPath)
@@ -243,7 +243,7 @@ func TestProcessHookDangerousCommand(t *testing.T) {
 
 	configContent := `rules:
   - pattern: "rm -rf /*"
-    response: "⚠️  Dangerous rm command detected"
+    message: "⚠️  Dangerous rm command detected"
     alternatives:
       - "Be more specific with your rm command"
       - "Use a safer alternative like moving to trash"
@@ -277,7 +277,7 @@ func TestProcessHookPatternMatching(t *testing.T) {
 
 	configContent := `rules:
   - pattern: "go test"
-    response: "Use make test instead for better TDD integration"
+    message: "Use just test instead for better TDD integration"
     alternatives:
       - "make test          # Run all tests"
       - "make test-unit     # Run unit tests only"
@@ -303,8 +303,8 @@ func TestProcessHookPatternMatching(t *testing.T) {
 		t.Error("Expected non-empty response for go test pattern match")
 	}
 
-	if !strings.Contains(response, "make test") {
-		t.Error("Response should suggest make test alternative")
+	if !strings.Contains(response, "just test") {
+		t.Error("Response should suggest just test alternative")
 	}
 }
 
@@ -316,7 +316,7 @@ func TestConfigurationIsUsed(t *testing.T) {
 	// a specific message from the config rather than hardcoded responses
 	configContent := `rules:
   - pattern: "go test"
-    response: "Use make test instead for better TDD integration"
+    message: "Use just test instead for better TDD integration"
     use_claude: false`
 
 	configPath := createTempConfig(t, configContent)
@@ -345,7 +345,7 @@ func TestTestCommand(t *testing.T) {
 
 	configContent := `rules:
   - pattern: "go test"
-    response: "Use make test instead for better TDD integration"`
+    message: "Use just test instead for better TDD integration"`
 
 	configPath := createTempConfig(t, configContent)
 	app := NewApp(configPath)
@@ -356,7 +356,7 @@ func TestTestCommand(t *testing.T) {
 	}
 
 	// Should contain the response message
-	if !strings.Contains(result, "Use make test instead") {
+	if !strings.Contains(result, "Use just test instead") {
 		t.Errorf("Result should contain the response message, got: %s", result)
 	}
 }
@@ -398,7 +398,7 @@ func TestStatus(t *testing.T) {
 
 	configContent := `rules:
   - pattern: "go test"
-    response: "Use make test instead"
+    message: "Use just test instead"
     use_claude: false`
 
 	configPath := createTempConfig(t, configContent)
@@ -423,7 +423,7 @@ func TestStatusEnhanced(t *testing.T) {
 	// Create a config file
 	configContent := `rules:
   - pattern: "go test"
-    response: "Use make test instead"`
+    message: "Use just test instead"`
 
 	err := os.WriteFile(configPath, []byte(configContent), 0o600)
 	if err != nil {
@@ -686,9 +686,9 @@ func TestProcessHookSimplifiedSchemaAlwaysDenies(t *testing.T) {
 	// Any pattern match should result in denial
 	configContent := `rules:
   - pattern: "go test"
-    response: "Use make test instead"
+    message: "Use just test instead"
   - pattern: "rm -rf"
-    response: "Dangerous command detected"
+    message: "Dangerous command detected"
 `
 
 	configPath := createTempConfig(t, configContent)
@@ -705,8 +705,8 @@ func TestProcessHookSimplifiedSchemaAlwaysDenies(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ProcessHook failed: %v", err)
 	}
-	if result1 != "Use make test instead" {
-		t.Errorf("Expected 'Use make test instead', got %q", result1)
+	if result1 != "Use just test instead" {
+		t.Errorf("Expected 'Use just test instead', got %q", result1)
 	}
 
 	// Test second rule - should be blocked because it matches (no action field needed)
@@ -746,7 +746,7 @@ func TestCommandWithoutBlockedPrefix(t *testing.T) {
 	// Test that TestCommand doesn't add "Command blocked:" prefix
 	configContent := `rules:
   - pattern: "go test"
-    response: "Use make test instead"
+    message: "Use just test instead"
 `
 
 	configPath := createTempConfig(t, configContent)
@@ -763,8 +763,8 @@ func TestCommandWithoutBlockedPrefix(t *testing.T) {
 	}
 
 	// Should contain the response directly
-	if !strings.Contains(result, "Use make test instead") {
-		t.Errorf("Expected response to contain 'Use make test instead', got: %q", result)
+	if !strings.Contains(result, "Use just test instead") {
+		t.Errorf("Expected response to contain 'Use just test instead', got: %q", result)
 	}
 }
 
@@ -913,9 +913,9 @@ func TestValidateConfig(t *testing.T) {
 
 	configContent := `rules:
   - pattern: "^go test"
-    response: "Use make test instead"
+    message: "Use just test instead"
   - pattern: "^(gci|go vet)"
-    response: "Use make lint-fix instead"`
+    message: "Use just lint fix instead"`
 
 	configPath := createTempConfig(t, configContent)
 	app := NewApp(configPath)
@@ -937,7 +937,7 @@ func TestInstallUsesPathConstants(t *testing.T) {
 	// Create a simple config file
 	configContent := `rules:
   - pattern: "dangerous"
-    response: "Use safer alternatives"`
+    message: "Use safer alternatives"`
 	configPath := createTempConfig(t, configContent)
 
 	// Create bin directory and bumpers binary (required by Initialize)
@@ -1015,14 +1015,14 @@ func setupProjectStructure(t *testing.T, configFileName string) (projectDir, sub
 		configContent = `
 [[rules]]
 pattern = ".*dangerous.*"
-response = "This command looks dangerous!"
+message = "This command looks dangerous!"
 `
 	case ".json":
 		configContent = `{
   "rules": [
     {
       "pattern": ".*dangerous.*",
-      "response": "This command looks dangerous!"
+      "message": "This command looks dangerous!"
     }
   ]
 }`
@@ -1031,7 +1031,7 @@ response = "This command looks dangerous!"
 		configContent = `
 rules:
   - pattern: ".*dangerous.*"
-    response: "This command looks dangerous!"
+    message: "This command looks dangerous!"
 `
 	}
 
@@ -1232,12 +1232,12 @@ func createPrecedenceConfigFiles(t *testing.T, projectDir string) {
 	yamlContent := `
 rules:
   - pattern: "yaml-test"
-    response: "Found YAML config"
+    message: "Found YAML config"
 `
 	tomlContent := `
 [[rules]]
 pattern = "toml-test"
-response = "Found TOML config"
+message = "Found TOML config"
 `
 
 	yamlPath := filepath.Join(projectDir, "bumpers.yaml")
@@ -1287,10 +1287,10 @@ func TestProcessHookRoutesUserPromptSubmit(t *testing.T) {
 
 	configContent := `rules:
   - pattern: "go test"
-    response: "Use make test instead"
+    message: "Use just test instead"
 commands:
   - name: "help"
-    message: "Available commands:\\n%help - Show this help\\n%status - Show project status"
+    message: "Available commands:\\n$help - Show this help\\n$status - Show project status"
   - name: "status"
     message: "Project Status: All systems operational"`
 
@@ -1299,7 +1299,7 @@ commands:
 
 	// Test UserPromptSubmit hook routing
 	userPromptInput := `{
-		"prompt": "%help"
+		"prompt": "$help"
 	}`
 
 	result, err := app.ProcessHook(strings.NewReader(userPromptInput))
@@ -1308,7 +1308,7 @@ commands:
 	}
 
 	expectedJSON := `{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit",` +
-		`"additionalContext":"Available commands:\\n%help - Show this help\\n%status - Show project status"}}`
+		`"additionalContext":"Available commands:\\n$help - Show this help\\n$status - Show project status"}}`
 	if result != expectedJSON {
 		t.Errorf("Expected %q, got %q", expectedJSON, result)
 	}
@@ -1319,10 +1319,10 @@ func TestProcessUserPrompt(t *testing.T) {
 
 	configContent := `rules:
   - pattern: "go test"
-    response: "Use make test instead"
+    message: "Use just test instead"
 commands:
   - name: "help"
-    message: "Available commands:\\n%help - Show this help\\n%status - Show project status"
+    message: "Available commands:\\n$help - Show this help\\n$status - Show project status"
   - name: "status"
     message: "Project Status: All systems operational"`
 
@@ -1335,17 +1335,17 @@ commands:
 		expectedOutput string
 	}{
 		{
-			name: "Help command (%help)",
+			name: "Help command ($help)",
 			promptJSON: `{
-				"prompt": "%help"
+				"prompt": "$help"
 			}`,
 			expectedOutput: `{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit",` +
-				`"additionalContext":"Available commands:\\n%help - Show this help\\n%status - Show project status"}}`,
+				`"additionalContext":"Available commands:\\n$help - Show this help\\n$status - Show project status"}}`,
 		},
 		{
-			name: "Status command (%status)",
+			name: "Status command ($status)",
 			promptJSON: `{
-				"prompt": "%status"
+				"prompt": "$status"
 			}`,
 			expectedOutput: `{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit",` +
 				`"additionalContext":"Project Status: All systems operational"}}`,
@@ -1358,9 +1358,9 @@ commands:
 			expectedOutput: "",
 		},
 		{
-			name: "Invalid command index (%5)",
+			name: "Invalid command index ($5)",
 			promptJSON: `{
-				"prompt": "%5"
+				"prompt": "$5"
 			}`,
 			expectedOutput: "",
 		},
@@ -1396,7 +1396,7 @@ commands:
 	app := NewApp(configPath)
 
 	// Test that named command prompts work
-	promptJSON := `{"prompt": "%test"}`
+	promptJSON := `{"prompt": "$test"}`
 	result, err := app.ProcessUserPrompt(json.RawMessage(promptJSON))
 	if err != nil {
 		t.Fatalf("ProcessUserPrompt failed: %v", err)
@@ -1406,6 +1406,43 @@ commands:
 		`"additionalContext":"Test command message"}}`
 	if result != expectedOutput {
 		t.Errorf("Expected hookSpecificOutput format for named command %q, got %q", expectedOutput, result)
+	}
+}
+
+func TestCommandPrefixConfiguration(t *testing.T) {
+	t.Parallel()
+
+	configContent := `
+commands:
+  - name: "test"
+    message: "Test command message"
+`
+
+	configPath := createTempConfig(t, configContent)
+	app := NewApp(configPath)
+
+	// Test that % prefix no longer works
+	oldPrefixJSON := `{"prompt": "%test"}`
+	result, err := app.ProcessUserPrompt(json.RawMessage(oldPrefixJSON))
+	if err != nil {
+		t.Fatalf("ProcessUserPrompt failed for old prefix: %v", err)
+	}
+
+	if result != "" {
+		t.Error("Old % prefix should no longer work")
+	}
+
+	// Test new behavior with $ prefix
+	newPrefixJSON := `{"prompt": "$test"}`
+	result, err = app.ProcessUserPrompt(json.RawMessage(newPrefixJSON))
+	if err != nil {
+		t.Fatalf("ProcessUserPrompt failed for new prefix: %v", err)
+	}
+
+	expectedOutput := `{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit",` +
+		`"additionalContext":"Test command message"}}`
+	if result != expectedOutput {
+		t.Errorf("Expected $ prefix to work, got result: %q", result)
 	}
 }
 
@@ -1532,7 +1569,7 @@ func TestProcessHookWorks(t *testing.T) {
 
 	configContent := `rules:
   - pattern: "go test"
-    response: "Use make test instead"`
+    message: "Use just test instead"`
 
 	configPath := createTempConfig(t, configContent)
 	app := NewApp(configPath)
@@ -1554,7 +1591,7 @@ func TestProcessHookRoutesSessionStart(t *testing.T) {
 
 	configContent := `rules:
   - pattern: "go test"
-    response: "Use just test instead"
+    message: "Use just test instead"
 notes:
   - message: "Remember to run tests first"
   - message: "Check CLAUDE.md for project conventions"`
@@ -1587,7 +1624,7 @@ func TestProcessSessionStartWithDifferentNotes(t *testing.T) {
 
 	configContent := `rules:
   - pattern: "go test"
-    response: "Use just test instead"
+    message: "Use just test instead"
 notes:
   - message: "Different message here"`
 

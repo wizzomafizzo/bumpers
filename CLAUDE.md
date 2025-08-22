@@ -81,9 +81,9 @@ The codebase follows standard Go project layout with clear separation of concern
 
 Rules are defined in YAML with regex patterns:
 - **pattern**: Regex to match commands (any match results in denial)
-- **response**: User-friendly explanation and alternatives
-- **use_claude**: Enable Claude CLI integration for dynamic responses
-- **prompt**: Custom prompt for Claude when use_claude is enabled
+- **message**: User-friendly explanation and alternatives
+- **generate**: Enable AI tool integration for dynamic responses (values: "off", "once", "session", "always")
+- **prompt**: Custom prompt for AI tool when generate is enabled
 
 Installation creates bumpers.yaml and configures .claude/settings.local.json hooks automatically.
 

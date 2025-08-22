@@ -31,21 +31,10 @@ var commonLocations = []string{
 }
 
 // GetClaudePath returns the path to the Claude binary
-func (l *Launcher) GetClaudePath() (string, error) {
+func (*Launcher) GetClaudePath() (string, error) {
 	attemptedPaths := make([]string, 0, 4) // Pre-allocate with estimated capacity
 
-	// 1. Check config override first
-	if l.config != nil && l.config.ClaudeBinary != "" {
-		configPath := l.config.ClaudeBinary
-		attemptedPaths = append(attemptedPaths, fmt.Sprintf("config: %s", configPath))
-
-		if err := validateBinary(configPath); err == nil {
-			return configPath, nil
-		}
-		// Config path failed, but continue searching
-	}
-
-	// 2. Check local Claude installation
+	// 1. Check local Claude installation
 	homeDir, err := os.UserHomeDir()
 	if err == nil {
 		localPath := filepath.Join(homeDir, ".claude", "local", "claude")

@@ -11,8 +11,8 @@ func TestRuleMatcher(t *testing.T) {
 	t.Parallel()
 
 	rule := config.Rule{
-		Pattern:  "^go test",
-		Response: "Use make test instead",
+		Pattern: "^go test",
+		Message: "Use just test instead",
 	}
 
 	matcher, err := NewRuleMatcher([]config.Rule{rule})
@@ -38,8 +38,8 @@ func TestRuleMatcherNoMatch(t *testing.T) {
 	t.Parallel()
 
 	rule := config.Rule{
-		Pattern:  "^go test",
-		Response: "Use make test instead",
+		Pattern: "^go test",
+		Message: "Use just test instead",
 	}
 
 	matcher, err := NewRuleMatcher([]config.Rule{rule})
@@ -110,8 +110,8 @@ func TestRegexPatternMatching(t *testing.T) {
 			t.Parallel()
 
 			rule := config.Rule{
-				Pattern:  tc.pattern,
-				Response: "Test response",
+				Pattern: tc.pattern,
+				Message: "Test response",
 			}
 
 			matcher, matcherErr := NewRuleMatcher([]config.Rule{rule})
@@ -156,8 +156,8 @@ func TestNewRuleMatcherInvalidRegex(t *testing.T) {
 	t.Parallel()
 
 	rule := config.Rule{
-		Pattern:  "[invalid-regex",
-		Response: "Test response",
+		Pattern: "[invalid-regex",
+		Message: "Test response",
 	}
 
 	_, err := NewRuleMatcher([]config.Rule{rule})

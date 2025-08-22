@@ -9,7 +9,6 @@ import (
 
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
-	"github.com/wizzomafizzo/bumpers/internal/config"
 	"github.com/wizzomafizzo/bumpers/internal/constants"
 	"gopkg.in/natefinch/lumberjack.v2"
 )
@@ -65,74 +64,6 @@ func (l *Logger) Rotate() error {
 		}
 	}
 	return nil
-}
-
-// NewWithConfig creates a new logger instance using configuration with lumberjack rotation
-// If cfg is nil, uses default configuration
-func NewWithConfig(cfg *config.Config, workDir string) (*Logger, error) {
-	// Use default config if none provided
-	if cfg == nil {
-		cfg = &config.Config{
-			Logging: config.LoggingConfig{
-				Level:      "info",
-				Path:       "",
-				MaxSize:    10,
-				MaxBackups: 3,
-				MaxAge:     30,
-			},
-		}
-	}
-
-	// Set defaults for lumberjack if not specified
-	if cfg.Logging.MaxSize == 0 {
-		cfg.Logging.MaxSize = 10
-	}
-	if cfg.Logging.MaxBackups == 0 {
-		cfg.Logging.MaxBackups = 3
-	}
-	if cfg.Logging.MaxAge == 0 {
-		cfg.Logging.MaxAge = 30
-	}
-
-	// Determine log path
-	var logFile string
-	if cfg.Logging.Path != "" {
-		logFile = cfg.Logging.Path
-	} else {
-		logDir := filepath.Join(workDir, constants.ClaudeDir, constants.AppSubDir)
-		logFile = filepath.Join(logDir, constants.LogFilename)
-
-		// Create log directory if it doesn't exist
-		err := os.MkdirAll(logDir, 0o750)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create log directory %s: %w", logDir, err)
-		}
-	}
-
-	// Create lumberjack logger for automatic rotation
-	lj := &lumberjack.Logger{
-		Filename:   logFile,
-		MaxSize:    cfg.Logging.MaxSize,    // MB
-		MaxBackups: cfg.Logging.MaxBackups, // number of old files to keep
-		MaxAge:     cfg.Logging.MaxAge,     // days
-	}
-
-	// Create zerolog logger
-	zl := zerolog.New(lj).With().Timestamp().Logger()
-
-	// Set log level if specified in config
-	if cfg.Logging.Level != "" {
-		level, err := zerolog.ParseLevel(cfg.Logging.Level)
-		if err == nil {
-			zl = zl.Level(level)
-		}
-	}
-
-	return &Logger{
-		Logger:           zl,
-		lumberjack:       lj,
-		supportsRotation: true,
-	}, nil
 }
 
 // Close closes the lumberjack logger

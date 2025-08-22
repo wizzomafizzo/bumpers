@@ -16,7 +16,7 @@ func TestLoadViperJSON(t *testing.T) {
   "rules": [
     {
       "pattern": "go test.*",
-      "response": "Use make test instead"
+      "message": "Use just test instead"
     }
   ]
 }`

@@ -34,7 +34,7 @@ func TestLoadConfig(t *testing.T) {
 
 	yamlContent := `rules:
   - pattern: "go test.*"
-    response: "Use make test instead"
+    message: "Use just test instead"
 `
 
 	err := os.WriteFile(configFile, []byte(yamlContent), 0o600)
@@ -53,11 +53,7 @@ func TestLoadConfigWithAlternatives(t *testing.T) {
 
 	yamlContent := `rules:
   - pattern: "go test.*"
-    response: "Use make test instead for better TDD integration"
-    alternatives:
-      - "make test          # Run all tests"
-      - "make test-unit     # Run unit tests only"
-    use_claude: false
+    message: "Use just test instead for better TDD integration"
 `
 
 	err := os.WriteFile(configFile, []byte(yamlContent), 0o600)
@@ -71,12 +67,8 @@ func TestLoadConfigWithAlternatives(t *testing.T) {
 	}
 
 	rule := config.Rules[0]
-	if len(rule.Alternatives) != 2 {
-		t.Fatalf("Expected 2 alternatives, got %d", len(rule.Alternatives))
-	}
-
-	if rule.UseClaude {
-		t.Errorf("Expected UseClaude to be false, got %v", rule.UseClaude)
+	if rule.Message == "" {
+		t.Error("Expected Message to be set, got empty string")
 	}
 }
 
@@ -85,14 +77,14 @@ func TestLoadConfigWithNewStructure(t *testing.T) {
 
 	yamlContent := `rules:
   - pattern: "go test*"
-    response: |
-      Use make test instead for better TDD integration
+    message: |
+      Use just test instead for better TDD integration
       
       Try one of these alternatives:
-      • make test          # Run all tests
-      • make test-unit     # Run unit tests only
-    use_claude: false
+      • just test          # Run all tests
+      • just test-unit     # Run unit tests only
     prompt: "Explain why direct go test is discouraged"
+    generate: "always"
 `
 
 	tempDir := t.TempDir()
@@ -109,13 +101,12 @@ func TestLoadConfigWithNewStructure(t *testing.T) {
 	}
 
 	rule := config.Rules[0]
-	if rule.Response == "" {
-		t.Error("Expected response to be populated")
+	if rule.Message == "" {
+		t.Error("Expected message to be populated")
 	}
 
-	// For now, UseClaude is still a bool, so this test checks the zero value
-	if rule.UseClaude {
-		t.Errorf("Expected UseClaude to be false (zero value), got %v", rule.UseClaude)
+	if rule.Generate != "always" {
+		t.Errorf("Expected Generate to be 'always', got %s", rule.Generate)
 	}
 
 	if rule.Prompt != "Explain why direct go test is discouraged" {
@@ -133,7 +124,7 @@ func TestSimplifiedSchemaHasNoActionConstants(t *testing.T) {
 
 	yamlContent := `rules:
   - pattern: "test*"
-    response: "Test response"
+    message: "Test response"
 `
 	tempDir := t.TempDir()
 	configFile := filepath.Join(tempDir, "test.yaml")
@@ -153,8 +144,8 @@ func TestSimplifiedSchemaHasNoActionConstants(t *testing.T) {
 	if rule.Pattern != "test*" {
 		t.Errorf("Expected pattern 'test*', got %s", rule.Pattern)
 	}
-	if rule.Response != "Test response" {
-		t.Errorf("Expected response 'Test response', got %s", rule.Response)
+	if rule.Message != "Test response" {
+		t.Errorf("Expected message 'Test response', got %s", rule.Message)
 	}
 
 	// This test implicitly shows that action constants are not needed
@@ -169,11 +160,9 @@ func TestLoadConfigFromFile(t *testing.T) {
 	configPath := filepath.Join(tempDir, "test-config.yaml")
 	configContent := `rules:
   - pattern: "go test.*"
-    response: "Use make test instead for better TDD integration"
-    alternatives:
-      - "make test          # Run all tests"
-      - "make test-unit     # Run unit tests only"
-    use_claude: false`
+    message: "Use just test instead for better TDD integration"
+    prompt: "Explain why direct go test is discouraged"
+    generate: "session"`
 
 	err := os.WriteFile(configPath, []byte(configContent), 0o600)
 	if err != nil {
@@ -201,15 +190,15 @@ func TestLoadConfigSimplifiedSchema(t *testing.T) {
 
 	yamlContent := `rules:
   - pattern: "go test*"
-    response: |
-      Use make test instead for better TDD integration
+    message: |
+      Use just test instead for better TDD integration
       
       Try one of these alternatives:
-      • make test          # Run all tests
-      • make test-unit     # Run unit tests only
+      • just test          # Run all tests
+      • just test-unit     # Run unit tests only
   - pattern: "rm -rf /*"
-    response: "Dangerous rm command detected! Be more specific with your rm command."
-    use_claude: true
+    message: "Dangerous rm command detected! Be more specific with your rm command."
+    generate: "always"
     prompt: "Explain why this rm command is dangerous and suggest safer alternatives"
 `
 
@@ -235,11 +224,11 @@ func TestLoadConfigSimplifiedSchema(t *testing.T) {
 	if rule1.Pattern != "go test*" {
 		t.Errorf("Expected pattern 'go test*', got %s", rule1.Pattern)
 	}
-	if rule1.Response == "" {
-		t.Error("Expected response to be populated")
+	if rule1.Message == "" {
+		t.Error("Expected message to be populated")
 	}
-	if rule1.UseClaude {
-		t.Error("Expected UseClaude to be false by default")
+	if rule1.Generate != "" {
+		t.Error("Expected Generate to be empty by default")
 	}
 	// In simplified schema, these fields don't exist at all
 
@@ -248,11 +237,11 @@ func TestLoadConfigSimplifiedSchema(t *testing.T) {
 	if rule2.Pattern != "rm -rf /*" {
 		t.Errorf("Expected pattern 'rm -rf /*', got %s", rule2.Pattern)
 	}
-	if !rule2.UseClaude {
-		t.Error("Expected UseClaude to be true")
+	if rule2.Generate != "always" {
+		t.Errorf("Expected Generate to be 'always', got %s", rule2.Generate)
 	}
 	if rule2.Prompt == "" {
-		t.Error("Expected prompt to be populated when UseClaude is true")
+		t.Error("Expected prompt to be populated when Generate is set")
 	}
 	// In simplified schema, these fields don't exist at all
 }
@@ -272,23 +261,22 @@ func testValidConfigs(t *testing.T) {
 			name: "valid config",
 			yamlContent: `rules:
   - pattern: "go test.*"
-    response: "Use make test instead"`,
+    message: "Use just test instead"`,
 			expectError: false,
 		},
 		{
-			name: "valid use_claude with prompt",
+			name: "valid generate with prompt",
 			yamlContent: `rules:
   - pattern: "test.*"
-    use_claude: true
+    generate: "always"
     prompt: "Test prompt"`,
 			expectError: false,
 		},
 		{
-			name: "rule with alternatives only",
+			name: "rule with message only",
 			yamlContent: `rules:
   - pattern: "test.*"
-    alternatives:
-      - "make test"`,
+    message: "Use just test instead"`,
 			expectError: false,
 		},
 	}
@@ -333,27 +321,19 @@ func testInvalidConfigs(t *testing.T) {
 			errorContains: "invalid regex pattern",
 		},
 		{
-			name: "use_claude without prompt",
-			yamlContent: `rules:
-  - pattern: "test.*"
-    use_claude: true`,
-			expectError:   true,
-			errorContains: "prompt field is required when use_claude is true",
-		},
-		{
 			name: "rule with no response mechanisms",
 			yamlContent: `rules:
   - pattern: "test.*"`,
 			expectError:   true,
-			errorContains: "must provide either a response, alternatives, or use_claude configuration",
+			errorContains: "must provide either a message or generate configuration",
 		},
 		{
 			name: "multiple rules with one invalid",
 			yamlContent: `rules:
   - pattern: "valid.*"
-    response: "Valid rule"
+    message: "Valid rule"
   - pattern: "[invalid"
-    response: "Invalid rule"`,
+    message: "Invalid rule"`,
 			expectError:   true,
 			errorContains: "rule 2 validation failed",
 		},
@@ -390,19 +370,13 @@ func validateConfigTest(t *testing.T, tt configTestCase) {
 	}
 }
 
-// Test logging configuration
-func TestConfigWithLogging(t *testing.T) {
+// Test basic configuration without logging
+func TestConfigWithoutLogging(t *testing.T) {
 	t.Parallel()
 
-	yamlContent := `logging:
-  level: debug
-  path: /custom/log/path.log
-  max_size: 5
-  max_backups: 3
-  max_age: 7
-rules:
+	yamlContent := `rules:
   - pattern: "go test.*"
-    response: "Use make test instead"`
+    message: "Use just test instead"`
 
 	tempDir := t.TempDir()
 	configFile := filepath.Join(tempDir, "test.yaml")
@@ -417,25 +391,9 @@ rules:
 		t.Fatalf("Expected no error, got %v", err)
 	}
 
-	// Check logging configuration
-	if config.Logging.Level != "debug" {
-		t.Errorf("Expected logging level 'debug', got %s", config.Logging.Level)
-	}
-
-	if config.Logging.Path != "/custom/log/path.log" {
-		t.Errorf("Expected logging path '/custom/log/path.log', got %s", config.Logging.Path)
-	}
-
-	if config.Logging.MaxSize != 5 {
-		t.Errorf("Expected max_size 5, got %d", config.Logging.MaxSize)
-	}
-
-	if config.Logging.MaxBackups != 3 {
-		t.Errorf("Expected max_backups 3, got %d", config.Logging.MaxBackups)
-	}
-
-	if config.Logging.MaxAge != 7 {
-		t.Errorf("Expected max_age 7, got %d", config.Logging.MaxAge)
+	// Check that basic config loads successfully without logging
+	if len(config.Rules) != 1 {
+		t.Errorf("Expected 1 rule, got %d", len(config.Rules))
 	}
 }
 
@@ -444,24 +402,21 @@ func contains(s, substr string) bool {
 	return strings.Contains(s, substr)
 }
 
-// checkRulePattern validates a specific rule pattern and response
-func checkRulePattern(t *testing.T, rule *Rule, patternName, expectedPattern, expectedResponse string) bool {
+// checkRulePattern validates a specific rule pattern and message
+func checkRulePattern(t *testing.T, rule *Rule, patternName, expectedPattern, expectedMessage string) bool {
 	if strings.Contains(rule.Pattern, expectedPattern) {
-		if !strings.Contains(rule.Response, expectedResponse) {
-			t.Errorf("Expected %s rule to mention %s", patternName, expectedResponse)
+		if !strings.Contains(rule.Message, expectedMessage) {
+			t.Errorf("Expected %s rule to mention %s", patternName, expectedMessage)
 		}
 		return true
 	}
 	return false
 }
 
-// validateLoggingDefaults checks the default logging configuration
-func validateLoggingDefaults(t *testing.T, config *Config) {
-	if config.Logging.Level != "info" {
-		t.Errorf("Expected default log level 'info', got %s", config.Logging.Level)
-	}
-	if config.Logging.MaxSize != 10 {
-		t.Errorf("Expected default max size 10, got %d", config.Logging.MaxSize)
+// validateBasicDefaults checks basic configuration validation
+func validateBasicDefaults(t *testing.T, config *Config) {
+	if len(config.Rules) == 0 {
+		t.Error("Expected default config to have rules")
 	}
 }
 
@@ -481,16 +436,16 @@ func TestDefaultConfig(t *testing.T) {
 	foundTmp := false
 
 	for _, rule := range config.Rules {
-		if checkRulePattern(t, &rule, "go test", "go test", "make test") {
+		if checkRulePattern(t, &rule, "go test", "go test", "just test") {
 			foundGoTest = true
 		}
-		if checkRulePattern(t, &rule, "lint", "gci|go vet", "make lint-fix") {
+		if checkRulePattern(t, &rule, "lint", "gci|go vet", "just lint fix") {
 			foundLint = true
 		}
 		if strings.Contains(rule.Pattern, "cd /tmp") {
 			foundTmp = true
-			if !strings.Contains(rule.Response, "tmp") {
-				t.Errorf("Expected tmp rule to mention tmp, got: %s", rule.Response)
+			if !strings.Contains(rule.Message, "tmp") {
+				t.Errorf("Expected tmp rule to mention tmp, got: %s", rule.Message)
 			}
 		}
 	}
@@ -505,7 +460,7 @@ func TestDefaultConfig(t *testing.T) {
 		t.Error("Expected default config to have tmp rule")
 	}
 
-	validateLoggingDefaults(t, config)
+	validateBasicDefaults(t, config)
 
 	// Check for example commands
 	if len(config.Commands) == 0 {
@@ -530,9 +485,9 @@ func TestDefaultConfigYAML(t *testing.T) {
 	expectedPatterns := []string{
 		"rules:",
 		"pattern: ^go test",
-		"make test",
+		"just test",
 		"gci|go vet",
-		"make lint-fix",
+		"just lint fix",
 		"cd /tmp",
 		"tmp",
 	}
@@ -550,7 +505,7 @@ func TestConfigWithCommands(t *testing.T) {
 
 	yamlContent := `rules:
   - pattern: "go test.*"
-    response: "Use make test instead"
+    message: "Use just test instead"
 commands:
   - message: "Available commands:\\n!help - Show this help\\n!status - Show project status"
   - message: "Project Status: All systems operational"`
@@ -608,7 +563,7 @@ func TestConfigWithNotes(t *testing.T) {
 
 	yamlContent := `rules:
   - pattern: "go test"
-    response: "Use just test instead"
+    message: "Use just test instead"
 notes:
   - message: "Remember to run tests first"
   - message: "Check CLAUDE.md for project conventions"`

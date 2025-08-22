@@ -7,18 +7,20 @@ commands:
     message: Run "just lint fix" and fix ALL linting issues if any.
   - name: check
     message: Run "just lint fix" and "just test" and fix ALL issues if any.
+  - name: commit
+    message: Commit ALL modified files.
 rules:
   - pattern: "^go test"
-    response: |
+    message: |
       Use "just test" instead for TDD integration:
       - just test                    # Run all tests
       - just test ./internal/claude  # Test only a specific package
       See "just --list" for more information.
   - pattern: "^(gci|go vet|goimports|gofumpt|go *fmt|golangci-lint)"
-    response: Use "just lint fix" instead to resolve lint/formatting issues.
+    message: Use "just lint fix" instead to resolve lint/formatting issues.
   - pattern: " /tmp"
-    response: Use a "tmp" directory in the project root instead.
+    message: Use a "tmp" directory in the project root instead.
   - pattern: "(git commit --no-verify|LEFTHOOK=0)"
-    response: Pre-commit hooks must not be skipped.
+    message: Pre-commit hooks must not be skipped.
   - pattern: "fieldalignment"
-    response: Fix field alignment issues by adding names to struct fields and running "just lint fix".
+    message: Fix field alignment issues by adding names to struct fields and running "just lint fix".

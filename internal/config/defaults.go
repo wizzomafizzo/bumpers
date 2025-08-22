@@ -12,18 +12,18 @@ func DefaultConfig() *Config {
 		Rules: []Rule{
 			{
 				Pattern: "^go test",
-				Response: `Use "make test" instead for TDD integration:
-- make test                        # Run all tests
-- make test PKG=./internal/claude  # Test only a specific package
-See Makefile for more information.`,
+				Message: `Use "just test" instead for TDD integration:
+- just test                        # Run all tests
+- just test PKG=./internal/claude  # Test only a specific package
+See justfile for more information.`,
 			},
 			{
-				Pattern:  "^(gci|go vet|goimports|gofumpt|go fmt)",
-				Response: `Use "make lint-fix" instead to resolve lint/formatting issues.`,
+				Pattern: "^(gci|go vet|goimports|gofumpt|go fmt)",
+				Message: `Use "just lint fix" instead to resolve lint/formatting issues.`,
 			},
 			{
-				Pattern:  "^cd /tmp",
-				Response: `Create a "tmp" directory in the project root instead.`,
+				Pattern: "^cd /tmp",
+				Message: `Create a "tmp" directory in the project root instead.`,
 			},
 		},
 		Commands: []Command{
@@ -48,12 +48,6 @@ See Makefile for more information.`,
 			{
 				Message: "Run 'just lint fix' to resolve formatting and linting issues",
 			},
-		},
-		Logging: LoggingConfig{
-			Level:      "info",
-			MaxSize:    10,
-			MaxBackups: 3,
-			MaxAge:     30,
 		},
 	}
 }

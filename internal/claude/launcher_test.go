@@ -1,8 +1,6 @@
 package claude
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/wizzomafizzo/bumpers/internal/config"
@@ -48,65 +46,22 @@ func TestGetClaudePath(t *testing.T) {
 	}
 }
 
-func TestGetClaudePathWithConfigOverride(t *testing.T) {
+func TestGetClaudePathBasic(t *testing.T) {
 	t.Parallel()
-	// Test that config override is attempted, but if it fails, fallback works
-	cfg := &config.Config{
-		ClaudeBinary: "/definitely/nonexistent/path/to/claude",
-	}
+	// Test that launcher works with basic config
+	cfg := &config.Config{}
 	launcher := NewLauncher(cfg)
 
+	// This may find Claude or return error - both are valid outcomes
 	path, err := launcher.GetClaudePath()
-
-	// This might succeed if Claude is installed in fallback locations
-	// OR fail with detailed error - both are valid outcomes
 	if err == nil {
-		t.Logf("Config override failed but fallback found Claude at: %s", path)
+		t.Logf("Found Claude at: %s", path)
 	} else {
-		// Error should be detailed, showing the config path was tried first
-		t.Logf("Expected detailed error when Claude not found: %v", err)
-		// Verify this is the detailed error type
 		if IsClaudeNotFoundError(err) {
-			t.Log("Got detailed ClaudeNotFoundError (good)")
+			t.Logf("Got expected Claude not found error: %v", err)
 		} else {
-			t.Error("Should get ClaudeNotFoundError with details")
+			t.Errorf("Expected ClaudeNotFoundError, got: %v", err)
 		}
-	}
-}
-
-func TestGetClaudePathWithValidConfig(t *testing.T) {
-	t.Parallel()
-	// Create a temporary file to act as a valid Claude binary
-	tempDir := t.TempDir()
-	claudePath := filepath.Join(tempDir, "claude")
-
-	// Create the file and make it executable
-	file, err := os.Create(claudePath) // #nosec G304 -- using safe temp directory path
-	if err != nil {
-		t.Fatalf("Failed to create temp Claude binary: %v", err)
-	}
-	if closeErr := file.Close(); closeErr != nil {
-		t.Fatalf("Failed to close temp Claude binary: %v", closeErr)
-	}
-
-	err = os.Chmod(claudePath, 0o755) // #nosec G302 -- executable permission needed for test binary
-	if err != nil {
-		t.Fatalf("Failed to make temp Claude binary executable: %v", err)
-	}
-
-	// Test that config override works with valid path
-	cfg := &config.Config{
-		ClaudeBinary: claudePath,
-	}
-	launcher := NewLauncher(cfg)
-
-	path, err := launcher.GetClaudePath()
-	if err != nil {
-		t.Errorf("Expected success with valid config path, got error: %v", err)
-	}
-
-	if path != claudePath {
-		t.Errorf("Expected path %s, got %s", claudePath, path)
 	}
 }
 
