@@ -106,3 +106,25 @@ func TestNewRootCommandHasConfigFlag(t *testing.T) {
 		t.Errorf("Expected config flag default value 'bumpers.yml', got '%s'", configFlag.DefValue)
 	}
 }
+
+func TestCreateAppFromCommand(t *testing.T) {
+	t.Parallel()
+
+	cmd := createNewRootCommand()
+	cmd.SetArgs([]string{"--config", "test.yml"})
+
+	// Parse flags before accessing them
+	err := cmd.ParseFlags([]string{"--config", "test.yml"})
+	if err != nil {
+		t.Fatalf("Failed to parse flags: %v", err)
+	}
+
+	app, err := createAppFromCommand(cmd)
+	if err != nil {
+		t.Fatalf("Expected createAppFromCommand to succeed, got error: %v", err)
+	}
+
+	if app == nil {
+		t.Error("Expected createAppFromCommand to return non-nil app")
+	}
+}

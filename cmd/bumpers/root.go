@@ -1,7 +1,10 @@
 package main
 
 import (
+	"fmt"
+
 	"github.com/spf13/cobra"
+	"github.com/wizzomafizzo/bumpers/internal/cli"
 )
 
 // createNewRootCommand creates the main root command that shows help by default.
@@ -27,4 +30,15 @@ func createNewRootCommand() *cobra.Command {
 	)
 
 	return rootCmd
+}
+
+// createAppFromCommand extracts config path and creates a CLI app
+func createAppFromCommand(cmd *cobra.Command) (*cli.App, error) {
+	configPath, err := cmd.Flags().GetString("config")
+	if err != nil {
+		return nil, fmt.Errorf("failed to get config flag: %w", err)
+	}
+
+	app := cli.NewApp(configPath)
+	return app, nil
 }

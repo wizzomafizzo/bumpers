@@ -20,14 +20,12 @@ func (e *HookExitError) Error() string {
 }
 
 // processHookCommand processes hook input and returns exit code and error message
-func processHookCommand(configPath string, input io.Reader, _ io.Writer) (code int, response string) {
+func processHookCommand(app *cli.App, input io.Reader, _ io.Writer) (code int, response string) {
 	// Read input for processing
 	inputBytes, err := io.ReadAll(input)
 	if err != nil {
 		return 1, fmt.Sprintf("Error reading input: %v", err)
 	}
-
-	app := cli.NewApp(configPath)
 
 	// Create a new reader from the bytes we just read
 	response, err = app.ProcessHook(strings.NewReader(string(inputBytes)))
@@ -55,9 +53,12 @@ func createHookCommand() *cobra.Command {
 		Long:         "Process hook input from Claude Code and apply configured rules",
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			configFlag, _ := cmd.Parent().PersistentFlags().GetString("config")
+			app, err := createAppFromCommand(cmd.Parent())
+			if err != nil {
+				return err
+			}
 
-			exitCode, message := processHookCommand(configFlag, cmd.InOrStdin(), cmd.ErrOrStderr())
+			exitCode, message := processHookCommand(app, cmd.InOrStdin(), cmd.ErrOrStderr())
 
 			if message != "" {
 				// Check if this is a hookSpecificOutput response that should go to stdout
