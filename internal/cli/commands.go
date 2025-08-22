@@ -79,9 +79,7 @@ func (a *App) ProcessUserPrompt(rawJSON json.RawMessage) (string, error) {
 	}
 
 	// Process template with command context including shared variables
-	context := template.BuildCommandContext(commandStr)
-
-	processedMessage, err := template.Execute(commandMessage, context)
+	processedMessage, err := template.ExecuteCommandTemplate(commandMessage, commandStr)
 	if err != nil {
 		log.Error().Err(err).Str("commandName", commandStr).Msg("Failed to process command template")
 		return "", fmt.Errorf("failed to process command template: %w", err)
@@ -89,7 +87,7 @@ func (a *App) ProcessUserPrompt(rawJSON json.RawMessage) (string, error) {
 
 	// Create hook response that replaces the prompt and continues processing
 	response := HookSpecificOutput{
-		HookEventName:     "UserPromptSubmit",
+		HookEventName:     constants.UserPromptSubmitEvent,
 		AdditionalContext: processedMessage,
 	}
 

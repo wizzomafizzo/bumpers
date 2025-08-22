@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/wizzomafizzo/bumpers/internal/config"
+	"github.com/wizzomafizzo/bumpers/internal/constants"
 	"github.com/wizzomafizzo/bumpers/internal/template"
 )
 
@@ -23,7 +24,7 @@ func (a *App) ProcessSessionStart(rawJSON json.RawMessage) (string, error) {
 	}
 
 	// Only process startup and clear sources
-	if event.Source != "startup" && event.Source != "clear" {
+	if event.Source != constants.SessionSourceStartup && event.Source != constants.SessionSourceClear {
 		return "", nil
 	}
 
@@ -42,8 +43,7 @@ func (a *App) ProcessSessionStart(rawJSON json.RawMessage) (string, error) {
 	messages := make([]string, 0, len(cfg.Notes))
 	for _, note := range cfg.Notes {
 		// Process template with note context including shared variables
-		context := template.BuildNoteContext()
-		processedMessage, templateErr := template.Execute(note.Message, context)
+		processedMessage, templateErr := template.ExecuteNoteTemplate(note.Message)
 		if templateErr != nil {
 			return "", fmt.Errorf("failed to process note template: %w", templateErr)
 		}
@@ -54,7 +54,7 @@ func (a *App) ProcessSessionStart(rawJSON json.RawMessage) (string, error) {
 
 	// Create hook response that adds context
 	response := HookSpecificOutput{
-		HookEventName:     "SessionStart",
+		HookEventName:     constants.SessionStartEvent,
 		AdditionalContext: additionalContext,
 	}
 

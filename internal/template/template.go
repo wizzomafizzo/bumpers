@@ -26,3 +26,21 @@ func Execute(templateStr string, data any) (string, error) {
 
 	return result.String(), nil
 }
+
+// ExecuteRuleTemplate processes a rule message template with the given command
+func ExecuteRuleTemplate(message, command string) (string, error) {
+	context := BuildRuleContext(command)
+	return Execute(message, context)
+}
+
+// ExecuteCommandTemplate processes a command message template with the given command name
+func ExecuteCommandTemplate(message, commandName string) (string, error) {
+	context := BuildCommandContext(commandName)
+	return Execute(message, context)
+}
+
+// ExecuteNoteTemplate processes a note message template
+func ExecuteNoteTemplate(message string) (string, error) {
+	context := BuildNoteContext()
+	return Execute(message, context)
+}

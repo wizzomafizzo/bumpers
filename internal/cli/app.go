@@ -144,9 +144,7 @@ func (a *App) ProcessHook(input io.Reader) (string, error) {
 
 	if rule != nil {
 		// Process template with rule context including shared variables
-		context := template.BuildRuleContext(event.ToolInput.Command)
-
-		processedMessage, err := template.Execute(rule.Message, context)
+		processedMessage, err := template.ExecuteRuleTemplate(rule.Message, event.ToolInput.Command)
 		if err != nil {
 			return "", fmt.Errorf("failed to process rule template: %w", err)
 		}
@@ -176,9 +174,7 @@ func (a *App) TestCommand(command string) (string, error) {
 
 	if rule != nil {
 		// Process template with rule context including shared variables
-		context := template.BuildRuleContext(command)
-
-		processedMessage, err := template.Execute(rule.Message, context)
+		processedMessage, err := template.ExecuteRuleTemplate(rule.Message, command)
 		if err != nil {
 			return "", fmt.Errorf("failed to process rule template: %w", err)
 		}
