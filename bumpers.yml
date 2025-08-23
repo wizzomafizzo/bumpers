@@ -11,24 +11,16 @@ commands:
     message: Commit ALL modified files.
 rules:
   - pattern: "^go test"
-    tools: "^Bash$"  # Only applies to Bash commands (default behavior)
     message: |
       Use "just test" instead for TDD integration:
       - just test                    # Run all tests
       - just test ./internal/claude  # Test only a specific package
       See "just --list" for more information.
   - pattern: "^(gci|go vet|goimports|gofumpt|go *fmt|golangci-lint)"
-    tools: "^Bash$"  # Only applies to Bash commands
     message: Use "just lint fix" instead to resolve lint/formatting issues.
   - pattern: " /tmp"
-    tools: "^(Bash|Task)$"  # Applies to both Bash and Task tools
     message: Use a "tmp" directory in the project root instead.
   - pattern: "(git commit --no-verify|LEFTHOOK=0)"
-    tools: "^Bash$"  # Git commands are typically in Bash
     message: Pre-commit hooks must not be skipped.
   - pattern: "fieldalignment"
-    tools: "^Bash$"  # Lint commands are typically in Bash
     message: Fix field alignment issues by adding names to struct fields and running "just lint fix".
-  - pattern: "(password|secret|key|token)"
-    tools: "^(Write|Edit|MultiEdit)$"  # Only applies to file editing tools
-    message: Avoid hardcoding secrets in files. Use environment variables or secure configuration.
