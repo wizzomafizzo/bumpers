@@ -210,7 +210,7 @@ func (a *App) installClaudeHooks() error {
 	}
 
 	// Add PreToolUse hook (preserves existing hooks with same matcher)
-	err = claudeSettings.AddOrAppendHook(settings.PreToolUseEvent, "Bash", hookCmd)
+	err = claudeSettings.AddOrAppendHook(settings.PreToolUseEvent, "", hookCmd)
 	if err != nil {
 		return fmt.Errorf("failed to add bumpers PreToolUse hook to Claude settings: %w", err)
 	}

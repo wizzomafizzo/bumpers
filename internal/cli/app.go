@@ -133,7 +133,7 @@ func (a *App) ProcessHook(input io.Reader) (string, error) {
 		return "", err
 	}
 
-	rule, err := ruleMatcher.Match(event.ToolInput.Command)
+	rule, err := ruleMatcher.Match(event.ToolInput.Command, event.ToolName)
 	if err != nil {
 		if errors.Is(err, matcher.ErrNoRuleMatch) {
 			// No rule matched, command is allowed
@@ -163,7 +163,7 @@ func (a *App) TestCommand(command string) (string, error) {
 		return "", err
 	}
 
-	rule, err := ruleMatcher.Match(command)
+	rule, err := ruleMatcher.Match(command, "Bash")
 	if err != nil {
 		if errors.Is(err, matcher.ErrNoRuleMatch) {
 			// No rule matched, command is allowed

@@ -44,7 +44,7 @@ func TestEndToEndHookProcessing(t *testing.T) {
 	}
 
 	// Match rule
-	rule, err := ruleMatcher.Match(event.ToolInput.Command)
+	rule, err := ruleMatcher.Match(event.ToolInput.Command, "Bash")
 	if err != nil {
 		if errors.Is(err, matcher.ErrNoRuleMatch) {
 			t.Fatal("Expected rule match for go test command, but got no match")

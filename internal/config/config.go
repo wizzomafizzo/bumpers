@@ -17,6 +17,7 @@ type Config struct {
 
 type Rule struct {
 	Pattern  string `yaml:"pattern" mapstructure:"pattern"`
+	Tools    string `yaml:"tools,omitempty" mapstructure:"tools"`
 	Message  string `yaml:"message" mapstructure:"message"`
 	Prompt   string `yaml:"prompt,omitempty" mapstructure:"prompt"`
 	Generate string `yaml:"generate,omitempty" mapstructure:"generate"`
@@ -96,6 +97,13 @@ func (r *Rule) Validate() error {
 	// Validate regex pattern
 	if _, err := regexp.Compile(r.Pattern); err != nil {
 		return fmt.Errorf("invalid regex pattern '%s': %w", r.Pattern, err)
+	}
+
+	// Validate tools regex pattern if provided
+	if r.Tools != "" {
+		if _, err := regexp.Compile(r.Tools); err != nil {
+			return fmt.Errorf("invalid tools regex pattern '%s': %w", r.Tools, err)
+		}
 	}
 
 	// Ensure at least one response mechanism is available

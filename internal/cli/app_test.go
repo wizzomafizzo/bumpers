@@ -191,7 +191,8 @@ func TestProcessHook(t *testing.T) {
 		"tool_input": {
 			"command": "go test ./...",
 			"description": "Run tests"
-		}
+		},
+		"tool_name": "Bash"
 	}`
 
 	response, err := app.ProcessHook(strings.NewReader(hookInput))
@@ -258,7 +259,8 @@ func TestProcessHookDangerousCommand(t *testing.T) {
 		"tool_input": {
 			"command": "rm -rf /tmp",
 			"description": "Remove directory"
-		}
+		},
+		"tool_name": "Bash"
 	}`
 
 	response, err := app.ProcessHook(strings.NewReader(hookInput))
@@ -291,7 +293,8 @@ func TestProcessHookPatternMatching(t *testing.T) {
 		"tool_input": {
 			"command": "go test -v ./pkg/...",
 			"description": "Run verbose tests"
-		}
+		},
+		"tool_name": "Bash"
 	}`
 
 	response, err := app.ProcessHook(strings.NewReader(hookInput))
@@ -327,7 +330,8 @@ func TestConfigurationIsUsed(t *testing.T) {
 		"tool_input": {
 			"command": "go test ./...",
 			"description": "Run all tests"
-		}
+		},
+		"tool_name": "Bash"
 	}`
 
 	response, err := app.ProcessHook(strings.NewReader(hookInput))
@@ -608,8 +612,8 @@ func TestInstallActuallyAddsHook(t *testing.T) {
 	}
 
 	contentStr := string(content)
-	if !strings.Contains(contentStr, `"matcher": "Bash"`) {
-		t.Error("Expected Bash hook to be added to settings.local.json")
+	if !strings.Contains(contentStr, `"PreToolUse"`) {
+		t.Error("Expected PreToolUse hook to be added to settings.local.json")
 	}
 
 	if !strings.Contains(contentStr, "bumpers") {
@@ -653,9 +657,9 @@ func TestInstallCreatesBothHooks(t *testing.T) {
 
 	contentStr := string(content)
 
-	// Check for PreToolUse hook with Bash matcher
-	if !strings.Contains(contentStr, `"matcher": "Bash"`) {
-		t.Error("Expected PreToolUse Bash hook to be added to settings.local.json")
+	// Check for PreToolUse hook (empty matcher is omitted in JSON)
+	if !strings.Contains(contentStr, `"PreToolUse"`) {
+		t.Error("Expected PreToolUse hook to be added to settings.local.json")
 	}
 
 	// Check for UserPromptSubmit hook with empty matcher (omitted from JSON)
@@ -700,7 +704,8 @@ func TestProcessHookSimplifiedSchemaAlwaysDenies(t *testing.T) {
 		"tool_input": {
 			"command": "go test ./...",
 			"description": "Run tests"
-		}
+		},
+		"tool_name": "Bash"
 	}`
 	result1, err := app.ProcessHook(strings.NewReader(hookInput1))
 	if err != nil {
@@ -715,7 +720,8 @@ func TestProcessHookSimplifiedSchemaAlwaysDenies(t *testing.T) {
 		"tool_input": {
 			"command": "rm -rf temp",
 			"description": "Remove directory"
-		}
+		},
+		"tool_name": "Bash"
 	}`
 	result2, err := app.ProcessHook(strings.NewReader(hookInput2))
 	if err != nil {
@@ -873,8 +879,8 @@ func TestHookInstallationDoesNotIncludeTimeout(t *testing.T) {
 	}
 
 	// Should still contain the essential hook fields
-	if !strings.Contains(contentStr, `"matcher": "Bash"`) {
-		t.Error("Expected Bash hook to be added to settings.local.json")
+	if !strings.Contains(contentStr, `"PreToolUse"`) {
+		t.Error("Expected PreToolUse hook to be added to settings.local.json")
 	}
 
 	if !strings.Contains(contentStr, "bumpers") {
@@ -1773,7 +1779,8 @@ func TestProcessHookWithTemplate(t *testing.T) {
 		"tool_input": {
 			"command": "go test ./...",
 			"description": "Run tests"
-		}
+		},
+		"tool_name": "Bash"
 	}`
 
 	response, err := app.ProcessHook(strings.NewReader(hookInput))
@@ -1802,7 +1809,8 @@ func TestProcessHookWithTodayVariable(t *testing.T) {
 		"tool_input": {
 			"command": "go test ./...",
 			"description": "Run tests"
-		}
+		},
+		"tool_name": "Bash"
 	}`
 
 	response, err := app.ProcessHook(strings.NewReader(hookInput))
@@ -1920,5 +1928,198 @@ func TestProcessSessionStartWithTodayVariable(t *testing.T) {
 	expectedMessage := "Today is " + expectedDate
 	if additionalContext != expectedMessage {
 		t.Errorf("Expected %q, got %q", expectedMessage, additionalContext)
+	}
+}
+
+func TestAppProcessHookWithToolName(t *testing.T) {
+	t.Parallel()
+
+	app := setupToolNameTestApp(t)
+	testCases := getToolNameTestCases()
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			runToolNameTest(t, app, tc)
+		})
+	}
+}
+
+func setupToolNameTestApp(t *testing.T) *App {
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "test.yml")
+
+	configContent := `
+rules:
+  - pattern: "^rm -rf"
+    tools: "^(Bash|Task)$"
+    message: "Dangerous rm command"
+  - pattern: "password"
+    tools: "^Write$"
+    message: "No hardcoded secrets"
+`
+
+	err := os.WriteFile(configPath, []byte(configContent), 0o600)
+	if err != nil {
+		t.Fatalf("Failed to write test config: %v", err)
+	}
+
+	fs := filesystem.NewMemoryFileSystem()
+	return NewAppWithFileSystem(configPath, tempDir, fs)
+}
+
+func getToolNameTestCases() []struct {
+	name        string
+	hookInput   string
+	expectMsg   string
+	expectBlock bool
+} {
+	return []struct {
+		name        string
+		hookInput   string
+		expectMsg   string
+		expectBlock bool
+	}{
+		{
+			name: "rm command in Bash should be blocked",
+			hookInput: `{
+				"tool_input": {
+					"command": "rm -rf /tmp",
+					"description": "Remove temp files"
+				},
+				"tool_name": "Bash"
+			}`,
+			expectBlock: true,
+			expectMsg:   "Dangerous rm command",
+		},
+		{
+			name: "rm command in Write should be allowed",
+			hookInput: `{
+				"tool_input": {
+					"command": "rm -rf /tmp",
+					"description": "Remove temp files"
+				},
+				"tool_name": "Write"
+			}`,
+			expectBlock: false,
+		},
+		{
+			name: "password in Write should be blocked",
+			hookInput: `{
+				"tool_input": {
+					"command": "echo password > file",
+					"description": "Write to file"
+				},
+				"tool_name": "Write"
+			}`,
+			expectBlock: true,
+			expectMsg:   "No hardcoded secrets",
+		},
+		{
+			name: "password in Bash should be allowed",
+			hookInput: `{
+				"tool_input": {
+					"command": "echo password",
+					"description": "Echo command"
+				},
+				"tool_name": "Bash"
+			}`,
+			expectBlock: false,
+		},
+	}
+}
+
+func runToolNameTest(t *testing.T, app *App, tc struct {
+	name        string
+	hookInput   string
+	expectMsg   string
+	expectBlock bool
+},
+) {
+	result, err := app.ProcessHook(strings.NewReader(tc.hookInput))
+
+	if tc.expectBlock {
+		validateBlockedCommand(t, result, err, tc.expectMsg)
+	} else {
+		validateAllowedCommand(t, result, err)
+	}
+}
+
+func validateBlockedCommand(t *testing.T, result string, err error, expectMsg string) {
+	if err != nil {
+		t.Errorf("Expected no error but got: %v", err)
+	}
+	if result == "" {
+		t.Error("Expected blocking message but got empty result")
+	}
+	if !strings.Contains(result, expectMsg) {
+		t.Errorf("Expected message to contain '%s', got '%s'", expectMsg, result)
+	}
+}
+
+func validateAllowedCommand(t *testing.T, result string, err error) {
+	if err != nil {
+		t.Errorf("Expected no error but got: %v", err)
+	}
+	if result != "" {
+		t.Errorf("Expected no blocking message but got: %s", result)
+	}
+}
+
+func TestAppProcessHookWithEmptyToolName(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "test.yml")
+
+	// Config that only matches Bash commands (no tools field means default to Bash)
+	configContent := `
+rules:
+  - pattern: "^go test"
+    message: "Use just test instead"
+`
+
+	err := os.WriteFile(configPath, []byte(configContent), 0o600)
+	if err != nil {
+		t.Fatalf("Failed to write test config: %v", err)
+	}
+
+	fs := filesystem.NewMemoryFileSystem()
+	app := NewAppWithFileSystem(configPath, tempDir, fs)
+
+	// Test case 1: Hook input with empty tool_name (should NOT be treated as Bash)
+	hookInput1 := `{
+		"tool_input": {
+			"command": "go test ./...",
+			"description": "Run tests"
+		}
+	}`
+
+	result, err := app.ProcessHook(strings.NewReader(hookInput1))
+	// Empty tool name should NOT match Bash-only rules
+	if err != nil {
+		t.Errorf("Expected no error but got: %v", err)
+	}
+	if result != "" {
+		t.Errorf("Expected no blocking message for empty tool name, got: %s", result)
+	}
+
+	// Test case 2: Same command with explicit "Bash" tool_name (should be blocked)
+	hookInput2 := `{
+		"tool_input": {
+			"command": "go test ./...",
+			"description": "Run tests"
+		},
+		"tool_name": "Bash"
+	}`
+
+	result2, err2 := app.ProcessHook(strings.NewReader(hookInput2))
+
+	// This should be blocked
+	if err2 != nil {
+		t.Errorf("Expected no error but got: %v", err2)
+	}
+	if result2 == "" {
+		t.Error("Expected blocking message for explicit Bash tool, got empty result")
 	}
 }
