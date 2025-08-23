@@ -631,3 +631,67 @@ func TestDefaultConfigIncludesNotes(t *testing.T) {
 		t.Error("Expected at least one note with non-empty message")
 	}
 }
+
+func TestRuleWithToolsField(t *testing.T) {
+	t.Parallel()
+
+	yamlData := `
+rules:
+  - pattern: "^rm -rf"
+    tools: "^(Bash|Task)$"
+    message: "Dangerous command"
+  - pattern: "password"
+    tools: "^(Write|Edit)$"
+    message: "No hardcoded secrets"
+  - pattern: "test"
+    message: "Bash only rule (no tools field)"
+`
+
+	config, err := LoadFromYAML([]byte(yamlData))
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	if len(config.Rules) != 3 {
+		t.Fatalf("Expected 3 rules, got %d", len(config.Rules))
+	}
+
+	// First rule with tools field
+	if config.Rules[0].Pattern != "^rm -rf" {
+		t.Errorf("Expected pattern '^rm -rf', got '%s'", config.Rules[0].Pattern)
+	}
+	if config.Rules[0].Tools != "^(Bash|Task)$" {
+		t.Errorf("Expected tools '^(Bash|Task)$', got '%s'", config.Rules[0].Tools)
+	}
+
+	// Second rule with tools field
+	if config.Rules[1].Tools != "^(Write|Edit)$" {
+		t.Errorf("Expected tools '^(Write|Edit)$', got '%s'", config.Rules[1].Tools)
+	}
+
+	// Third rule without tools field (should be empty string)
+	if config.Rules[2].Tools != "" {
+		t.Errorf("Expected empty tools field, got '%s'", config.Rules[2].Tools)
+	}
+}
+
+func TestRuleValidationWithInvalidToolsRegex(t *testing.T) {
+	t.Parallel()
+
+	yamlData := `
+rules:
+  - pattern: "test"
+    tools: "[invalid regex"
+    message: "Test message"
+`
+
+	_, err := LoadFromYAML([]byte(yamlData))
+	if err == nil {
+		t.Fatal("Expected error for invalid tools regex, got nil")
+	}
+
+	expectedError := "invalid tools regex pattern"
+	if !strings.Contains(err.Error(), expectedError) {
+		t.Errorf("Expected error to contain '%s', got '%s'", expectedError, err.Error())
+	}
+}

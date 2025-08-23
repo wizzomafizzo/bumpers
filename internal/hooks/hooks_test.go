@@ -104,3 +104,28 @@ func TestDetectHookType(t *testing.T) {
 		})
 	}
 }
+
+func TestParseInputWithToolName(t *testing.T) {
+	t.Parallel()
+
+	jsonInput := `{
+		"tool_input": {
+			"command": "go test ./...",
+			"description": "Run tests"
+		},
+		"tool_name": "Bash"
+	}`
+
+	event, err := ParseInput(strings.NewReader(jsonInput))
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	if event.ToolInput.Command != "go test ./..." {
+		t.Errorf("Expected command 'go test ./...', got %s", event.ToolInput.Command)
+	}
+
+	if event.ToolName != "Bash" {
+		t.Errorf("Expected tool name 'Bash', got '%s'", event.ToolName)
+	}
+}

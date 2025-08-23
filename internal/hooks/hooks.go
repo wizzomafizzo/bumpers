@@ -23,6 +23,7 @@ type ToolInput struct {
 
 type HookEvent struct {
 	ToolInput ToolInput `json:"tool_input"` //nolint:tagliatelle // API uses snake_case
+	ToolName  string    `json:"tool_name"`  //nolint:tagliatelle // API uses snake_case
 }
 
 func ParseInput(reader io.Reader) (*HookEvent, error) {

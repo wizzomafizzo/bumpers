@@ -60,9 +60,43 @@ internal/
 
 Rules defined in `bumpers.yml` with regex patterns:
 - **pattern**: Regex to match commands (matches result in denial)
+- **tools**: Regex to match tool names (optional, defaults to "^Bash$" if empty)
 - **message**: User-friendly explanation and alternatives
 - **generate**: AI tool integration ("off", "once", "session", "always")
 - **prompt**: Custom prompt for AI responses
+
+### Tool Matching
+
+The `tools` field allows rules to target specific Claude Code tools:
+
+```yaml
+rules:
+  # Rule applies only to Bash commands (default behavior when tools is empty)
+  - pattern: "^go test"
+    tools: "^Bash$"
+    message: "Use 'just test' instead"
+    
+  # Rule applies to multiple tools using regex alternation
+  - pattern: " /tmp"
+    tools: "^(Bash|Task)$"
+    message: "Use project 'tmp' directory instead"
+    
+  # Rule applies only to file editing tools
+  - pattern: "password"
+    tools: "^(Write|Edit|MultiEdit)$"
+    message: "Avoid hardcoding secrets in files"
+    
+  # Rule applies to all tools (empty tools field defaults to Bash only)
+  - pattern: "help"
+    tools: ".*"
+    message: "Use built-in help system"
+```
+
+**Common Tool Names:** Bash, Write, Edit, MultiEdit, Read, Task, Glob, Grep, WebFetch, WebSearch
+
+**Case-Insensitive Matching:** Tool patterns are matched case-insensitively, so `bash` matches `Bash`.
+
+**Default Behavior:** Rules without a `tools` field only match Bash commands (backward compatibility).
 
 ## Key Patterns
 

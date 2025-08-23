@@ -20,7 +20,7 @@ func TestRuleMatcher(t *testing.T) {
 		t.Fatalf("Failed to create matcher: %v", err)
 	}
 
-	match, err := matcher.Match("go test ./...")
+	match, err := matcher.Match("go test ./...", "Bash")
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -47,7 +47,7 @@ func TestRuleMatcherNoMatch(t *testing.T) {
 		t.Fatalf("Failed to create matcher: %v", err)
 	}
 
-	match, err := matcher.Match("make test")
+	match, err := matcher.Match("make test", "Bash")
 	if err == nil {
 		t.Fatal("Expected ErrNoRuleMatch error, got nil")
 	}
@@ -118,7 +118,7 @@ func TestRegexPatternMatching(t *testing.T) {
 			if matcherErr != nil {
 				t.Fatalf("Failed to create matcher: %v", matcherErr)
 			}
-			match, err := matcher.Match(tc.command)
+			match, err := matcher.Match(tc.command, "Bash")
 
 			if tc.matches {
 				assertMatch(t, match, err)
@@ -167,5 +167,61 @@ func TestNewRuleMatcherInvalidRegex(t *testing.T) {
 
 	if !errors.Is(err, ErrInvalidRegex) {
 		t.Errorf("Expected ErrInvalidRegex, got %v", err)
+	}
+}
+
+func TestRuleMatcherWithToolFiltering(t *testing.T) {
+	t.Parallel()
+
+	rules := []config.Rule{
+		{
+			Pattern: "^rm -rf",
+			Tools:   "^(Bash|Task)$",
+			Message: "Dangerous command",
+		},
+		{
+			Pattern: "password",
+			Tools:   "^(Write|Edit)$",
+			Message: "No secrets",
+		},
+		{
+			Pattern: "test",
+			Tools:   "", // Empty = defaults to Bash only
+			Message: "Bash test command",
+		},
+	}
+
+	matcher, err := NewRuleMatcher(rules)
+	if err != nil {
+		t.Fatalf("Expected no error creating matcher, got %v", err)
+	}
+
+	// Test rm command matches Bash tool
+	rule, err := matcher.Match("rm -rf /tmp", "Bash")
+	if err != nil {
+		t.Errorf("Expected match for Bash, got error: %v", err)
+	}
+	if rule == nil {
+		t.Error("Expected rule but got nil")
+	}
+
+	// Test rm command does not match Write tool
+	_, err = matcher.Match("rm -rf /tmp", "Write")
+	if err == nil {
+		t.Error("Expected no match for Write tool")
+	}
+	if !errors.Is(err, ErrNoRuleMatch) {
+		t.Errorf("Expected ErrNoRuleMatch, got %v", err)
+	}
+
+	// Test empty tools field defaults to Bash only
+	_, err = matcher.Match("test file", "Bash")
+	if err != nil {
+		t.Errorf("Expected match for Bash with empty tools field, got error: %v", err)
+	}
+
+	_, err = matcher.Match("test file", "Write")
+	if err == nil {
+		t.Error("Expected no match for Write with empty tools field")
 	}
 }

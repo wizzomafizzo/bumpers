@@ -36,13 +36,31 @@ type RuleMatcher struct {
 	rules []config.Rule
 }
 
-func (m *RuleMatcher) Match(command string) (*config.Rule, error) {
+func (m *RuleMatcher) Match(command, toolName string) (*config.Rule, error) {
 	for i := range m.rules {
-		re, err := regexp.Compile(m.rules[i].Pattern)
+		// Filter rules by tool first
+		toolPattern := m.rules[i].Tools
+		if toolPattern == "" {
+			toolPattern = "^Bash$" // Default to Bash only when empty
+		}
+
+		// Compile tools pattern with case-insensitive flag
+		toolRe, err := regexp.Compile("(?i)" + toolPattern)
+		if err != nil {
+			continue // Skip rules with invalid tool patterns
+		}
+
+		// Skip rule if tool doesn't match
+		if !toolRe.MatchString(toolName) {
+			continue
+		}
+
+		// Now check if command matches
+		cmdRe, err := regexp.Compile(m.rules[i].Pattern)
 		if err != nil {
 			continue
 		}
-		if re.MatchString(command) {
+		if cmdRe.MatchString(command) {
 			return &m.rules[i], nil
 		}
 	}
