@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/wizzomafizzo/bumpers/internal/context"
 	"github.com/wizzomafizzo/bumpers/internal/logger"
 	"github.com/wizzomafizzo/bumpers/internal/project"
 )
@@ -28,7 +29,9 @@ func run() error {
 		return fmt.Errorf("failed to find project root: %w", err)
 	}
 
-	if err := logger.Init(workingDir); err != nil {
+	// Create project context for XDG-compliant logging
+	projectCtx := context.New(workingDir)
+	if err := logger.InitWithProjectContext(projectCtx); err != nil {
 		return fmt.Errorf("logger init failed: %w", err)
 	}
 

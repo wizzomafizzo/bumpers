@@ -11,6 +11,9 @@ const (
 	// LogFilename is the default log file name for bumpers.
 	LogFilename = "bumpers.log"
 
+	// CacheFilename is the default cache database file name for bumpers.
+	CacheFilename = "cache.db"
+
 	// SettingsFilename is the Claude settings file name that bumpers modifies.
 	SettingsFilename = "settings.local.json"
 )

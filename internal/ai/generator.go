@@ -19,9 +19,9 @@ type Generator struct {
 	launcher MessageGenerator
 }
 
-// NewGenerator creates a new AI message generator
-func NewGenerator(dbPath string) (*Generator, error) {
-	cache, err := NewCache(dbPath)
+// NewGenerator creates a new AI message generator with project context
+func NewGenerator(dbPath, projectID string) (*Generator, error) {
+	cache, err := NewCacheWithProject(dbPath, projectID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create cache: %w", err)
 	}

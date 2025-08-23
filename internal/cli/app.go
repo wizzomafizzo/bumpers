@@ -15,6 +15,7 @@ import (
 	"github.com/wizzomafizzo/bumpers/internal/hooks"
 	"github.com/wizzomafizzo/bumpers/internal/matcher"
 	"github.com/wizzomafizzo/bumpers/internal/project"
+	"github.com/wizzomafizzo/bumpers/internal/storage"
 	"github.com/wizzomafizzo/bumpers/internal/template"
 )
 
@@ -220,22 +221,21 @@ func (a *App) getFileSystem() filesystem.FileSystem {
 }
 
 // processAIGeneration applies AI generation to a message if configured
-func (*App) processAIGeneration(rule *config.Rule, message, _ string) (string, error) {
+func (a *App) processAIGeneration(rule *config.Rule, message, _ string) (string, error) {
 	// Skip if no generation configured or mode is "off"
 	if rule.Generate == "" || rule.Generate == "off" {
 		return message, nil
 	}
 
-	// Create cache directory path
-	cacheDir := filepath.Join(os.Getenv("HOME"), ".claude", "bumpers")
-	if err := os.MkdirAll(cacheDir, 0o750); err != nil {
-		return message, fmt.Errorf("failed to create cache directory: %w", err)
+	// Use XDG-compliant cache path
+	storageManager := storage.New(filesystem.NewOSFileSystem())
+	cachePath, err := storageManager.GetCachePath()
+	if err != nil {
+		return message, fmt.Errorf("failed to get cache path: %w", err)
 	}
 
-	cachePath := filepath.Join(cacheDir, "cache.db")
-
 	// Create AI generator
-	generator, err := ai.NewGenerator(cachePath)
+	generator, err := ai.NewGenerator(cachePath, a.projectRoot)
 	if err != nil {
 		return message, fmt.Errorf("failed to create AI generator: %w", err)
 	}

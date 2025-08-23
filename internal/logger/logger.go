@@ -10,8 +10,37 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/wizzomafizzo/bumpers/internal/constants"
+	"github.com/wizzomafizzo/bumpers/internal/context"
+	"github.com/wizzomafizzo/bumpers/internal/filesystem"
+	"github.com/wizzomafizzo/bumpers/internal/storage"
 	"gopkg.in/natefinch/lumberjack.v2"
 )
+
+const (
+	// Lumberjack configuration constants
+	maxLogSizeMB  = 10 // Maximum size in MB before rotation
+	maxLogBackups = 3  // Number of old files to keep
+	maxLogAgeDays = 30 // Maximum age in days before deletion
+)
+
+// createLumberjackLogger creates a lumberjack.Logger with standard configuration
+func createLumberjackLogger(logFile string) *lumberjack.Logger {
+	return &lumberjack.Logger{
+		Filename:   logFile,
+		MaxSize:    maxLogSizeMB,
+		MaxBackups: maxLogBackups,
+		MaxAge:     maxLogAgeDays,
+	}
+}
+
+// ensureLogDir creates the log directory if it doesn't exist
+func ensureLogDir(logDir string) error {
+	err := os.MkdirAll(logDir, 0o750)
+	if err != nil {
+		return fmt.Errorf("failed to create log directory %s: %w", logDir, err)
+	}
+	return nil
+}
 
 // Logger wraps zerolog.Logger with lumberjack for automatic log rotation
 type Logger struct {
@@ -26,19 +55,11 @@ func New(workDir string) (*Logger, error) {
 	logDir := filepath.Join(workDir, constants.ClaudeDir, constants.AppSubDir)
 	logFile := filepath.Join(logDir, constants.LogFilename)
 
-	// Create log directory if it doesn't exist
-	err := os.MkdirAll(logDir, 0o750)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create log directory %s: %w", logDir, err)
+	if err := ensureLogDir(logDir); err != nil {
+		return nil, err
 	}
 
-	// Create lumberjack logger for automatic rotation
-	lj := &lumberjack.Logger{
-		Filename:   logFile,
-		MaxSize:    10, // MB
-		MaxBackups: 3,
-		MaxAge:     30, // days
-	}
+	lj := createLumberjackLogger(logFile)
 
 	// Create zerolog logger
 	zl := zerolog.New(lj).With().Timestamp().Logger()
@@ -131,4 +152,25 @@ func Init(workDir string) error {
 // InitTest initializes logger for testing (outputs to discard)
 func InitTest() {
 	log.Logger = zerolog.New(io.Discard)
+}
+
+// InitWithProjectContext initializes the global logger with project context and XDG paths
+func InitWithProjectContext(projectCtx *context.ProjectContext) error {
+	// Use storage manager for XDG-compliant paths
+	storageManager := storage.New(&filesystem.OSFileSystem{})
+	logFile, err := storageManager.GetLogPath()
+	if err != nil {
+		return fmt.Errorf("failed to get log path: %w", err)
+	}
+
+	lj := createLumberjackLogger(logFile)
+
+	// Create zerolog logger with project context
+	log.Logger = zerolog.New(lj).With().
+		Timestamp().
+		Str("project_id", projectCtx.ID).
+		Str("project_name", projectCtx.Name).
+		Logger()
+
+	return nil
 }

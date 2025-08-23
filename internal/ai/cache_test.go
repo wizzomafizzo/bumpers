@@ -12,7 +12,7 @@ func TestCacheBasicOperations(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "test.db")
 
-	cache, err := NewCache(dbPath)
+	cache, err := NewCacheWithProject(dbPath, "test-project")
 	if err != nil {
 		t.Fatalf("Failed to create cache: %v", err)
 	}
@@ -75,7 +75,7 @@ func TestCachePersistenceBetweenSessions(t *testing.T) {
 	}
 
 	// First session: create cache and store entry
-	cache1, err := NewCache(dbPath)
+	cache1, err := NewCacheWithProject(dbPath, "test-project")
 	if err != nil {
 		t.Fatalf("Failed to create cache: %v", err)
 	}
@@ -90,7 +90,7 @@ func TestCachePersistenceBetweenSessions(t *testing.T) {
 	}
 
 	// Second session: reopen cache and retrieve entry
-	cache2, err := NewCache(dbPath)
+	cache2, err := NewCacheWithProject(dbPath, "test-project")
 	if err != nil {
 		t.Fatalf("Failed to reopen cache: %v", err)
 	}
@@ -107,6 +107,52 @@ func TestCachePersistenceBetweenSessions(t *testing.T) {
 	if retrieved == nil {
 		t.Fatal("Entry should persist between sessions")
 	}
+	if retrieved.GeneratedMessage != entry.GeneratedMessage {
+		t.Errorf("GeneratedMessage mismatch: got %q, want %q", retrieved.GeneratedMessage, entry.GeneratedMessage)
+	}
+}
+
+func TestCacheWithProjectContext(t *testing.T) {
+	t.Parallel()
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "test.db")
+
+	// Create cache with project context
+	projectID := "test-a1b2"
+	cache, err := NewCacheWithProject(dbPath, projectID)
+	if err != nil {
+		t.Fatalf("Failed to create cache with project: %v", err)
+	}
+	defer func() {
+		if closeErr := cache.Close(); closeErr != nil {
+			t.Logf("Failed to close cache: %v", closeErr)
+		}
+	}()
+
+	// Store entry - should be prefixed internally
+	key := "test-key"
+	entry := &CacheEntry{
+		GeneratedMessage: "Project-specific message",
+		OriginalMessage:  "Original message",
+		Timestamp:        time.Now(),
+		GenerateMode:     "once",
+	}
+
+	err = cache.Put(key, entry)
+	if err != nil {
+		t.Fatalf("Failed to put entry: %v", err)
+	}
+
+	// Retrieve entry
+	retrieved, err := cache.Get(key)
+	if err != nil {
+		t.Fatalf("Failed to get entry: %v", err)
+	}
+
+	if retrieved == nil {
+		t.Fatal("Retrieved entry is nil")
+	}
+
 	if retrieved.GeneratedMessage != entry.GeneratedMessage {
 		t.Errorf("GeneratedMessage mismatch: got %q, want %q", retrieved.GeneratedMessage, entry.GeneratedMessage)
 	}
