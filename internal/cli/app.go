@@ -133,13 +133,7 @@ func (a *App) ProcessHook(input io.Reader) (string, error) {
 		return "", err
 	}
 
-	// Use tool name from event, default to "Bash" if empty for backward compatibility
-	toolName := event.ToolName
-	if toolName == "" {
-		toolName = "Bash"
-	}
-
-	rule, err := ruleMatcher.Match(event.ToolInput.Command, toolName)
+	rule, err := ruleMatcher.Match(event.ToolInput.Command, event.ToolName)
 	if err != nil {
 		if errors.Is(err, matcher.ErrNoRuleMatch) {
 			// No rule matched, command is allowed
