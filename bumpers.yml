@@ -10,14 +10,16 @@ commands:
   - name: commit
     message: Commit ALL modified files.
 rules:
-  - pattern: "^go test"
+  - pattern: "go test "
     message: |
       Use "just test" instead for TDD integration:
-      - just test                    # Run all tests
-      - just test ./internal/claude  # Test only a specific package
-      See "just --list" for more information.
+      - just test                                # Run all tests
+      - just test ./internal/claude              # Test only a specific package
+      - just test "" TestExample1                # Run all tests with a specific test case
+      - just test ./internal/claude TestExample1 # Test only a specific package with a specific test case
   - pattern: "^(gci|go vet|goimports|gofumpt|go *fmt|golangci-lint)"
     message: Use "just lint fix" instead to resolve lint/formatting issues.
+    generate: once
   - pattern: " /tmp"
     message: Use a "tmp" directory in the project root instead.
   - pattern: "(git commit --no-verify|LEFTHOOK=0)"

@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/rs/zerolog/log"
 	"github.com/wizzomafizzo/bumpers/internal/config"
 )
 
@@ -80,12 +81,40 @@ func (l *Launcher) Execute(args ...string) ([]byte, error) {
 
 	// #nosec G204 -- claudePath is validated before use
 	cmd := exec.CommandContext(context.Background(), claudePath, args...)
-	output, err := cmd.Output()
+
+	// Log the exact command being executed
+	log.Debug().
+		Str("claude_path", claudePath).
+		Strs("args", args).
+		Msg("Executing Claude command")
+
+	output, err := cmd.CombinedOutput() // Use CombinedOutput to capture stderr too
 	if err != nil {
+		// Log detailed error information
+		log.Error().
+			Str("claude_path", claudePath).
+			Strs("args", args).
+			Str("output", string(output)).
+			Err(err).
+			Msg("Claude command failed")
 		return nil, fmt.Errorf("failed to execute Claude: %w", err)
 	}
 
+	log.Debug().
+		Str("claude_path", claudePath).
+		Int("output_length", len(output)).
+		Msg("Claude command succeeded")
+
 	return output, nil
+}
+
+// GenerateMessage uses Claude to generate an AI response for the given prompt
+func (l *Launcher) GenerateMessage(prompt string) (string, error) {
+	output, err := l.Execute("-p", prompt)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(output)), nil
 }
 
 // validateBinary checks if the given path is a valid, executable file

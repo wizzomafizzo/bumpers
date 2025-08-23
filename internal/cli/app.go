@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 
 	"github.com/rs/zerolog/log"
+	"github.com/wizzomafizzo/bumpers/internal/ai"
 	"github.com/wizzomafizzo/bumpers/internal/config"
 	"github.com/wizzomafizzo/bumpers/internal/filesystem"
 	"github.com/wizzomafizzo/bumpers/internal/hooks"
@@ -149,7 +150,15 @@ func (a *App) ProcessHook(input io.Reader) (string, error) {
 			return "", fmt.Errorf("failed to process rule template: %w", err)
 		}
 
-		return processedMessage, nil
+		// Apply AI generation if configured
+		finalMessage, err := a.processAIGeneration(rule, processedMessage, event.ToolInput.Command)
+		if err != nil {
+			// Log error but don't fail the hook - fallback to original message
+			log.Error().Err(err).Msg("AI generation failed, using original message")
+			return processedMessage, nil
+		}
+
+		return finalMessage, nil
 	}
 
 	// This should never happen based on matcher logic, but Go requires a return
@@ -208,4 +217,48 @@ func (a *App) getFileSystem() filesystem.FileSystem {
 		return a.fileSystem
 	}
 	return filesystem.NewOSFileSystem()
+}
+
+// processAIGeneration applies AI generation to a message if configured
+func (*App) processAIGeneration(rule *config.Rule, message, _ string) (string, error) {
+	// Skip if no generation configured or mode is "off"
+	if rule.Generate == "" || rule.Generate == "off" {
+		return message, nil
+	}
+
+	// Create cache directory path
+	cacheDir := filepath.Join(os.Getenv("HOME"), ".claude", "bumpers")
+	if err := os.MkdirAll(cacheDir, 0o750); err != nil {
+		return message, fmt.Errorf("failed to create cache directory: %w", err)
+	}
+
+	cachePath := filepath.Join(cacheDir, "cache.db")
+
+	// Create AI generator
+	generator, err := ai.NewGenerator(cachePath)
+	if err != nil {
+		return message, fmt.Errorf("failed to create AI generator: %w", err)
+	}
+	defer func() {
+		if closeErr := generator.Close(); closeErr != nil {
+			// Log error but don't fail the hook - generator.Close() error is non-critical
+			_ = closeErr // Silence linter about empty block
+		}
+	}()
+
+	// Create request
+	req := &ai.GenerateRequest{
+		OriginalMessage: message,
+		CustomPrompt:    rule.Prompt,
+		GenerateMode:    rule.Generate,
+		Pattern:         rule.Pattern,
+	}
+
+	// Generate message
+	result, err := generator.GenerateMessage(req)
+	if err != nil {
+		return message, fmt.Errorf("failed to generate AI message: %w", err)
+	}
+
+	return result, nil
 }

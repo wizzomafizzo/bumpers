@@ -695,3 +695,97 @@ rules:
 		t.Errorf("Expected error to contain '%s', got '%s'", expectedError, err.Error())
 	}
 }
+
+func TestRuleValidationWithGenerateField(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		yamlData    string
+		errorText   string
+		expectError bool
+	}{
+		{
+			name: "valid generate field - once",
+			yamlData: `
+rules:
+  - pattern: "test"
+    message: "Test message"
+    generate: "once"
+`,
+			expectError: false,
+		},
+		{
+			name: "valid generate field - session",
+			yamlData: `
+rules:
+  - pattern: "test"
+    message: "Test message"
+    generate: "session"
+`,
+			expectError: false,
+		},
+		{
+			name: "valid generate field - always",
+			yamlData: `
+rules:
+  - pattern: "test"
+    message: "Test message"
+    generate: "always"
+`,
+			expectError: false,
+		},
+		{
+			name: "valid generate field - off",
+			yamlData: `
+rules:
+  - pattern: "test"  
+    message: "Test message"
+    generate: "off"
+`,
+			expectError: false,
+		},
+		{
+			name: "invalid generate field",
+			yamlData: `
+rules:
+  - pattern: "test"
+    message: "Test message"
+    generate: "invalid"
+`,
+			expectError: true,
+			errorText:   "invalid generate mode",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			testRuleGenerateValidation(t, tt)
+		})
+	}
+}
+
+// testRuleGenerateValidation is a helper function to reduce complexity
+func testRuleGenerateValidation(t *testing.T, tt struct {
+	name        string
+	yamlData    string
+	errorText   string
+	expectError bool
+},
+) {
+	_, err := LoadFromYAML([]byte(tt.yamlData))
+
+	if tt.expectError {
+		if err == nil {
+			t.Fatalf("Expected error for %s, got nil", tt.name)
+		}
+		if !strings.Contains(err.Error(), tt.errorText) {
+			t.Errorf("Expected error to contain '%s', got '%s'", tt.errorText, err.Error())
+		}
+		return
+	}
+	if err != nil {
+		t.Errorf("Expected no error for %s, got %v", tt.name, err)
+	}
+}

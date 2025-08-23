@@ -111,5 +111,20 @@ func (r *Rule) Validate() error {
 		return errors.New("rule must provide either a message or generate configuration")
 	}
 
+	// Validate generate mode if provided
+	if r.Generate != "" {
+		validModes := []string{"off", "once", "session", "always"}
+		isValid := false
+		for _, mode := range validModes {
+			if r.Generate == mode {
+				isValid = true
+				break
+			}
+		}
+		if !isValid {
+			return fmt.Errorf("invalid generate mode '%s': must be one of: off, once, session, always", r.Generate)
+		}
+	}
+
 	return nil
 }
