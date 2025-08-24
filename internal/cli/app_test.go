@@ -2795,3 +2795,147 @@ func TestFindMatchingRule(t *testing.T) {
 		t.Errorf("Expected matched value '/home/user/secrets.txt', got %s", value)
 	}
 }
+
+// TestProcessHookRoutesPostToolUse tests that PostToolUse hooks are properly routed
+func TestProcessHookRoutesPostToolUse(t *testing.T) {
+	t.Parallel()
+	setupTest(t)
+
+	configContent := `rules:
+  # Post-tool-use rule matching output
+  - match: "error|failed"
+    send: "Command failed - check the output"
+    when: ["post"]
+  # Post-tool-use rule matching reasoning
+  - match: "not related to my changes"
+    send: "AI claiming unrelated - please verify"
+    when: ["reasoning"]`
+
+	configPath := createTempConfig(t, configContent)
+	app := NewApp(configPath)
+
+	// Use static testdata transcript
+	transcriptPath := filepath.Join("../../testdata", "transcript-not-related.jsonl")
+	absPath, err := filepath.Abs(transcriptPath)
+	if err != nil {
+		t.Fatalf("Failed to get absolute path: %v", err)
+	}
+	transcriptPath = absPath
+
+	// Test PostToolUse hook with reasoning match
+	postToolUseInput := `{
+		"session_id": "abc123",
+		"transcript_path": "` + transcriptPath + `",
+		"cwd": "/test/directory",
+		"hook_event_name": "PostToolUse",
+		"tool_name": "Bash",
+		"tool_input": {
+			"command": "npm test"
+		},
+		"tool_output": {
+			"success": true,
+			"output": "All tests passed"
+		}
+	}`
+
+	result, err := app.ProcessHook(strings.NewReader(postToolUseInput))
+	if err != nil {
+		t.Fatalf("ProcessHook failed for PostToolUse: %v", err)
+	}
+
+	// Should match the reasoning rule and return the message
+	expectedMessage := "AI claiming unrelated - please verify"
+	if result != expectedMessage {
+		t.Errorf("Expected %q, got %q", expectedMessage, result)
+	}
+}
+
+// TestPostToolUseWithDifferentTranscript tests that PostToolUse reads actual transcript content
+func TestPostToolUseWithDifferentTranscript(t *testing.T) {
+	t.Parallel()
+	setupTest(t)
+
+	configContent := `rules:
+  - match: "permission denied"
+    send: "File permission error detected"
+    when: ["reasoning"]`
+
+	configPath := createTempConfig(t, configContent)
+	app := NewApp(configPath)
+
+	// Use static testdata transcript with permission denied content
+	transcriptPath := filepath.Join("../../testdata", "transcript-permission-denied.jsonl")
+	absPath, err := filepath.Abs(transcriptPath)
+	if err != nil {
+		t.Fatalf("Failed to get absolute path: %v", err)
+	}
+	transcriptPath = absPath
+
+	postToolUseInput := `{
+		"session_id": "test456",
+		"transcript_path": "` + transcriptPath + `",
+		"cwd": "/test/dir",
+		"hook_event_name": "PostToolUse",
+		"tool_name": "Bash",
+		"tool_input": {"command": "ls /root"},
+		"tool_output": {"error": true}
+	}`
+
+	result, err := app.ProcessHook(strings.NewReader(postToolUseInput))
+	if err != nil {
+		t.Fatalf("ProcessHook failed: %v", err)
+	}
+
+	// This should match "permission denied" pattern, not return the hardcoded stub message
+	expectedMessage := "File permission error detected"
+	if result != expectedMessage {
+		t.Errorf("Expected %q (from transcript matching), got %q", expectedMessage, result)
+	}
+
+	// Verify it's NOT returning the hardcoded stub message
+	stubMessage := "AI claiming unrelated - please verify"
+	if result == stubMessage {
+		t.Error("Got hardcoded stub message - PostToolUse handler not reading transcript properly")
+	}
+}
+
+// TestPostToolUseRuleNotMatching tests that PostToolUse returns empty when no rules match
+func TestPostToolUseRuleNotMatching(t *testing.T) {
+	t.Parallel()
+	setupTest(t)
+
+	configContent := `rules:
+  - match: "file not found"
+    send: "Check the file path"
+    when: ["reasoning"]`
+
+	configPath := createTempConfig(t, configContent)
+	app := NewApp(configPath)
+
+	// Use transcript that won't match the "file not found" pattern
+	transcriptPath := filepath.Join("../../testdata", "transcript-permission-denied.jsonl")
+	absPath, err := filepath.Abs(transcriptPath)
+	if err != nil {
+		t.Fatalf("Failed to get absolute path: %v", err)
+	}
+
+	postToolUseInput := `{
+		"session_id": "test789",
+		"transcript_path": "` + absPath + `",
+		"cwd": "/test/dir",
+		"hook_event_name": "PostToolUse",
+		"tool_name": "Bash",
+		"tool_input": {"command": "ls"},
+		"tool_output": {"success": true}
+	}`
+
+	result, err := app.ProcessHook(strings.NewReader(postToolUseInput))
+	if err != nil {
+		t.Fatalf("ProcessHook failed: %v", err)
+	}
+
+	// Should return empty string when no rules match
+	if result != "" {
+		t.Errorf("Expected empty result when no rules match, got %q", result)
+	}
+}

@@ -1023,3 +1023,97 @@ func testRuleGenerateValidation(t *testing.T, tt struct {
 		t.Errorf("Expected no error for %s, got %v", tt.name, err)
 	}
 }
+
+// TestWhenFieldParsing tests the When field parsing and smart defaults
+func TestWhenFieldParsing(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name         string
+		yamlContent  string
+		expectedWhen []string
+	}{
+		{
+			name: "when field omitted - should default to pre+input",
+			yamlContent: `rules:
+  - match: "^rm -rf"
+    send: "Use safer deletion"`,
+			expectedWhen: []string{"pre", "input"},
+		},
+		{
+			name: "when field with reasoning - should expand to post+reasoning",
+			yamlContent: `rules:
+  - match: "not related to my changes"
+    send: "AI claiming unrelated"
+    when: ["reasoning"]`,
+			expectedWhen: []string{"post", "reasoning"},
+		},
+		{
+			name: "when field with post - should expand to post+output",
+			yamlContent: `rules:
+  - match: "error|failed"
+    send: "Command failed"
+    when: ["post"]`,
+			expectedWhen: []string{"post", "output"},
+		},
+		{
+			name: "when field with exclusion - should exclude reasoning",
+			yamlContent: `rules:
+  - match: "error"
+    send: "Check output"
+    when: ["post", "!reasoning"]`,
+			expectedWhen: []string{"post", "output"},
+		},
+		{
+			name: "when field explicit - should use as-is",
+			yamlContent: `rules:
+  - match: "critical"
+    send: "Critical operation"
+    when: ["pre", "post", "reasoning", "input", "output"]`,
+			expectedWhen: []string{"pre", "post", "reasoning", "input", "output"},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			config, err := LoadFromYAML([]byte(tc.yamlContent))
+			if err != nil {
+				t.Fatalf("Failed to load config: %v", err)
+			}
+
+			if len(config.Rules) != 1 {
+				t.Fatalf("Expected 1 rule, got %d", len(config.Rules))
+			}
+
+			rule := config.Rules[0]
+			expandedWhen := rule.ExpandWhen()
+
+			if len(expandedWhen) != len(tc.expectedWhen) {
+				t.Fatalf("Expected When %v, got %v", tc.expectedWhen, expandedWhen)
+			}
+
+			// Convert to map for order-independent comparison
+			expected := make(map[string]bool)
+			for _, w := range tc.expectedWhen {
+				expected[w] = true
+			}
+
+			actual := make(map[string]bool)
+			for _, w := range expandedWhen {
+				actual[w] = true
+			}
+
+			for expectedFlag := range expected {
+				if !actual[expectedFlag] {
+					t.Errorf("Expected flag '%s' not found in expanded When: %v", expectedFlag, expandedWhen)
+				}
+			}
+
+			for actualFlag := range actual {
+				if !expected[actualFlag] {
+					t.Errorf("Unexpected flag '%s' found in expanded When: %v", actualFlag, expandedWhen)
+				}
+			}
+		})
+	}
+}
