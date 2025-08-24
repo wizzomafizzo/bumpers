@@ -14,6 +14,7 @@ import (
 	"github.com/wizzomafizzo/bumpers/internal/claude"
 	"github.com/wizzomafizzo/bumpers/internal/constants"
 	"github.com/wizzomafizzo/bumpers/internal/filesystem"
+	"github.com/wizzomafizzo/bumpers/internal/hooks"
 	"github.com/wizzomafizzo/bumpers/internal/logger"
 	"github.com/wizzomafizzo/bumpers/internal/storage"
 )
@@ -2535,5 +2536,175 @@ func TestProcessHookWithAllInvalidRules(t *testing.T) {
 	// Should allow command (empty response) since no valid rules match
 	if response != "" {
 		t.Errorf("Expected empty response when no valid rules exist, got: %s", response)
+	}
+}
+
+func TestReadToolMatching(t *testing.T) {
+	t.Parallel()
+	setupTest(t)
+
+	// Config with rule that should match Read tool accessing bumpers.yml
+	configContent := `rules:
+  - match: "bumpers.yml"
+    tool: "Read|Edit|Grep"
+    send: "Bumpers configuration file should not be accessed directly."
+    generate: "off"`
+
+	configPath := createTempConfig(t, configContent)
+	app := NewAppWithWorkDir(configPath, "")
+
+	// Hook input simulating Read tool with file_path (not command)
+	hookInput := `{
+		"tool_name": "Read",
+		"tool_input": {
+			"file_path": "/home/callan/dev/bumpers/bumpers.yml"
+		}
+	}`
+
+	response, err := app.ProcessHook(strings.NewReader(hookInput))
+	if err != nil {
+		t.Fatalf("ProcessHook failed: %v", err)
+	}
+
+	// Should now match because we check all string fields in tool_input
+	if response == "" {
+		t.Error("Expected Read tool to match bumpers.yml rule but got empty response")
+	}
+
+	// Verify the response content
+	if !strings.Contains(response, "Bumpers configuration file should not be accessed directly") {
+		t.Errorf("Expected specific message about bumpers.yml, got: %s", response)
+	}
+}
+
+func TestReadToolSecretsMatching(t *testing.T) {
+	t.Parallel()
+	setupTest(t)
+
+	configContent := `rules:
+  - match: "secrets"
+    tool: "Read"
+    send: "Tool usage blocked"
+    generate: "off"`
+
+	configPath := createTempConfig(t, configContent)
+	app := NewAppWithWorkDir(configPath, "")
+
+	hookInput := `{
+		"tool_name": "Read",
+		"tool_input": {
+			"file_path": "/home/user/secrets.txt"
+		}
+	}`
+
+	response, err := app.ProcessHook(strings.NewReader(hookInput))
+	if err != nil {
+		t.Fatalf("ProcessHook failed: %v", err)
+	}
+
+	if response == "" {
+		t.Error("Expected Read tool to match on file_path field but got empty response")
+	}
+}
+
+func TestGrepToolPasswordMatching(t *testing.T) {
+	t.Parallel()
+	setupTest(t)
+
+	configContent := `rules:
+  - match: "password"
+    tool: "Grep"
+    send: "Tool usage blocked"
+    generate: "off"`
+
+	configPath := createTempConfig(t, configContent)
+	app := NewAppWithWorkDir(configPath, "")
+
+	hookInput := `{
+		"tool_name": "Grep",
+		"tool_input": {
+			"pattern": "password",
+			"path": "/home/user"
+		}
+	}`
+
+	response, err := app.ProcessHook(strings.NewReader(hookInput))
+	if err != nil {
+		t.Fatalf("ProcessHook failed: %v", err)
+	}
+
+	if response == "" {
+		t.Error("Expected Grep tool to match on pattern field but got empty response")
+	}
+}
+
+func TestWriteToolNoMatching(t *testing.T) {
+	t.Parallel()
+	setupTest(t)
+
+	configContent := `rules:
+  - match: "secrets"
+    tool: "Write"
+    send: "Tool usage blocked"
+    generate: "off"`
+
+	configPath := createTempConfig(t, configContent)
+	app := NewAppWithWorkDir(configPath, "")
+
+	hookInput := `{
+		"tool_name": "Write",
+		"tool_input": {
+			"file_path": "/home/user/normal.txt",
+			"content": "normal content"
+		}
+	}`
+
+	response, err := app.ProcessHook(strings.NewReader(hookInput))
+	if err != nil {
+		t.Fatalf("ProcessHook failed: %v", err)
+	}
+
+	if response != "" {
+		t.Errorf("Expected Write tool not to match rule but got response: %s", response)
+	}
+}
+
+func TestFindMatchingRule(t *testing.T) {
+	t.Parallel()
+	setupTest(t)
+
+	configContent := `rules:
+  - match: "secrets"
+    tool: "Read"
+    send: "Blocked"
+    generate: "off"`
+
+	configPath := createTempConfig(t, configContent)
+	app := NewAppWithWorkDir(configPath, "")
+
+	_, ruleMatcher, err := app.loadConfigAndMatcher()
+	if err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
+
+	event := hooks.HookEvent{
+		ToolName: "Read",
+		ToolInput: map[string]any{
+			"file_path": "/home/user/secrets.txt",
+			"other":     123,
+		},
+	}
+
+	rule, value, err := app.findMatchingRule(ruleMatcher, event)
+	if err != nil {
+		t.Fatalf("findMatchingRule failed: %v", err)
+	}
+
+	if rule == nil {
+		t.Error("Expected rule match but got nil")
+	}
+
+	if value != "/home/user/secrets.txt" {
+		t.Errorf("Expected matched value '/home/user/secrets.txt', got %s", value)
 	}
 }

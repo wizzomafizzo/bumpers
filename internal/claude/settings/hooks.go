@@ -125,31 +125,31 @@ func (s *Settings) FindHook(event HookEvent, matcher string) (*HookMatcher, erro
 		return nil, errors.New("no hooks configured")
 	}
 
-	var hookMatchers []HookMatcher
+	var hookMatchers *[]HookMatcher
 	switch event {
 	case PreToolUseEvent:
-		hookMatchers = s.Hooks.PreToolUse
+		hookMatchers = &s.Hooks.PreToolUse
 	case PostToolUseEvent:
-		hookMatchers = s.Hooks.PostToolUse
+		hookMatchers = &s.Hooks.PostToolUse
 	case UserPromptSubmitEvent:
-		hookMatchers = s.Hooks.UserPromptSubmit
+		hookMatchers = &s.Hooks.UserPromptSubmit
 	case SessionStartEvent:
-		hookMatchers = s.Hooks.SessionStart
+		hookMatchers = &s.Hooks.SessionStart
 	case StopEvent:
-		hookMatchers = s.Hooks.Stop
+		hookMatchers = &s.Hooks.Stop
 	case SubagentStopEvent:
-		hookMatchers = s.Hooks.SubagentStop
+		hookMatchers = &s.Hooks.SubagentStop
 	case PreCompactEvent:
-		hookMatchers = s.Hooks.PreCompact
+		hookMatchers = &s.Hooks.PreCompact
 	case NotificationEvent:
-		hookMatchers = s.Hooks.Notification
+		hookMatchers = &s.Hooks.Notification
 	default:
 		return nil, fmt.Errorf("unsupported event: %s", event)
 	}
 
-	for i := range hookMatchers {
-		if hookMatchers[i].Matcher == matcher {
-			return &hookMatchers[i], nil
+	for i := range *hookMatchers {
+		if (*hookMatchers)[i].Matcher == matcher {
+			return &(*hookMatchers)[i], nil
 		}
 	}
 

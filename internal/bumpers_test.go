@@ -43,8 +43,12 @@ func TestEndToEndHookProcessing(t *testing.T) {
 		t.Fatalf("Failed to parse hook input: %v", err)
 	}
 
-	// Match rule
-	rule, err := ruleMatcher.Match(event.ToolInput.Command, "Bash")
+	// Match rule - get command from the map
+	command, ok := event.ToolInput["command"].(string)
+	if !ok {
+		t.Fatal("Expected command field in tool input")
+	}
+	rule, err := ruleMatcher.Match(command, "Bash")
 	if err != nil {
 		if errors.Is(err, matcher.ErrNoRuleMatch) {
 			t.Fatal("Expected rule match for go test command, but got no match")

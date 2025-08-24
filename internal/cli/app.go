@@ -116,14 +116,36 @@ func (a *App) loadConfigAndMatcher() (*config.Config, *matcher.RuleMatcher, erro
 	return &partialCfg.Config, ruleMatcher, nil
 }
 
+func (*App) findMatchingRule(ruleMatcher *matcher.RuleMatcher, event hooks.HookEvent) (*config.Rule, string, error) {
+	for key, value := range event.ToolInput {
+		strValue, ok := value.(string)
+		if !ok {
+			continue
+		}
+
+		rule, err := ruleMatcher.Match(strValue, event.ToolName)
+		if err != nil {
+			if errors.Is(err, matcher.ErrNoRuleMatch) {
+				continue // Try next field
+			}
+			return nil, "", fmt.Errorf("failed to match rule for %s '%s': %w", key, strValue, err)
+		}
+
+		if rule != nil {
+			return rule, strValue, nil
+		}
+	}
+
+	return nil, "", nil
+}
+
 func (a *App) ProcessHook(input io.Reader) (string, error) {
 	if os.Getenv("BUMPERS_SKIP") == "1" {
 		log.Debug().Msg("BUMPERS_SKIP is set, skipping hook processing")
 		return "", nil
 	}
 
-	// Log that we're processing a hook
-	log.Info().Msg("Processing hook input")
+	log.Debug().Msg("processing hook input")
 
 	// Detect hook type and get raw JSON
 	hookType, rawJSON, err := hooks.DetectHookType(input)
@@ -131,6 +153,7 @@ func (a *App) ProcessHook(input io.Reader) (string, error) {
 		log.Error().Err(err).Msg("Failed to detect hook type")
 		return "", fmt.Errorf("failed to detect hook type: %w", err)
 	}
+	log.Debug().RawJSON("hook", rawJSON).Msg("hook JSON")
 
 	log.Info().Int("hookType", int(hookType)).Msg("Detected hook type")
 
@@ -158,24 +181,21 @@ func (a *App) ProcessHook(input io.Reader) (string, error) {
 		return "", err
 	}
 
-	rule, err := ruleMatcher.Match(event.ToolInput.Command, event.ToolName)
+	// Try matching against all string fields in tool_input
+	matchedRule, matchedValue, err := a.findMatchingRule(ruleMatcher, event)
 	if err != nil {
-		if errors.Is(err, matcher.ErrNoRuleMatch) {
-			// No rule matched, command is allowed
-			return "", nil
-		}
-		return "", fmt.Errorf("failed to match rule for command '%s': %w", event.ToolInput.Command, err)
+		return "", err
 	}
 
-	if rule != nil {
+	if matchedRule != nil {
 		// Process template with rule context including shared variables
-		processedMessage, err := template.ExecuteRuleTemplate(rule.Send, event.ToolInput.Command)
+		processedMessage, err := template.ExecuteRuleTemplate(matchedRule.Send, matchedValue)
 		if err != nil {
 			return "", fmt.Errorf("failed to process rule template: %w", err)
 		}
 
 		// Apply AI generation if configured
-		finalMessage, err := a.processAIGeneration(rule, processedMessage, event.ToolInput.Command)
+		finalMessage, err := a.processAIGeneration(matchedRule, processedMessage, matchedValue)
 		if err != nil {
 			// Log error but don't fail the hook - fallback to original message
 			log.Error().Err(err).Msg("AI generation failed, using original message")

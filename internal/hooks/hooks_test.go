@@ -20,8 +20,8 @@ func TestParseInput(t *testing.T) {
 		t.Fatalf("Expected no error, got %v", err)
 	}
 
-	if event.ToolInput.Command != "go test ./..." {
-		t.Errorf("Expected command 'go test ./...', got %s", event.ToolInput.Command)
+	if command, ok := event.ToolInput["command"].(string); !ok || command != "go test ./..." {
+		t.Errorf("Expected command 'go test ./...', got %v", event.ToolInput["command"])
 	}
 }
 
@@ -121,8 +121,8 @@ func TestParseInputWithToolName(t *testing.T) {
 		t.Fatalf("Expected no error, got %v", err)
 	}
 
-	if event.ToolInput.Command != "go test ./..." {
-		t.Errorf("Expected command 'go test ./...', got %s", event.ToolInput.Command)
+	if command, ok := event.ToolInput["command"].(string); !ok || command != "go test ./..." {
+		t.Errorf("Expected command 'go test ./...', got %v", event.ToolInput["command"])
 	}
 
 	if event.ToolName != "Bash" {

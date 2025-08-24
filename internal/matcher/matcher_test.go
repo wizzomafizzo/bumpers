@@ -278,3 +278,61 @@ func TestRuleMatcherWithToolFiltering(t *testing.T) {
 		t.Error("Expected no match for Write with empty tools field")
 	}
 }
+
+func TestBumpersYmlToolMatching(t *testing.T) {
+	t.Parallel()
+
+	// This test specifically covers the bumpers.yml rule from the config
+	rule := config.Rule{
+		Match: "bumpers.yml",
+		Tool:  "Read|Edit|Grep", // Pipe-separated OR pattern
+		Send:  "Bumpers configuration file should not be accessed directly.",
+	}
+
+	matcher, err := NewRuleMatcher([]config.Rule{rule})
+	if err != nil {
+		t.Fatalf("Expected no error creating matcher, got %v", err)
+	}
+
+	// Test cases that should match
+	shouldMatch := []struct {
+		command  string
+		toolName string
+	}{
+		{"bumpers.yml", "Read"},
+		{"bumpers.yml", "Edit"},
+		{"bumpers.yml", "Grep"},
+		{"path/to/bumpers.yml", "Read"}, // substring match
+		{"cat bumpers.yml", "Read"},     // command containing file
+	}
+
+	for _, tc := range shouldMatch {
+		result, err := matcher.Match(tc.command, tc.toolName)
+		if err != nil {
+			t.Errorf("Expected match for command=%q tool=%q, got error: %v", tc.command, tc.toolName, err)
+		}
+		if result == nil {
+			t.Errorf("Expected rule match for command=%q tool=%q, got nil", tc.command, tc.toolName)
+		}
+	}
+
+	// Test cases that should NOT match
+	shouldNotMatch := []struct {
+		command  string
+		toolName string
+	}{
+		{"bumpers.yml", "Bash"},  // Wrong tool
+		{"bumpers.yml", "Write"}, // Wrong tool
+		{"other.yml", "Read"},    // Wrong command
+	}
+
+	for _, tc := range shouldNotMatch {
+		result, err := matcher.Match(tc.command, tc.toolName)
+		if err == nil {
+			t.Errorf("Expected no match for command=%q tool=%q, but got rule: %v", tc.command, tc.toolName, result)
+		}
+		if !errors.Is(err, ErrNoRuleMatch) {
+			t.Errorf("Expected ErrNoRuleMatch for command=%q tool=%q, got: %v", tc.command, tc.toolName, err)
+		}
+	}
+}
