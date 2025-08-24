@@ -11,8 +11,8 @@ func TestRuleMatcher(t *testing.T) {
 	t.Parallel()
 
 	rule := config.Rule{
-		Pattern: "^go test",
-		Message: "Use just test instead",
+		Match: "^go test",
+		Send:  "Use just test instead",
 	}
 
 	matcher, err := NewRuleMatcher([]config.Rule{rule})
@@ -29,8 +29,8 @@ func TestRuleMatcher(t *testing.T) {
 		t.Fatal("Expected match, got nil")
 	}
 
-	if match.Pattern != "^go test" {
-		t.Errorf("Expected rule pattern '^go test', got %s", match.Pattern)
+	if match.Match != "^go test" {
+		t.Errorf("Expected rule pattern '^go test', got %s", match.Match)
 	}
 }
 
@@ -38,8 +38,8 @@ func TestRuleMatcherNoMatch(t *testing.T) {
 	t.Parallel()
 
 	rule := config.Rule{
-		Pattern: "^go test",
-		Message: "Use just test instead",
+		Match: "^go test",
+		Send:  "Use just test instead",
 	}
 
 	matcher, err := NewRuleMatcher([]config.Rule{rule})
@@ -110,8 +110,8 @@ func TestRegexPatternMatching(t *testing.T) {
 			t.Parallel()
 
 			rule := config.Rule{
-				Pattern: tc.pattern,
-				Message: "Test response",
+				Match: tc.pattern,
+				Send:  "Test response",
 			}
 
 			matcher, matcherErr := NewRuleMatcher([]config.Rule{rule})
@@ -156,8 +156,8 @@ func TestNewRuleMatcherInvalidRegex(t *testing.T) {
 	t.Parallel()
 
 	rule := config.Rule{
-		Pattern: "[invalid-regex",
-		Message: "Test response",
+		Match: "[invalid-regex",
+		Send:  "Test response",
 	}
 
 	_, err := NewRuleMatcher([]config.Rule{rule})
@@ -175,19 +175,19 @@ func TestRuleMatcherWithToolFiltering(t *testing.T) {
 
 	rules := []config.Rule{
 		{
-			Pattern: "^rm -rf",
-			Tools:   "^(Bash|Task)$",
-			Message: "Dangerous command",
+			Match: "^rm -rf",
+			Tool:  "^(Bash|Task)$",
+			Send:  "Dangerous command",
 		},
 		{
-			Pattern: "password",
-			Tools:   "^(Write|Edit)$",
-			Message: "No secrets",
+			Match: "password",
+			Tool:  "^(Write|Edit)$",
+			Send:  "No secrets",
 		},
 		{
-			Pattern: "test",
-			Tools:   "", // Empty = defaults to Bash only
-			Message: "Bash test command",
+			Match: "test",
+			Tool:  "", // Empty = defaults to Bash only
+			Send:  "Bash test command",
 		},
 	}
 

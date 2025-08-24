@@ -15,8 +15,8 @@ func TestLoadViperJSON(t *testing.T) {
 	jsonContent := `{
   "rules": [
     {
-      "pattern": "go test.*",
-      "message": "Use just test instead"
+      "match": "go test.*",
+      "send": "Use just test instead"
     }
   ]
 }`

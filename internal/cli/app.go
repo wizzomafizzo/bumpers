@@ -151,7 +151,7 @@ func (a *App) ProcessHook(input io.Reader) (string, error) {
 
 	if rule != nil {
 		// Process template with rule context including shared variables
-		processedMessage, err := template.ExecuteRuleTemplate(rule.Message, event.ToolInput.Command)
+		processedMessage, err := template.ExecuteRuleTemplate(rule.Send, event.ToolInput.Command)
 		if err != nil {
 			return "", fmt.Errorf("failed to process rule template: %w", err)
 		}
@@ -189,7 +189,7 @@ func (a *App) TestCommand(command string) (string, error) {
 
 	if rule != nil {
 		// Process template with rule context including shared variables
-		processedMessage, err := template.ExecuteRuleTemplate(rule.Message, command)
+		processedMessage, err := template.ExecuteRuleTemplate(rule.Send, command)
 		if err != nil {
 			return "", fmt.Errorf("failed to process rule template: %w", err)
 		}
@@ -262,7 +262,7 @@ func (a *App) clearSessionCache() error {
 // processAIGeneration applies AI generation to a message if configured
 func (a *App) processAIGeneration(rule *config.Rule, message, _ string) (string, error) {
 	// Skip if no generation configured or mode is "off"
-	if rule.Generate == "" || rule.Generate == "off" {
+	if rule.Generate.Mode == "" || rule.Generate.Mode == "off" {
 		return message, nil
 	}
 
@@ -288,9 +288,9 @@ func (a *App) processAIGeneration(rule *config.Rule, message, _ string) (string,
 	// Create request
 	req := &ai.GenerateRequest{
 		OriginalMessage: message,
-		CustomPrompt:    rule.Prompt,
-		GenerateMode:    rule.Generate,
-		Pattern:         rule.Pattern,
+		CustomPrompt:    rule.Generate.Prompt,
+		GenerateMode:    rule.Generate.Mode,
+		Pattern:         rule.Match,
 	}
 
 	// Generate message

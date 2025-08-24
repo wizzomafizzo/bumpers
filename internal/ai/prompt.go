@@ -18,5 +18,6 @@ When you respond, only include the rephrased message by itself, no additional
 context about your own work to rephrase the message or things like "here's 
 the message:" or similar.
 
-Original message: ` + message
+ORIGINAL MESSAGE:
+` + message
 }

@@ -320,13 +320,13 @@ func TestCacheClearByCurrentMode(t *testing.T) {
 
 	entries := map[string]*CacheEntry{
 		"entry1": {
-			GeneratedMessage: "Message 1",
+			GeneratedMessage: "Add 1",
 			OriginalMessage:  "Original 1",
 			Timestamp:        now,
 			ExpiresAt:        &sessionExpiry, // Session-like expiry
 		},
 		"entry2": {
-			GeneratedMessage: "Message 2",
+			GeneratedMessage: "Add 2",
 			OriginalMessage:  "Original 2",
 			Timestamp:        now,
 			ExpiresAt:        nil, // No expiry (once-like)

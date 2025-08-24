@@ -12,24 +12,28 @@ import (
 type Config struct {
 	Rules    []Rule    `yaml:"rules,omitempty" mapstructure:"rules"`
 	Commands []Command `yaml:"commands,omitempty" mapstructure:"commands"`
-	Notes    []Note    `yaml:"notes,omitempty" mapstructure:"notes"`
+	Session  []Session `yaml:"session,omitempty" mapstructure:"session"`
+}
+
+type Generate struct {
+	Mode   string `yaml:"mode" mapstructure:"mode"`
+	Prompt string `yaml:"prompt" mapstructure:"prompt"`
 }
 
 type Rule struct {
-	Pattern  string `yaml:"pattern" mapstructure:"pattern"`
-	Tools    string `yaml:"tools,omitempty" mapstructure:"tools"`
-	Message  string `yaml:"message" mapstructure:"message"`
-	Prompt   string `yaml:"prompt,omitempty" mapstructure:"prompt"`
-	Generate string `yaml:"generate,omitempty" mapstructure:"generate"`
+	Match    string   `yaml:"match" mapstructure:"match"`
+	Tool     string   `yaml:"tool,omitempty" mapstructure:"tool"`
+	Send     string   `yaml:"send" mapstructure:"send"`
+	Generate Generate `yaml:"generate,omitempty" mapstructure:"generate"`
 }
 
 type Command struct {
-	Name    string `yaml:"name" mapstructure:"name"`
-	Message string `yaml:"message" mapstructure:"message"`
+	Name string `yaml:"name" mapstructure:"name"`
+	Send string `yaml:"send" mapstructure:"send"`
 }
 
-type Note struct {
-	Message string `yaml:"message" mapstructure:"message"`
+type Session struct {
+	Add string `yaml:"add" mapstructure:"add"`
 }
 
 func Load(path string) (*Config, error) {
@@ -75,8 +79,8 @@ func LoadFromYAML(data []byte) (*Config, error) {
 
 // Validate performs comprehensive config validation
 func (c *Config) Validate() error {
-	if len(c.Rules) == 0 && len(c.Commands) == 0 && len(c.Notes) == 0 {
-		return errors.New("config must contain at least one rule, command, or note")
+	if len(c.Rules) == 0 && len(c.Commands) == 0 && len(c.Session) == 0 {
+		return errors.New("config must contain at least one rule, command, or session")
 	}
 
 	for i, rule := range c.Rules {
@@ -90,39 +94,39 @@ func (c *Config) Validate() error {
 
 // Validate performs rule-level validation
 func (r *Rule) Validate() error {
-	if r.Pattern == "" {
-		return errors.New("pattern field is required and cannot be empty")
+	if r.Match == "" {
+		return errors.New("match field is required and cannot be empty")
 	}
 
 	// Validate regex pattern
-	if _, err := regexp.Compile(r.Pattern); err != nil {
-		return fmt.Errorf("invalid regex pattern '%s': %w", r.Pattern, err)
+	if _, err := regexp.Compile(r.Match); err != nil {
+		return fmt.Errorf("invalid regex pattern '%s': %w", r.Match, err)
 	}
 
 	// Validate tools regex pattern if provided
-	if r.Tools != "" {
-		if _, err := regexp.Compile(r.Tools); err != nil {
-			return fmt.Errorf("invalid tools regex pattern '%s': %w", r.Tools, err)
+	if r.Tool != "" {
+		if _, err := regexp.Compile(r.Tool); err != nil {
+			return fmt.Errorf("invalid tools regex pattern '%s': %w", r.Tool, err)
 		}
 	}
 
 	// Ensure at least one response mechanism is available
-	if r.Message == "" && r.Generate == "" {
+	if r.Send == "" && r.Generate.Mode == "" {
 		return errors.New("rule must provide either a message or generate configuration")
 	}
 
 	// Validate generate mode if provided
-	if r.Generate != "" {
+	if r.Generate.Mode != "" {
 		validModes := []string{"off", "once", "session", "always"}
 		isValid := false
 		for _, mode := range validModes {
-			if r.Generate == mode {
+			if r.Generate.Mode == mode {
 				isValid = true
 				break
 			}
 		}
 		if !isValid {
-			return fmt.Errorf("invalid generate mode '%s': must be one of: off, once, session, always", r.Generate)
+			return fmt.Errorf("invalid generate mode '%s': must be one of: off, once, session, always", r.Generate.Mode)
 		}
 	}
 

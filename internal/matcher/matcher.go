@@ -15,7 +15,7 @@ var (
 func NewRuleMatcher(rules []config.Rule) (*RuleMatcher, error) {
 	// Validate all patterns can be compiled as regex
 	for _, rule := range rules {
-		if err := validatePattern(rule.Pattern); err != nil {
+		if err := validatePattern(rule.Match); err != nil {
 			return nil, err
 		}
 	}
@@ -39,7 +39,7 @@ type RuleMatcher struct {
 func (m *RuleMatcher) Match(command, toolName string) (*config.Rule, error) {
 	for i := range m.rules {
 		// Filter rules by tool first
-		toolPattern := m.rules[i].Tools
+		toolPattern := m.rules[i].Tool
 		if toolPattern == "" {
 			toolPattern = "^Bash$" // Default to Bash only when empty
 		}
@@ -56,7 +56,7 @@ func (m *RuleMatcher) Match(command, toolName string) (*config.Rule, error) {
 		}
 
 		// Now check if command matches
-		cmdRe, err := regexp.Compile(m.rules[i].Pattern)
+		cmdRe, err := regexp.Compile(m.rules[i].Match)
 		if err != nil {
 			continue
 		}

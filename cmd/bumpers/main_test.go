@@ -124,8 +124,8 @@ func TestConfigFlagWorks(t *testing.T) { //nolint:paralleltest // changes workin
 	// Create a custom config file
 	customConfigPath := "custom-config.yaml"
 	err = os.WriteFile(customConfigPath, []byte(`rules:
-  - pattern: "echo test"
-    message: "Custom config loaded"
+  - match: "echo test"
+    send: "Custom config loaded"
 `), 0o600)
 	if err != nil {
 		t.Fatal(err)

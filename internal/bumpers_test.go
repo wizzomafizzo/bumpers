@@ -15,8 +15,8 @@ func TestEndToEndHookProcessing(t *testing.T) {
 
 	// Create config in memory
 	configContent := `rules:
-  - pattern: "go test"
-    message: "Use just test instead for better TDD integration"`
+  - match: "go test"
+    send: "Use just test instead for better TDD integration"`
 
 	cfg, err := config.LoadFromYAML([]byte(configContent))
 	if err != nil {
@@ -57,12 +57,12 @@ func TestEndToEndHookProcessing(t *testing.T) {
 	}
 
 	// Generate response
-	resp := rule.Message
+	resp := rule.Send
 	if resp == "" {
 		t.Fatal("Expected non-empty message")
 	}
 
 	if !strings.Contains(resp, "just test") {
-		t.Error("Message should suggest just test alternative")
+		t.Error("Add should suggest just test alternative")
 	}
 }

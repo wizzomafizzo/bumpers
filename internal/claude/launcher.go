@@ -89,7 +89,9 @@ func (l *Launcher) ExecuteWithInput(input string) ([]byte, error) {
 		"--print",
 		"--output-format", "json",
 		"--model", "sonnet",
-		"--max-turns", "3",
+		"--max-turns", "5",
+		"--allowedTools", "Read|Grep|Glob",
+		// "--append-system-prompt", "",
 		input,
 	}
 
@@ -110,35 +112,23 @@ func (l *Launcher) ExecuteWithInput(input string) ([]byte, error) {
 	return output, nil
 }
 
-// ServerToolUse represents server tool usage statistics
-type ServerToolUse struct {
-	WebSearchRequests int `json:"web_search_requests"` //nolint:tagliatelle // matches Claude API format
-}
-
 // Usage represents token usage and service information
 type Usage struct {
-	ServiceTier              string        `json:"service_tier"`
-	InputTokens              int           `json:"input_tokens"`
-	CacheCreationInputTokens int           `json:"cache_creation_input_tokens"`
-	CacheReadInputTokens     int           `json:"cache_read_input_tokens"`
-	OutputTokens             int           `json:"output_tokens"`
-	ServerToolUse            ServerToolUse `json:"server_tool_use"`
+	InputTokens  int `json:"input_tokens"`
+	OutputTokens int `json:"output_tokens"`
 }
 
 // CLIResponse represents the parsed JSON output from Claude Code execution
 type CLIResponse struct {
-	Type              string   `json:"type"`
-	Subtype           string   `json:"subtype"`
-	Result            string   `json:"result"`
-	SessionID         string   `json:"session_id"`
-	UUID              string   `json:"uuid"`
-	PermissionDenials []string `json:"permission_denials"`
-	Usage             Usage    `json:"usage"`
-	DurationMs        int      `json:"duration_ms"`
-	DurationAPIMs     int      `json:"duration_api_ms"`
-	NumTurns          int      `json:"num_turns"`
-	TotalCostUsd      float64  `json:"total_cost_usd"`
-	IsError           bool     `json:"is_error"`
+	Type       string `json:"type"`
+	Subtype    string `json:"subtype"`
+	Result     string `json:"result"`
+	SessionID  string `json:"session_id"`
+	UUID       string `json:"uuid"`
+	Usage      Usage  `json:"usage"`
+	DurationMs int    `json:"duration_ms"`
+	NumTurns   int    `json:"num_turns"`
+	IsError    bool   `json:"is_error"`
 }
 
 // GenerateMessage uses Claude to generate an AI response for the given prompt

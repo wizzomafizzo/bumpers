@@ -11,42 +11,42 @@ func DefaultConfig() *Config {
 	return &Config{
 		Rules: []Rule{
 			{
-				Pattern: "^go test",
-				Message: `Use "just test" instead for TDD integration:
+				Match: "^go test",
+				Send: `Use "just test" instead for TDD integration:
 - just test                        # Run all tests
 - just test PKG=./internal/claude  # Test only a specific package
 See justfile for more information.`,
 			},
 			{
-				Pattern: "^(gci|go vet|goimports|gofumpt|go fmt)",
-				Message: `Use "just lint fix" instead to resolve lint/formatting issues.`,
+				Match: "^(gci|go vet|goimports|gofumpt|go fmt)",
+				Send:  `Use "just lint fix" instead to resolve lint/formatting issues.`,
 			},
 			{
-				Pattern: "^cd /tmp",
-				Message: `Create a "tmp" directory in the project root instead.`,
+				Match: "^cd /tmp",
+				Send:  `Create a "tmp" directory in the project root instead.`,
 			},
 		},
 		Commands: []Command{
 			{
-				Message: "Available commands:\\n!help - Show this help\\n!status - Show project status\\n" +
+				Send: "Available commands:\\n!help - Show this help\\n!status - Show project status\\n" +
 					"!docs - Open documentation",
 			},
 			{
-				Message: "Project Status: All systems operational",
+				Send: "Project Status: All systems operational",
 			},
 			{
-				Message: "📚 Documentation: Visit https://github.com/wizzomafizzo/bumpers for usage guides and examples",
+				Send: "📚 Documentation: Visit https://github.com/wizzomafizzo/bumpers for usage guides and examples",
 			},
 		},
-		Notes: []Note{
+		Session: []Session{
 			{
-				Message: "Use 'just test' instead of 'go test' for proper TDD integration",
+				Add: "Use 'just test' instead of 'go test' for proper TDD integration",
 			},
 			{
-				Message: "Check CLAUDE.md for project conventions and guidelines",
+				Add: "Check CLAUDE.md for project conventions and guidelines",
 			},
 			{
-				Message: "Run 'just lint fix' to resolve formatting and linting issues",
+				Add: "Run 'just lint fix' to resolve formatting and linting issues",
 			},
 		},
 	}

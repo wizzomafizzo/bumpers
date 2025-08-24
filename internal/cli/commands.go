@@ -66,7 +66,7 @@ func (a *App) ProcessUserPrompt(rawJSON json.RawMessage) (string, error) {
 
 	for _, cmd := range cfg.Commands {
 		if cmd.Name == commandStr {
-			commandMessage = cmd.Message
+			commandMessage = cmd.Send
 			foundCommand = true
 			log.Info().Str("commandName", commandStr).Str("message", commandMessage).Msg("Found valid command")
 			break

@@ -21,8 +21,8 @@ func testConfigLoading(t *testing.T, configFile, expectedPattern string) {
 	}
 
 	rule := config.Rules[0]
-	if rule.Pattern != expectedPattern {
-		t.Errorf("Expected rule pattern '%s', got %s", expectedPattern, rule.Pattern)
+	if rule.Match != expectedPattern {
+		t.Errorf("Expected rule pattern '%s', got %s", expectedPattern, rule.Match)
 	}
 }
 
@@ -33,8 +33,8 @@ func TestLoadConfig(t *testing.T) {
 	configFile := filepath.Join(tempDir, "test.yaml")
 
 	yamlContent := `rules:
-  - pattern: "go test.*"
-    message: "Use just test instead"
+  - match: "go test.*"
+    send: "Use just test instead"
 `
 
 	err := os.WriteFile(configFile, []byte(yamlContent), 0o600)
@@ -52,8 +52,8 @@ func TestLoadConfigWithAlternatives(t *testing.T) {
 	configFile := filepath.Join(tempDir, "test.yaml")
 
 	yamlContent := `rules:
-  - pattern: "go test.*"
-    message: "Use just test instead for better TDD integration"
+  - match: "go test.*"
+    send: "Use just test instead for better TDD integration"
 `
 
 	err := os.WriteFile(configFile, []byte(yamlContent), 0o600)
@@ -67,8 +67,8 @@ func TestLoadConfigWithAlternatives(t *testing.T) {
 	}
 
 	rule := config.Rules[0]
-	if rule.Message == "" {
-		t.Error("Expected Message to be set, got empty string")
+	if rule.Send == "" {
+		t.Error("Expected Add to be set, got empty string")
 	}
 }
 
@@ -76,15 +76,16 @@ func TestLoadConfigWithNewStructure(t *testing.T) {
 	t.Parallel()
 
 	yamlContent := `rules:
-  - pattern: "go test*"
-    message: |
+  - match: "go test*"
+    send: |
       Use just test instead for better TDD integration
       
       Try one of these alternatives:
       • just test          # Run all tests
       • just test-unit     # Run unit tests only
-    prompt: "Explain why direct go test is discouraged"
-    generate: "always"
+    generate:
+      mode: "always"
+      prompt: "Explain why direct go test is discouraged"
 `
 
 	tempDir := t.TempDir()
@@ -101,16 +102,16 @@ func TestLoadConfigWithNewStructure(t *testing.T) {
 	}
 
 	rule := config.Rules[0]
-	if rule.Message == "" {
+	if rule.Send == "" {
 		t.Error("Expected message to be populated")
 	}
 
-	if rule.Generate != "always" {
-		t.Errorf("Expected Generate to be 'always', got %s", rule.Generate)
+	if rule.Generate.Mode != "always" {
+		t.Errorf("Expected Generate.Mode to be 'always', got %s", rule.Generate.Mode)
 	}
 
-	if rule.Prompt != "Explain why direct go test is discouraged" {
-		t.Errorf("Expected prompt to be set correctly, got %s", rule.Prompt)
+	if rule.Generate.Prompt != "Explain why direct go test is discouraged" {
+		t.Errorf("Expected Generate.Prompt to be set correctly, got %s", rule.Generate.Prompt)
 	}
 }
 
@@ -123,8 +124,8 @@ func TestSimplifiedSchemaHasNoActionConstants(t *testing.T) {
 	// that the simplified schema works without them
 
 	yamlContent := `rules:
-  - pattern: "test*"
-    message: "Test response"
+  - match: "test*"
+    send: "Test response"
 `
 	tempDir := t.TempDir()
 	configFile := filepath.Join(tempDir, "test.yaml")
@@ -141,11 +142,11 @@ func TestSimplifiedSchemaHasNoActionConstants(t *testing.T) {
 
 	// Verify that rules work without action constants
 	rule := config.Rules[0]
-	if rule.Pattern != "test*" {
-		t.Errorf("Expected pattern 'test*', got %s", rule.Pattern)
+	if rule.Match != "test*" {
+		t.Errorf("Expected pattern 'test*', got %s", rule.Match)
 	}
-	if rule.Message != "Test response" {
-		t.Errorf("Expected message 'Test response', got %s", rule.Message)
+	if rule.Send != "Test response" {
+		t.Errorf("Expected message 'Test response', got %s", rule.Send)
 	}
 
 	// This test implicitly shows that action constants are not needed
@@ -159,10 +160,11 @@ func TestLoadConfigFromFile(t *testing.T) {
 	tempDir := t.TempDir()
 	configPath := filepath.Join(tempDir, "test-config.yaml")
 	configContent := `rules:
-  - pattern: "go test.*"
-    message: "Use just test instead for better TDD integration"
-    prompt: "Explain why direct go test is discouraged"
-    generate: "session"`
+  - match: "go test.*"
+    send: "Use just test instead for better TDD integration"
+    generate:
+      mode: "session"
+      prompt: "Explain why direct go test is discouraged"`
 
 	err := os.WriteFile(configPath, []byte(configContent), 0o600)
 	if err != nil {
@@ -180,8 +182,8 @@ func TestLoadConfigFromFile(t *testing.T) {
 
 	// Check first rule
 	rule := config.Rules[0]
-	if rule.Pattern != "go test.*" {
-		t.Errorf("Expected first rule pattern 'go test.*', got %s", rule.Pattern)
+	if rule.Match != "go test.*" {
+		t.Errorf("Expected first rule pattern 'go test.*', got %s", rule.Match)
 	}
 }
 
@@ -189,17 +191,18 @@ func TestLoadConfigSimplifiedSchema(t *testing.T) {
 	t.Parallel()
 
 	yamlContent := `rules:
-  - pattern: "go test*"
-    message: |
+  - match: "go test*"
+    send: |
       Use just test instead for better TDD integration
       
       Try one of these alternatives:
       • just test          # Run all tests
       • just test-unit     # Run unit tests only
-  - pattern: "rm -rf /*"
-    message: "Dangerous rm command detected! Be more specific with your rm command."
-    generate: "always"
-    prompt: "Explain why this rm command is dangerous and suggest safer alternatives"
+  - match: "rm -rf /*"
+    send: "Dangerous rm command detected! Be more specific with your rm command."
+    generate:
+      mode: "always"
+      prompt: "Explain why this rm command is dangerous and suggest safer alternatives"
 `
 
 	tempDir := t.TempDir()
@@ -221,27 +224,27 @@ func TestLoadConfigSimplifiedSchema(t *testing.T) {
 
 	// Test first rule (go test)
 	rule1 := config.Rules[0]
-	if rule1.Pattern != "go test*" {
-		t.Errorf("Expected pattern 'go test*', got %s", rule1.Pattern)
+	if rule1.Match != "go test*" {
+		t.Errorf("Expected pattern 'go test*', got %s", rule1.Match)
 	}
-	if rule1.Message == "" {
+	if rule1.Send == "" {
 		t.Error("Expected message to be populated")
 	}
-	if rule1.Generate != "" {
-		t.Error("Expected Generate to be empty by default")
+	if rule1.Generate.Mode != "" {
+		t.Error("Expected Generate.Mode to be empty by default")
 	}
 	// In simplified schema, these fields don't exist at all
 
 	// Test second rule (dangerous rm)
 	rule2 := config.Rules[1]
-	if rule2.Pattern != "rm -rf /*" {
-		t.Errorf("Expected pattern 'rm -rf /*', got %s", rule2.Pattern)
+	if rule2.Match != "rm -rf /*" {
+		t.Errorf("Expected pattern 'rm -rf /*', got %s", rule2.Match)
 	}
-	if rule2.Generate != "always" {
-		t.Errorf("Expected Generate to be 'always', got %s", rule2.Generate)
+	if rule2.Generate.Mode != "always" {
+		t.Errorf("Expected Generate.Mode to be 'always', got %s", rule2.Generate.Mode)
 	}
-	if rule2.Prompt == "" {
-		t.Error("Expected prompt to be populated when Generate is set")
+	if rule2.Generate.Prompt == "" {
+		t.Error("Expected Generate.Prompt to be populated when Generate is set")
 	}
 	// In simplified schema, these fields don't exist at all
 }
@@ -260,23 +263,24 @@ func testValidConfigs(t *testing.T) {
 		{
 			name: "valid config",
 			yamlContent: `rules:
-  - pattern: "go test.*"
-    message: "Use just test instead"`,
+  - match: "go test.*"
+    send: "Use just test instead"`,
 			expectError: false,
 		},
 		{
 			name: "valid generate with prompt",
 			yamlContent: `rules:
-  - pattern: "test.*"
-    generate: "always"
-    prompt: "Test prompt"`,
+  - match: "test.*"
+    generate:
+      mode: "always"
+      prompt: "Test prompt"`,
 			expectError: false,
 		},
 		{
 			name: "rule with message only",
 			yamlContent: `rules:
-  - pattern: "test.*"
-    message: "Use just test instead"`,
+  - match: "test.*"
+    send: "Use just test instead"`,
 			expectError: false,
 		},
 	}
@@ -307,33 +311,33 @@ func testInvalidConfigs(t *testing.T) {
 		{
 			name: "empty pattern",
 			yamlContent: `rules:
-  - pattern: ""
-    response: "Empty pattern"`,
+  - match: ""
+    send: "Empty pattern"`,
 			expectError:   true,
-			errorContains: "pattern field is required",
+			errorContains: "match field is required",
 		},
 		{
 			name: "invalid regex pattern",
 			yamlContent: `rules:
-  - pattern: "[invalid"
-    response: "Invalid regex"`,
+  - match: "[invalid"
+    send: "Invalid regex"`,
 			expectError:   true,
 			errorContains: "invalid regex pattern",
 		},
 		{
 			name: "rule with no response mechanisms",
 			yamlContent: `rules:
-  - pattern: "test.*"`,
+  - match: "test.*"`,
 			expectError:   true,
 			errorContains: "must provide either a message or generate configuration",
 		},
 		{
 			name: "multiple rules with one invalid",
 			yamlContent: `rules:
-  - pattern: "valid.*"
-    message: "Valid rule"
-  - pattern: "[invalid"
-    message: "Invalid rule"`,
+  - match: "valid.*"
+    send: "Valid rule"
+  - match: "[invalid"
+    send: "Invalid rule"`,
 			expectError:   true,
 			errorContains: "rule 2 validation failed",
 		},
@@ -375,8 +379,8 @@ func TestConfigWithoutLogging(t *testing.T) {
 	t.Parallel()
 
 	yamlContent := `rules:
-  - pattern: "go test.*"
-    message: "Use just test instead"`
+  - match: "go test.*"
+    send: "Use just test instead"`
 
 	tempDir := t.TempDir()
 	configFile := filepath.Join(tempDir, "test.yaml")
@@ -404,8 +408,8 @@ func contains(s, substr string) bool {
 
 // checkRulePattern validates a specific rule pattern and message
 func checkRulePattern(t *testing.T, rule *Rule, patternName, expectedPattern, expectedMessage string) bool {
-	if strings.Contains(rule.Pattern, expectedPattern) {
-		if !strings.Contains(rule.Message, expectedMessage) {
+	if strings.Contains(rule.Match, expectedPattern) {
+		if !strings.Contains(rule.Send, expectedMessage) {
 			t.Errorf("Expected %s rule to mention %s", patternName, expectedMessage)
 		}
 		return true
@@ -442,10 +446,10 @@ func TestDefaultConfig(t *testing.T) {
 		if checkRulePattern(t, &rule, "lint", "gci|go vet", "just lint fix") {
 			foundLint = true
 		}
-		if strings.Contains(rule.Pattern, "cd /tmp") {
+		if strings.Contains(rule.Match, "cd /tmp") {
 			foundTmp = true
-			if !strings.Contains(rule.Message, "tmp") {
-				t.Errorf("Expected tmp rule to mention tmp, got: %s", rule.Message)
+			if !strings.Contains(rule.Send, "tmp") {
+				t.Errorf("Expected tmp rule to mention tmp, got: %s", rule.Send)
 			}
 		}
 	}
@@ -484,7 +488,7 @@ func TestDefaultConfigYAML(t *testing.T) {
 	yamlStr := string(yamlBytes)
 	expectedPatterns := []string{
 		"rules:",
-		"pattern: ^go test",
+		"match: ^go test",
 		"just test",
 		"gci|go vet",
 		"just lint fix",
@@ -504,11 +508,13 @@ func TestConfigWithCommands(t *testing.T) {
 	t.Parallel()
 
 	yamlContent := `rules:
-  - pattern: "go test.*"
-    message: "Use just test instead"
+  - match: "go test.*"
+    send: "Use just test instead"
 commands:
-  - message: "Available commands:\\n!help - Show this help\\n!status - Show project status"
-  - message: "Project Status: All systems operational"`
+  - name: "help"
+    send: "Available commands:\\n!help - Show this help\\n!status - Show project status"
+  - name: "status"
+    send: "Project Status: All systems operational"`
 
 	config, err := LoadFromYAML([]byte(yamlContent))
 	if err != nil {
@@ -531,8 +537,8 @@ commands:
 	}
 
 	for i, cmd := range config.Commands {
-		if cmd.Message != expectedMessages[i] {
-			t.Errorf("Expected command %d message %q, got %q", i, expectedMessages[i], cmd.Message)
+		if cmd.Send != expectedMessages[i] {
+			t.Errorf("Expected command %d message %q, got %q", i, expectedMessages[i], cmd.Send)
 		}
 	}
 }
@@ -542,7 +548,8 @@ func TestConfigValidationWithCommands(t *testing.T) {
 	t.Parallel()
 
 	yamlContent := `commands:
-  - message: "Help command response"`
+  - name: "help"
+    send: "Help command response"`
 
 	config, err := LoadFromYAML([]byte(yamlContent))
 	if err != nil {
@@ -562,19 +569,19 @@ func TestConfigWithNotes(t *testing.T) {
 	t.Parallel()
 
 	yamlContent := `rules:
-  - pattern: "go test"
-    message: "Use just test instead"
-notes:
-  - message: "Remember to run tests first"
-  - message: "Check CLAUDE.md for project conventions"`
+  - match: "go test"
+    send: "Use just test instead"
+session:
+  - add: "Remember to run tests first"
+  - add: "Check CLAUDE.md for project conventions"`
 
 	config, err := LoadFromYAML([]byte(yamlContent))
 	if err != nil {
 		t.Fatalf("Expected no error loading config with notes, got %v", err)
 	}
 
-	if len(config.Notes) != 2 {
-		t.Fatalf("Expected 2 notes, got %d", len(config.Notes))
+	if len(config.Session) != 2 {
+		t.Fatalf("Expected 2 notes, got %d", len(config.Session))
 	}
 
 	expectedMessages := []string{
@@ -582,9 +589,9 @@ notes:
 		"Check CLAUDE.md for project conventions",
 	}
 
-	for i, note := range config.Notes {
-		if note.Message != expectedMessages[i] {
-			t.Errorf("Expected note %d message %q, got %q", i, expectedMessages[i], note.Message)
+	for i, note := range config.Session {
+		if note.Add != expectedMessages[i] {
+			t.Errorf("Expected note %d message %q, got %q", i, expectedMessages[i], note.Add)
 		}
 	}
 }
@@ -592,16 +599,16 @@ notes:
 func TestConfigValidationWithNotesOnly(t *testing.T) {
 	t.Parallel()
 
-	yamlContent := `notes:
-  - message: "Just a note"`
+	yamlContent := `session:
+  - add: "Just a note"`
 
 	config, err := LoadFromYAML([]byte(yamlContent))
 	if err != nil {
 		t.Fatalf("Expected no error loading config with notes only, got %v", err)
 	}
 
-	if len(config.Notes) != 1 {
-		t.Fatalf("Expected 1 note, got %d", len(config.Notes))
+	if len(config.Session) != 1 {
+		t.Fatalf("Expected 1 note, got %d", len(config.Session))
 	}
 
 	if len(config.Rules) != 0 {
@@ -614,14 +621,14 @@ func TestDefaultConfigIncludesNotes(t *testing.T) {
 
 	config := DefaultConfig()
 
-	if len(config.Notes) == 0 {
+	if len(config.Session) == 0 {
 		t.Error("Expected default config to include example notes")
 	}
 
 	// Check that notes contain helpful messages
 	hasUsefulNote := false
-	for _, note := range config.Notes {
-		if note.Message != "" {
+	for _, note := range config.Session {
+		if note.Add != "" {
 			hasUsefulNote = true
 			break
 		}
@@ -637,14 +644,14 @@ func TestRuleWithToolsField(t *testing.T) {
 
 	yamlData := `
 rules:
-  - pattern: "^rm -rf"
-    tools: "^(Bash|Task)$"
-    message: "Dangerous command"
-  - pattern: "password"
-    tools: "^(Write|Edit)$"
-    message: "No hardcoded secrets"
-  - pattern: "test"
-    message: "Bash only rule (no tools field)"
+  - match: "^rm -rf"
+    tool: "^(Bash|Task)$"
+    send: "Dangerous command"
+  - match: "password"
+    tool: "^(Write|Edit)$"
+    send: "No hardcoded secrets"
+  - match: "test"
+    send: "Bash only rule (no tool field)"
 `
 
 	config, err := LoadFromYAML([]byte(yamlData))
@@ -657,21 +664,21 @@ rules:
 	}
 
 	// First rule with tools field
-	if config.Rules[0].Pattern != "^rm -rf" {
-		t.Errorf("Expected pattern '^rm -rf', got '%s'", config.Rules[0].Pattern)
+	if config.Rules[0].Match != "^rm -rf" {
+		t.Errorf("Expected pattern '^rm -rf', got '%s'", config.Rules[0].Match)
 	}
-	if config.Rules[0].Tools != "^(Bash|Task)$" {
-		t.Errorf("Expected tools '^(Bash|Task)$', got '%s'", config.Rules[0].Tools)
+	if config.Rules[0].Tool != "^(Bash|Task)$" {
+		t.Errorf("Expected tools '^(Bash|Task)$', got '%s'", config.Rules[0].Tool)
 	}
 
 	// Second rule with tools field
-	if config.Rules[1].Tools != "^(Write|Edit)$" {
-		t.Errorf("Expected tools '^(Write|Edit)$', got '%s'", config.Rules[1].Tools)
+	if config.Rules[1].Tool != "^(Write|Edit)$" {
+		t.Errorf("Expected tools '^(Write|Edit)$', got '%s'", config.Rules[1].Tool)
 	}
 
 	// Third rule without tools field (should be empty string)
-	if config.Rules[2].Tools != "" {
-		t.Errorf("Expected empty tools field, got '%s'", config.Rules[2].Tools)
+	if config.Rules[2].Tool != "" {
+		t.Errorf("Expected empty tools field, got '%s'", config.Rules[2].Tool)
 	}
 }
 
@@ -680,9 +687,9 @@ func TestRuleValidationWithInvalidToolsRegex(t *testing.T) {
 
 	yamlData := `
 rules:
-  - pattern: "test"
-    tools: "[invalid regex"
-    message: "Test message"
+  - match: "test"
+    tool: "[invalid regex"
+    send: "Test message"
 `
 
 	_, err := LoadFromYAML([]byte(yamlData))
@@ -709,9 +716,10 @@ func TestRuleValidationWithGenerateField(t *testing.T) {
 			name: "valid generate field - once",
 			yamlData: `
 rules:
-  - pattern: "test"
-    message: "Test message"
-    generate: "once"
+  - match: "test"
+    send: "Test message"
+    generate:
+      mode: "once"
 `,
 			expectError: false,
 		},
@@ -719,9 +727,10 @@ rules:
 			name: "valid generate field - session",
 			yamlData: `
 rules:
-  - pattern: "test"
-    message: "Test message"
-    generate: "session"
+  - match: "test"
+    send: "Test message"
+    generate:
+      mode: "session"
 `,
 			expectError: false,
 		},
@@ -729,9 +738,10 @@ rules:
 			name: "valid generate field - always",
 			yamlData: `
 rules:
-  - pattern: "test"
-    message: "Test message"
-    generate: "always"
+  - match: "test"
+    send: "Test message"
+    generate:
+      mode: "always"
 `,
 			expectError: false,
 		},
@@ -739,9 +749,10 @@ rules:
 			name: "valid generate field - off",
 			yamlData: `
 rules:
-  - pattern: "test"  
-    message: "Test message"
-    generate: "off"
+  - match: "test"  
+    send: "Test message"
+    generate:
+      mode: "off"
 `,
 			expectError: false,
 		},
@@ -749,9 +760,10 @@ rules:
 			name: "invalid generate field",
 			yamlData: `
 rules:
-  - pattern: "test"
-    message: "Test message"
-    generate: "invalid"
+  - match: "test"
+    send: "Test message"
+    generate:
+      mode: "invalid"
 `,
 			expectError: true,
 			errorText:   "invalid generate mode",

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -26,8 +27,8 @@ func TestCreateHookCommand(t *testing.T) {
 	}
 }
 
-func TestHookCommandProcessesInput(t *testing.T) { //nolint:paralleltest // changes working directory
-	// Test that hook command can process hook input
+func TestHookCommandBlocksWithProperToolName(t *testing.T) { //nolint:paralleltest // changes working directory
+	// Test that hook command blocks when tool_name is provided correctly
 	tempDir := t.TempDir()
 	originalDir, err := os.Getwd()
 	if err != nil {
@@ -42,8 +43,72 @@ func TestHookCommandProcessesInput(t *testing.T) { //nolint:paralleltest // chan
 
 	// Create config with deny rule
 	configContent := `rules:
-  - pattern: "go test"
-    response: "Test command blocked"`
+  - match: "^go test"
+    send: "Test command blocked"`
+
+	configPath := filepath.Join(tempDir, "bumpers.yml")
+	err = os.WriteFile(configPath, []byte(configContent), 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Create hook input WITH tool_name
+	hookInput := `{
+		"tool_input": {
+			"command": "go test ./...",
+			"description": "Run tests"
+		},
+		"tool_name": "Bash"
+	}`
+
+	// Test hook command execution
+	rootCmd := createNewRootCommand()
+	rootCmd.SetArgs([]string{"hook", "--config", configPath})
+
+	var stderr bytes.Buffer
+	rootCmd.SetErr(&stderr)
+	rootCmd.SetIn(strings.NewReader(hookInput))
+
+	err = rootCmd.Execute()
+	// Command should return HookExitError for blocked commands (exit code 2)
+	if err == nil {
+		t.Error("Expected command to be blocked with error, but got no error")
+		return
+	}
+
+	// Check if it's a HookExitError with the expected message and exit code
+	hookErr := &HookExitError{}
+	if !errors.As(err, &hookErr) {
+		t.Errorf("Expected HookExitError, got: %T", err)
+		return
+	}
+
+	if hookErr.Code != 2 {
+		t.Errorf("Expected exit code 2 for blocked command, got %d", hookErr.Code)
+	}
+	if !strings.Contains(hookErr.Message, "Test command blocked") {
+		t.Errorf("Expected error message to contain 'Test command blocked', got: %s", hookErr.Message)
+	}
+}
+
+func TestHookCommandAllowsInputWithMissingToolName(t *testing.T) { //nolint:paralleltest // changes working directory
+	// Test that hook command allows input when tool_name is missing (safe default)
+	tempDir := t.TempDir()
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Chdir(originalDir) }()
+
+	err = os.Chdir(tempDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Create config with deny rule
+	configContent := `rules:
+  - match: "^go test"
+    send: "Test command blocked"`
 
 	configPath := filepath.Join(tempDir, "bumpers.yml")
 	err = os.WriteFile(configPath, []byte(configContent), 0o600)
@@ -68,12 +133,8 @@ func TestHookCommandProcessesInput(t *testing.T) { //nolint:paralleltest // chan
 	rootCmd.SetIn(strings.NewReader(hookInput))
 
 	err = rootCmd.Execute()
-	// Command should not return error, but should exit with status code
-	if err == nil {
-		// If it doesn't error, check stderr for blocking message
-		stderrOutput := stderr.String()
-		if !strings.Contains(stderrOutput, "Test command blocked") {
-			t.Errorf("Expected stderr to contain denial message, got: %s", stderrOutput)
-		}
+	// Command should be allowed when tool_name is missing (safe default behavior)
+	if err != nil {
+		t.Errorf("Expected command to be allowed when tool_name is missing, but got error: %v", err)
 	}
 }
