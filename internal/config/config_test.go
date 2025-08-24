@@ -106,12 +106,13 @@ func TestLoadConfigWithNewStructure(t *testing.T) {
 		t.Error("Expected message to be populated")
 	}
 
-	if rule.Generate.Mode != "always" {
-		t.Errorf("Expected Generate.Mode to be 'always', got %s", rule.Generate.Mode)
+	generate := rule.GetGenerate()
+	if generate.Mode != "always" {
+		t.Errorf("Expected Generate.Mode to be 'always', got %s", generate.Mode)
 	}
 
-	if rule.Generate.Prompt != "Explain why direct go test is discouraged" {
-		t.Errorf("Expected Generate.Prompt to be set correctly, got %s", rule.Generate.Prompt)
+	if generate.Prompt != "Explain why direct go test is discouraged" {
+		t.Errorf("Expected Generate.Prompt to be set correctly, got %s", generate.Prompt)
 	}
 }
 
@@ -187,6 +188,47 @@ func TestLoadConfigFromFile(t *testing.T) {
 	}
 }
 
+func TestGenerateFieldAsString(t *testing.T) {
+	t.Parallel()
+
+	yamlContent := `rules:
+  - match: "go test"
+    send: "Use just test instead"
+    generate: "session"
+`
+
+	config, err := LoadFromYAML([]byte(yamlContent))
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	rule := config.Rules[0]
+	generate := rule.GetGenerate()
+	if generate.Mode != "session" {
+		t.Errorf("Expected Generate.Mode to be 'session', got %s", generate.Mode)
+	}
+}
+
+func TestGenerateFieldDefaultToSession(t *testing.T) {
+	t.Parallel()
+
+	yamlContent := `rules:
+  - match: "go test"
+    send: "Use just test instead"
+`
+
+	config, err := LoadFromYAML([]byte(yamlContent))
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	rule := config.Rules[0]
+	generate := rule.GetGenerate()
+	if generate.Mode != "session" {
+		t.Errorf("Expected Generate.Mode to default to 'session', got %s", generate.Mode)
+	}
+}
+
 func TestLoadConfigSimplifiedSchema(t *testing.T) {
 	t.Parallel()
 
@@ -230,8 +272,9 @@ func TestLoadConfigSimplifiedSchema(t *testing.T) {
 	if rule1.Send == "" {
 		t.Error("Expected message to be populated")
 	}
-	if rule1.Generate.Mode != "" {
-		t.Error("Expected Generate.Mode to be empty by default")
+	generate1 := rule1.GetGenerate()
+	if generate1.Mode != "session" {
+		t.Error("Expected Generate.Mode to default to 'session'")
 	}
 	// In simplified schema, these fields don't exist at all
 
@@ -240,10 +283,11 @@ func TestLoadConfigSimplifiedSchema(t *testing.T) {
 	if rule2.Match != "rm -rf /*" {
 		t.Errorf("Expected pattern 'rm -rf /*', got %s", rule2.Match)
 	}
-	if rule2.Generate.Mode != "always" {
-		t.Errorf("Expected Generate.Mode to be 'always', got %s", rule2.Generate.Mode)
+	generate2 := rule2.GetGenerate()
+	if generate2.Mode != "always" {
+		t.Errorf("Expected Generate.Mode to be 'always', got %s", generate2.Mode)
 	}
-	if rule2.Generate.Prompt == "" {
+	if generate2.Prompt == "" {
 		t.Error("Expected Generate.Prompt to be populated when Generate is set")
 	}
 	// In simplified schema, these fields don't exist at all
@@ -325,9 +369,10 @@ func testInvalidConfigs(t *testing.T) {
 			errorContains: "invalid regex pattern",
 		},
 		{
-			name: "rule with no response mechanisms",
+			name: "rule with generate off and no send",
 			yamlContent: `rules:
-  - match: "test.*"`,
+  - match: "test.*"
+    generate: "off"`,
 			expectError:   true,
 			errorContains: "must provide either a message or generate configuration",
 		},

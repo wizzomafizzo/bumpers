@@ -90,8 +90,8 @@ func (l *Launcher) ExecuteWithInput(input string) ([]byte, error) {
 		"--output-format", "json",
 		"--model", "sonnet",
 		"--max-turns", "5",
-		"--allowedTools", "Read|Grep|Glob",
-		// "--append-system-prompt", "",
+		"--allowedTools", "Read", "Grep", "Glob",
+		"--",
 		input,
 	}
 

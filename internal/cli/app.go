@@ -261,8 +261,9 @@ func (a *App) clearSessionCache() error {
 
 // processAIGeneration applies AI generation to a message if configured
 func (a *App) processAIGeneration(rule *config.Rule, message, _ string) (string, error) {
-	// Skip if no generation configured or mode is "off"
-	if rule.Generate.Mode == "" || rule.Generate.Mode == "off" {
+	generate := rule.GetGenerate()
+	// Skip if generation mode is "off"
+	if generate.Mode == "off" {
 		return message, nil
 	}
 
@@ -288,8 +289,8 @@ func (a *App) processAIGeneration(rule *config.Rule, message, _ string) (string,
 	// Create request
 	req := &ai.GenerateRequest{
 		OriginalMessage: message,
-		CustomPrompt:    rule.Generate.Prompt,
-		GenerateMode:    rule.Generate.Mode,
+		CustomPrompt:    generate.Prompt,
+		GenerateMode:    generate.Mode,
 		Pattern:         rule.Match,
 	}
 

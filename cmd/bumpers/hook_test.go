@@ -41,10 +41,11 @@ func TestHookCommandBlocksWithProperToolName(t *testing.T) { //nolint:parallelte
 		t.Fatal(err)
 	}
 
-	// Create config with deny rule
+	// Create config with deny rule and AI generation disabled
 	configContent := `rules:
   - match: "^go test"
-    send: "Test command blocked"`
+    send: "Test command blocked"
+    generate: "off"`
 
 	configPath := filepath.Join(tempDir, "bumpers.yml")
 	err = os.WriteFile(configPath, []byte(configContent), 0o600)
@@ -91,6 +92,67 @@ func TestHookCommandBlocksWithProperToolName(t *testing.T) { //nolint:parallelte
 	}
 }
 
+func TestHookCommandNoDuplicateOutput(t *testing.T) { //nolint:paralleltest // changes working directory
+	// Test that blocked commands don't output the message twice
+	tempDir := t.TempDir()
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Chdir(originalDir) }()
+
+	err = os.Chdir(tempDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Create config with deny rule and AI generation disabled
+	configContent := `rules:
+  - match: "^go test"
+    send: "Test command blocked"
+    generate: "off"`
+
+	configPath := filepath.Join(tempDir, "bumpers.yml")
+	err = os.WriteFile(configPath, []byte(configContent), 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Create hook input WITH tool_name
+	hookInput := `{
+		"tool_input": {
+			"command": "go test ./...",
+			"description": "Run tests"
+		},
+		"tool_name": "Bash"
+	}`
+
+	// Test hook command execution
+	rootCmd := createNewRootCommand()
+	rootCmd.SetArgs([]string{"hook", "--config", configPath})
+
+	var stderr bytes.Buffer
+	var stdout bytes.Buffer
+	rootCmd.SetErr(&stderr)
+	rootCmd.SetOut(&stdout)
+	rootCmd.SetIn(strings.NewReader(hookInput))
+
+	_ = rootCmd.Execute()
+
+	// Verify the message only appears once in stderr (not duplicated)
+	stderrContent := stderr.String()
+	messageCount := strings.Count(stderrContent, "Test command blocked")
+	if messageCount != 1 {
+		t.Errorf("Expected message to appear exactly once in stderr, found %d occurrences in: %s",
+			messageCount, stderrContent)
+	}
+
+	// Verify stdout is empty for blocked commands
+	if stdout.String() != "" {
+		t.Errorf("Expected empty stdout for blocked command, got: %s", stdout.String())
+	}
+}
+
 func TestHookCommandAllowsInputWithMissingToolName(t *testing.T) { //nolint:paralleltest // changes working directory
 	// Test that hook command allows input when tool_name is missing (safe default)
 	tempDir := t.TempDir()
@@ -105,10 +167,11 @@ func TestHookCommandAllowsInputWithMissingToolName(t *testing.T) { //nolint:para
 		t.Fatal(err)
 	}
 
-	// Create config with deny rule
+	// Create config with deny rule and AI generation disabled
 	configContent := `rules:
   - match: "^go test"
-    send: "Test command blocked"`
+    send: "Test command blocked"
+    generate: "off"`
 
 	configPath := filepath.Join(tempDir, "bumpers.yml")
 	err = os.WriteFile(configPath, []byte(configContent), 0o600)

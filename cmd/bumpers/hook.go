@@ -60,12 +60,10 @@ func createHookCommand() *cobra.Command {
 
 			exitCode, message := processHookCommand(app, cmd.InOrStdin(), cmd.ErrOrStderr())
 
-			if message != "" {
-				// Check if this is a hookSpecificOutput response that should go to stdout
+			if message != "" && exitCode == 0 {
+				// Only output non-blocking messages (hookSpecificOutput)
 				if strings.Contains(message, "hookEventName") {
 					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s\n", message)
-				} else {
-					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "%s\n", message)
 				}
 			}
 

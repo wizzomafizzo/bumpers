@@ -21,10 +21,10 @@ type Generate struct {
 }
 
 type Rule struct {
-	Match    string   `yaml:"match" mapstructure:"match"`
-	Tool     string   `yaml:"tool,omitempty" mapstructure:"tool"`
-	Send     string   `yaml:"send" mapstructure:"send"`
-	Generate Generate `yaml:"generate,omitempty" mapstructure:"generate"`
+	Generate any    `yaml:"generate,omitempty" mapstructure:"generate"`
+	Match    string `yaml:"match" mapstructure:"match"`
+	Tool     string `yaml:"tool,omitempty" mapstructure:"tool"`
+	Send     string `yaml:"send" mapstructure:"send"`
 }
 
 type Command struct {
@@ -111,24 +111,54 @@ func (r *Rule) Validate() error {
 	}
 
 	// Ensure at least one response mechanism is available
-	if r.Send == "" && r.Generate.Mode == "" {
+	// Since generate now defaults to "session", we only fail if send is empty AND generate is explicitly set to "off"
+	generate := r.GetGenerate()
+	if r.Send == "" && generate.Mode == "off" {
 		return errors.New("rule must provide either a message or generate configuration")
 	}
 
 	// Validate generate mode if provided
-	if r.Generate.Mode != "" {
+	if generate.Mode != "" {
 		validModes := []string{"off", "once", "session", "always"}
 		isValid := false
 		for _, mode := range validModes {
-			if r.Generate.Mode == mode {
+			if generate.Mode == mode {
 				isValid = true
 				break
 			}
 		}
 		if !isValid {
-			return fmt.Errorf("invalid generate mode '%s': must be one of: off, once, session, always", r.Generate.Mode)
+			return fmt.Errorf("invalid generate mode '%s': must be one of: off, once, session, always", generate.Mode)
 		}
 	}
 
 	return nil
+}
+
+// GetGenerate converts the interface{} Generate field to a Generate struct
+func (r *Rule) GetGenerate() Generate {
+	if r.Generate == nil {
+		return Generate{Mode: "session"}
+	}
+
+	switch generateValue := r.Generate.(type) {
+	case string:
+		return Generate{Mode: generateValue}
+	case map[string]any:
+		gen := Generate{}
+		if mode, ok := generateValue["mode"].(string); ok {
+			gen.Mode = mode
+		}
+		if prompt, ok := generateValue["prompt"].(string); ok {
+			gen.Prompt = prompt
+		}
+		if gen.Mode == "" {
+			gen.Mode = "session"
+		}
+		return gen
+	case Generate:
+		return generateValue
+	default:
+		return Generate{Mode: "session"}
+	}
 }

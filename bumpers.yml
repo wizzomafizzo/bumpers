@@ -1,5 +1,8 @@
 session:
   - add: "Today's date is: {{.Today}}"
+  - add: |
+      All new and existing tests for Claude Code CLI must use the mock CLI
+      script not the actual CLI binary.
 
 commands:
   - name: test
@@ -14,21 +17,17 @@ commands:
     send: "Read log file in ~/.local/share/bumpers/bumpers.log"
 
 rules:
+  - match: " /tmp"
+    send: Use a "tmp" directory in the project root instead.
   - match: "go test "
-    send: >
+    send: |
       Use "just test" instead for TDD integration:
       - just test                                # Run all tests
       - just test ./internal/claude              # Test only a specific package
       - just test "" TestExample1                # Run all tests with a specific test case
       - just test ./internal/claude TestExample1 # Test only a specific package with a specific test case
-    generate:
-      mode: session
   - match: "gci|go vet|goimports|gofumpt|go *fmt|golangci-lint"
     send: Use "just lint fix" instead to resolve lint/formatting issues.
-    generate:
-      mode: session
-  - match: " /tmp"
-    send: Use a "tmp" directory in the project root instead.
   - match: "git commit --no-verify|LEFTHOOK=0"
     send: Pre-commit hooks must not be skipped.
   - match: "fieldalignment"
@@ -37,8 +36,6 @@ rules:
     send: Don't use dangerous exec in find commands.
   - match: "BUMPERS_SKIP=1"
     send: Bumpers should not be skipped.
-    generate:
-      mode: session
   - match: "bumpers.yml"
     tool: "Read|Edit|Grep"
     send: Bumpers configuration file should not be accessed directly.
