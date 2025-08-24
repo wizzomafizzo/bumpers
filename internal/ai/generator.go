@@ -33,6 +33,19 @@ func NewGenerator(dbPath, projectID string) (*Generator, error) {
 	}, nil
 }
 
+// NewGeneratorWithLauncher creates a new AI message generator with custom launcher (for testing)
+func NewGeneratorWithLauncher(dbPath, projectID string, launcher MessageGenerator) (*Generator, error) {
+	cache, err := NewCacheWithProject(dbPath, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create cache: %w", err)
+	}
+
+	return &Generator{
+		cache:    cache,
+		launcher: launcher,
+	}, nil
+}
+
 // Close closes the generator
 func (g *Generator) Close() error {
 	return g.cache.Close()

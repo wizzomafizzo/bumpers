@@ -61,6 +61,59 @@ func TestRuleMatcherNoMatch(t *testing.T) {
 	}
 }
 
+func TestRuleMatcherWithPartialConfig(t *testing.T) {
+	t.Parallel()
+
+	yamlContent := `rules:
+  - match: "go test.*"
+    send: "Use just test instead"
+  - match: "[invalid regex"
+    send: "This rule has invalid regex"
+  - match: "rm -rf"
+    send: "Dangerous command - use safer alternatives"
+`
+
+	// Load partial config which filters out invalid rules
+	partialConfig, err := config.LoadPartial([]byte(yamlContent))
+	if err != nil {
+		t.Fatalf("Failed to load partial config: %v", err)
+	}
+
+	// Create matcher with the valid rules from partial config
+	matcher, err := NewRuleMatcher(partialConfig.Rules)
+	if err != nil {
+		t.Fatalf("Expected NewRuleMatcher to work with valid rules from partial config, got %v", err)
+	}
+
+	// Test that matching works with filtered rules
+	match, err := matcher.Match("go test ./...", "Bash")
+	if err != nil {
+		t.Fatalf("Expected no error matching, got %v", err)
+	}
+
+	if match == nil {
+		t.Fatal("Expected match, got nil")
+	}
+
+	if match.Match != "go test.*" {
+		t.Errorf("Expected rule pattern 'go test.*', got %s", match.Match)
+	}
+
+	// Test the second valid rule
+	match, err = matcher.Match("rm -rf /tmp", "Bash")
+	if err != nil {
+		t.Fatalf("Expected no error matching rm, got %v", err)
+	}
+
+	if match == nil {
+		t.Fatal("Expected rm match, got nil")
+	}
+
+	if match.Match != "rm -rf" {
+		t.Errorf("Expected rule pattern 'rm -rf', got %s", match.Match)
+	}
+}
+
 func TestRegexPatternMatching(t *testing.T) {
 	t.Parallel()
 

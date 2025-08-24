@@ -15,6 +15,19 @@ type Config struct {
 	Session  []Session `yaml:"session,omitempty" mapstructure:"session"`
 }
 
+// PartialConfig represents a configuration where some rules may be invalid
+type PartialConfig struct {
+	Config
+	ValidationWarnings []ValidationWarning
+}
+
+// ValidationWarning represents a validation error for a specific rule
+type ValidationWarning struct {
+	Error     error
+	Rule      Rule
+	RuleIndex int
+}
+
 type Generate struct {
 	Mode   string `yaml:"mode" mapstructure:"mode"`
 	Prompt string `yaml:"prompt" mapstructure:"prompt"`
@@ -161,4 +174,54 @@ func (r *Rule) GetGenerate() Generate {
 	default:
 		return Generate{Mode: "session"}
 	}
+}
+
+// LoadPartial loads config from YAML bytes with partial parsing support
+func LoadPartial(data []byte) (*PartialConfig, error) {
+	viperInstance := viper.New()
+	viperInstance.SetConfigType("yaml")
+
+	if err := viperInstance.ReadConfig(strings.NewReader(string(data))); err != nil {
+		return nil, fmt.Errorf("failed to read config: %w", err)
+	}
+
+	var config Config
+	if err := viperInstance.Unmarshal(&config); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
+	}
+
+	// Use partial validation to collect errors instead of failing
+	validConfig, warnings := config.ValidatePartial()
+
+	return &PartialConfig{
+		Config:             validConfig,
+		ValidationWarnings: warnings,
+	}, nil
+}
+
+// ValidatePartial performs validation and returns valid config with warnings for invalid rules
+func (c *Config) ValidatePartial() (Config, []ValidationWarning) {
+	var validRules []Rule
+	var warnings []ValidationWarning
+
+	// Validate each rule separately
+	for i, rule := range c.Rules {
+		if err := rule.Validate(); err != nil {
+			warnings = append(warnings, ValidationWarning{
+				RuleIndex: i,
+				Rule:      rule,
+				Error:     err,
+			})
+		} else {
+			validRules = append(validRules, rule)
+		}
+	}
+
+	validConfig := Config{
+		Rules:    validRules,
+		Commands: c.Commands,
+		Session:  c.Session,
+	}
+
+	return validConfig, warnings
 }

@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/rs/zerolog/log"
 	"github.com/wizzomafizzo/bumpers/internal/ai"
@@ -77,25 +78,42 @@ func NewAppWithFileSystem(configPath, workDir string, fs filesystem.FileSystem) 
 }
 
 type App struct {
-	fileSystem  filesystem.FileSystem
-	configPath  string
-	workDir     string
-	projectRoot string
+	fileSystem   filesystem.FileSystem
+	mockLauncher ai.MessageGenerator
+	configPath   string
+	workDir      string
+	projectRoot  string
 }
 
 // loadConfigAndMatcher loads configuration and creates a rule matcher
 func (a *App) loadConfigAndMatcher() (*config.Config, *matcher.RuleMatcher, error) {
-	cfg, err := config.Load(a.configPath)
+	// Read config file content
+	data, err := os.ReadFile(a.configPath)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to read config from %s: %w", a.configPath, err)
+	}
+
+	// Use partial loading to handle invalid rules
+	partialCfg, err := config.LoadPartial(data)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to load config from %s: %w", a.configPath, err)
 	}
 
-	ruleMatcher, err := matcher.NewRuleMatcher(cfg.Rules)
+	// Log warnings for invalid rules
+	for _, warning := range partialCfg.ValidationWarnings {
+		log.Warn().
+			Int("ruleIndex", warning.RuleIndex).
+			Str("pattern", warning.Rule.Match).
+			Err(warning.Error).
+			Msg("Invalid rule skipped")
+	}
+
+	ruleMatcher, err := matcher.NewRuleMatcher(partialCfg.Rules)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create rule matcher: %w", err)
 	}
 
-	return cfg, ruleMatcher, nil
+	return &partialCfg.Config, ruleMatcher, nil
 }
 
 func (a *App) ProcessHook(input io.Reader) (string, error) {
@@ -202,19 +220,44 @@ func (a *App) TestCommand(command string) (string, error) {
 }
 
 func (a *App) ValidateConfig() (string, error) {
-	// Load config file
-	cfg, err := config.Load(a.configPath)
+	// Read config file content
+	data, err := os.ReadFile(a.configPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to read config from %s: %w", a.configPath, err)
+	}
+
+	// Use partial loading to get validation results
+	partialCfg, err := config.LoadPartial(data)
 	if err != nil {
 		return "", fmt.Errorf("failed to load config from %s: %w", a.configPath, err)
 	}
 
-	// Validate regex patterns by trying to create matcher
-	_, err = matcher.NewRuleMatcher(cfg.Rules)
-	if err != nil {
-		return "", fmt.Errorf("failed to validate config rules: %w", err)
+	// Build validation result message
+	validCount := len(partialCfg.Rules)
+	invalidCount := len(partialCfg.ValidationWarnings)
+
+	var result strings.Builder
+	if invalidCount == 0 {
+		_, _ = result.WriteString("Configuration is valid")
+	} else {
+		_, _ = result.WriteString(fmt.Sprintf(
+			"Configuration partially valid: %d valid rules, %d invalid rules\n\nInvalid rules:\n",
+			validCount, invalidCount))
+		for _, warning := range partialCfg.ValidationWarnings {
+			_, _ = result.WriteString(fmt.Sprintf("  Rule %d: %s (pattern: '%s')\n",
+				warning.RuleIndex+1, warning.Error.Error(), warning.Rule.Match))
+		}
 	}
 
-	return "Configuration is valid", nil
+	// Validate that valid rules can create matcher
+	if validCount > 0 {
+		_, err = matcher.NewRuleMatcher(partialCfg.Rules)
+		if err != nil {
+			return "", fmt.Errorf("failed to validate valid config rules: %w", err)
+		}
+	}
+
+	return result.String(), nil
 }
 
 // getFileSystem returns the filesystem to use - either injected or defaults to OS
@@ -223,6 +266,11 @@ func (a *App) getFileSystem() filesystem.FileSystem {
 		return a.fileSystem
 	}
 	return filesystem.NewOSFileSystem()
+}
+
+// SetMockLauncher sets the mock launcher for testing
+func (a *App) SetMockLauncher(launcher ai.MessageGenerator) {
+	a.mockLauncher = launcher
 }
 
 // clearSessionCache clears all session-based cached AI generation entries
@@ -274,8 +322,13 @@ func (a *App) processAIGeneration(rule *config.Rule, message, _ string) (string,
 		return message, fmt.Errorf("failed to get cache path: %w", err)
 	}
 
-	// Create AI generator
-	generator, err := ai.NewGenerator(cachePath, a.projectRoot)
+	// Create AI generator with mock launcher if available
+	var generator *ai.Generator
+	if a.mockLauncher != nil {
+		generator, err = ai.NewGeneratorWithLauncher(cachePath, a.projectRoot, a.mockLauncher)
+	} else {
+		generator, err = ai.NewGenerator(cachePath, a.projectRoot)
+	}
 	if err != nil {
 		return message, fmt.Errorf("failed to create AI generator: %w", err)
 	}

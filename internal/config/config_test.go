@@ -446,6 +446,52 @@ func TestConfigWithoutLogging(t *testing.T) {
 	}
 }
 
+// TestPartialConfigLoading tests that valid rules can be loaded even when some rules are invalid
+func TestPartialConfigLoading(t *testing.T) {
+	t.Parallel()
+
+	yamlContent := `rules:
+  - match: "go test.*"
+    send: "Use just test instead"
+  - match: "[invalid regex"
+    send: "This rule has invalid regex"
+  - match: "rm -rf"
+    send: "Dangerous command - use safer alternatives"
+  - match: ""
+    send: "Empty pattern rule"
+`
+
+	// This should eventually work with partial loading
+	partialConfig, err := LoadPartial([]byte(yamlContent))
+	if err != nil {
+		t.Fatalf("Expected LoadPartial to succeed even with invalid rules, got %v", err)
+	}
+
+	// Should have 2 valid rules (go test and rm -rf)
+	if len(partialConfig.Rules) != 2 {
+		t.Errorf("Expected 2 valid rules, got %d", len(partialConfig.Rules))
+	}
+
+	// Should have 2 warnings (invalid regex and empty pattern)
+	if len(partialConfig.ValidationWarnings) != 2 {
+		t.Errorf("Expected 2 validation warnings, got %d", len(partialConfig.ValidationWarnings))
+	}
+
+	// Verify the valid rules are the correct ones
+	expectedPatterns := []string{"go test.*", "rm -rf"}
+	for i, rule := range partialConfig.Rules {
+		if rule.Match != expectedPatterns[i] {
+			t.Errorf("Expected rule %d pattern '%s', got '%s'", i, expectedPatterns[i], rule.Match)
+		}
+	}
+
+	// Debug: print warnings
+	for i, warning := range partialConfig.ValidationWarnings {
+		t.Logf("Warning %d: Rule index %d, pattern '%s', error: %v",
+			i, warning.RuleIndex, warning.Rule.Match, warning.Error)
+	}
+}
+
 // Helper function for substring checking
 func contains(s, substr string) bool {
 	return strings.Contains(s, substr)

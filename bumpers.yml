@@ -1,8 +1,5 @@
 session:
   - add: "Today's date is: {{.Today}}"
-  - add: |
-      All new and existing tests for Claude Code CLI must use the mock CLI
-      script not the actual CLI binary.
 
 commands:
   - name: test
