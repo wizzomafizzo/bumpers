@@ -41,12 +41,14 @@ type Rule struct {
 }
 
 type Command struct {
-	Name string `yaml:"name" mapstructure:"name"`
-	Send string `yaml:"send" mapstructure:"send"`
+	Generate any    `yaml:"generate,omitempty" mapstructure:"generate"`
+	Name     string `yaml:"name" mapstructure:"name"`
+	Send     string `yaml:"send" mapstructure:"send"`
 }
 
 type Session struct {
-	Add string `yaml:"add" mapstructure:"add"`
+	Generate any    `yaml:"generate,omitempty" mapstructure:"generate"`
+	Add      string `yaml:"add" mapstructure:"add"`
 }
 
 func Load(path string) (*Config, error) {
@@ -150,30 +152,11 @@ func (r *Rule) Validate() error {
 
 // GetGenerate converts the interface{} Generate field to a Generate struct
 func (r *Rule) GetGenerate() Generate {
-	if r.Generate == nil {
-		return Generate{Mode: "session"}
-	}
-
-	switch generateValue := r.Generate.(type) {
-	case string:
-		return Generate{Mode: generateValue}
-	case map[string]any:
-		gen := Generate{}
-		if mode, ok := generateValue["mode"].(string); ok {
-			gen.Mode = mode
-		}
-		if prompt, ok := generateValue["prompt"].(string); ok {
-			gen.Prompt = prompt
-		}
-		if gen.Mode == "" {
-			gen.Mode = "session"
-		}
-		return gen
-	case Generate:
+	// Handle the special case of Generate struct
+	if generateValue, ok := r.Generate.(Generate); ok {
 		return generateValue
-	default:
-		return Generate{Mode: "session"}
 	}
+	return parseGenerateField(r.Generate, "session")
 }
 
 // LoadPartial loads config from YAML bytes with partial parsing support
@@ -224,4 +207,41 @@ func (c *Config) ValidatePartial() (Config, []ValidationWarning) {
 	}
 
 	return validConfig, warnings
+}
+
+// parseGenerateField converts an interface{} Generate field to a Generate struct with given default
+func parseGenerateField(generateField any, defaultMode string) Generate {
+	if generateField == nil {
+		return Generate{Mode: defaultMode}
+	}
+
+	if modeStr, ok := generateField.(string); ok {
+		return Generate{Mode: modeStr}
+	}
+
+	if generateMap, ok := generateField.(map[string]any); ok {
+		gen := Generate{}
+		if mode, ok := generateMap["mode"].(string); ok {
+			gen.Mode = mode
+		}
+		if prompt, ok := generateMap["prompt"].(string); ok {
+			gen.Prompt = prompt
+		}
+		if gen.Mode == "" {
+			gen.Mode = defaultMode
+		}
+		return gen
+	}
+
+	return Generate{Mode: defaultMode}
+}
+
+// GetGenerate converts the interface{} Generate field to a Generate struct for Command
+func (c *Command) GetGenerate() Generate {
+	return parseGenerateField(c.Generate, "off")
+}
+
+// GetGenerate converts the interface{} Generate field to a Generate struct for Session
+func (s *Session) GetGenerate() Generate {
+	return parseGenerateField(s.Generate, "off")
 }

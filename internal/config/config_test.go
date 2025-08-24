@@ -656,6 +656,137 @@ func TestConfigValidationWithCommands(t *testing.T) {
 	}
 }
 
+// Test Command Generate field defaults to session
+func TestCommandGenerateFieldDefaultToOff(t *testing.T) {
+	t.Parallel()
+
+	yamlContent := `commands:
+  - name: "help"
+    send: "Help message"`
+
+	config, err := LoadFromYAML([]byte(yamlContent))
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	command := config.Commands[0]
+	generate := command.GetGenerate()
+	if generate.Mode != "off" {
+		t.Errorf("Expected Command Generate.Mode to be 'off', got %s", generate.Mode)
+	}
+}
+
+// Test Command Generate shortform
+func TestCommandGenerateShortform(t *testing.T) {
+	t.Parallel()
+
+	yamlContent := `commands:
+  - name: "help"
+    send: "Help message"
+    generate: "once"`
+
+	config, err := LoadFromYAML([]byte(yamlContent))
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	command := config.Commands[0]
+	generate := command.GetGenerate()
+	if generate.Mode != "once" {
+		t.Errorf("Expected Command Generate.Mode to be 'once', got %s", generate.Mode)
+	}
+}
+
+// Test Command Generate full form
+func TestCommandGenerateFullForm(t *testing.T) {
+	t.Parallel()
+
+	yamlContent := `commands:
+  - name: "help"
+    send: "Help message"
+    generate:
+      mode: "always"
+      prompt: "Custom prompt"`
+
+	config, err := LoadFromYAML([]byte(yamlContent))
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	command := config.Commands[0]
+	generate := command.GetGenerate()
+	if generate.Mode != "always" {
+		t.Errorf("Expected Command Generate.Mode to be 'always', got %s", generate.Mode)
+	}
+	if generate.Prompt != "Custom prompt" {
+		t.Errorf("Expected Command Generate.Prompt to be 'Custom prompt', got %s", generate.Prompt)
+	}
+}
+
+// Test Session Generate field defaults to session
+func TestSessionGenerateFieldDefaultToOff(t *testing.T) {
+	t.Parallel()
+
+	yamlContent := `session:
+  - add: "Session note"`
+
+	config, err := LoadFromYAML([]byte(yamlContent))
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	session := config.Session[0]
+	generate := session.GetGenerate()
+	if generate.Mode != "off" {
+		t.Errorf("Expected Session Generate.Mode to be 'off', got %s", generate.Mode)
+	}
+}
+
+// Test Session Generate shortform
+func TestSessionGenerateShortform(t *testing.T) {
+	t.Parallel()
+
+	yamlContent := `session:
+  - add: "Session note"
+    generate: "once"`
+
+	config, err := LoadFromYAML([]byte(yamlContent))
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	session := config.Session[0]
+	generate := session.GetGenerate()
+	if generate.Mode != "once" {
+		t.Errorf("Expected Session Generate.Mode to be 'once', got %s", generate.Mode)
+	}
+}
+
+// Test Session Generate full form
+func TestSessionGenerateFullForm(t *testing.T) {
+	t.Parallel()
+
+	yamlContent := `session:
+  - add: "Session note"
+    generate:
+      mode: "always"
+      prompt: "Custom prompt"`
+
+	config, err := LoadFromYAML([]byte(yamlContent))
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	session := config.Session[0]
+	generate := session.GetGenerate()
+	if generate.Mode != "always" {
+		t.Errorf("Expected Session Generate.Mode to be 'always', got %s", generate.Mode)
+	}
+	if generate.Prompt != "Custom prompt" {
+		t.Errorf("Expected Session Generate.Prompt to be 'Custom prompt', got %s", generate.Prompt)
+	}
+}
+
 func TestConfigWithNotes(t *testing.T) {
 	t.Parallel()
 

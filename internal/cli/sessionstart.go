@@ -54,7 +54,16 @@ func (a *App) ProcessSessionStart(rawJSON json.RawMessage) (string, error) {
 		if templateErr != nil {
 			return "", fmt.Errorf("failed to process note template: %w", templateErr)
 		}
-		messages = append(messages, processedMessage)
+
+		// Apply AI generation if configured
+		finalMessage, genErr := a.processAIGenerationGeneric(&note, processedMessage, "")
+		if genErr != nil {
+			// Log error but don't fail the hook - fallback to original message
+			log.Error().Err(genErr).Msg("AI generation failed, using original message")
+			finalMessage = processedMessage
+		}
+
+		messages = append(messages, finalMessage)
 	}
 
 	additionalContext := strings.Join(messages, "\n")
