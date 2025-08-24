@@ -4,11 +4,25 @@ import (
 	"bytes"
 	"os"
 	"strings"
+	"sync"
 	"testing"
+
+	"github.com/wizzomafizzo/bumpers/internal/logger"
 )
+
+var loggerInitOnce sync.Once
+
+// setupTest initializes test logger to prevent race conditions
+func setupTest(t *testing.T) {
+	t.Helper()
+	loggerInitOnce.Do(func() {
+		logger.InitTest()
+	})
+}
 
 func TestInstallCommandExistence(t *testing.T) {
 	t.Parallel()
+	setupTest(t)
 
 	// Test that createNewRootCommand creates a command with install subcommand
 	rootCmd := createNewRootCommand()
@@ -26,6 +40,7 @@ func TestInstallCommandExistence(t *testing.T) {
 
 func TestInstallCommandHasRunFunction(t *testing.T) {
 	t.Parallel()
+	setupTest(t)
 
 	// Test that the install command has a Run function wired up
 	rootCmd := createNewRootCommand()
@@ -40,6 +55,7 @@ func TestInstallCommandHasRunFunction(t *testing.T) {
 }
 
 func TestInstallCommandActuallyWorks(t *testing.T) { //nolint:paralleltest // uses global logger state
+	setupTest(t)
 	// Test that install command actually initializes
 	tempDir := t.TempDir()
 	originalDir, err := os.Getwd()
@@ -69,6 +85,7 @@ func TestInstallCommandActuallyWorks(t *testing.T) { //nolint:paralleltest // us
 
 func TestHookCommandExistence(t *testing.T) {
 	t.Parallel()
+	setupTest(t)
 
 	// Test that createNewRootCommand creates a command with hook subcommand
 	rootCmd := createNewRootCommand()
@@ -90,6 +107,7 @@ func TestHookCommandExistence(t *testing.T) {
 }
 
 func TestConfigFlagWorks(t *testing.T) { //nolint:paralleltest // changes working directory
+	setupTest(t)
 	// Test that config flag is properly passed to subcommands
 	tempDir := t.TempDir()
 	originalDir, err := os.Getwd()
@@ -130,6 +148,7 @@ func TestConfigFlagWorks(t *testing.T) { //nolint:paralleltest // changes workin
 
 func TestRootCommandShowsHelp(t *testing.T) {
 	t.Parallel()
+	setupTest(t)
 
 	// Test that root command shows help when run without arguments
 	rootCmd := createNewRootCommand()
@@ -150,6 +169,7 @@ func TestRootCommandShowsHelp(t *testing.T) {
 }
 
 func TestMainUsesProjectContextForLogger(t *testing.T) { //nolint:paralleltest // tests logger initialization
+	setupTest(t)
 	// Test that main.go uses InitWithProjectContext instead of Init
 	// This is a behavioral test - we can't easily mock the logger initialization,
 	// but we can verify that the function completes successfully with the new approach
@@ -176,6 +196,7 @@ func TestMainUsesProjectContextForLogger(t *testing.T) { //nolint:paralleltest /
 }
 
 func TestRunFunctionWrapsCommandExecutionErrors(t *testing.T) { //nolint:paralleltest // changes working directory
+	setupTest(t)
 	// Test that run() function properly wraps errors from command execution
 	tempDir := t.TempDir()
 	originalDir, err := os.Getwd()

@@ -1,13 +1,16 @@
+//nolint:tagliatelle // JSON tags must match Claude API format
 package claude
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/rs/zerolog/log"
 	"github.com/wizzomafizzo/bumpers/internal/config"
@@ -67,54 +70,94 @@ func (*Launcher) GetClaudePath() (string, error) {
 	}
 
 	// Claude not found anywhere
-	return "", &ClaudeNotFoundError{
+	return "", &NotFoundError{
 		AttemptedPaths: attemptedPaths,
 	}
 }
 
-// Execute runs Claude with the given arguments and returns the output
-func (l *Launcher) Execute(args ...string) ([]byte, error) {
+// ExecuteWithInput runs Claude with the given input and arguments using pipes like the working SDK
+func (l *Launcher) ExecuteWithInput(input string) ([]byte, error) {
 	claudePath, err := l.GetClaudePath()
 	if err != nil {
 		return nil, fmt.Errorf("failed to locate Claude binary: %w", err)
 	}
 
-	// #nosec G204 -- claudePath is validated before use
-	cmd := exec.CommandContext(context.Background(), claudePath, args...)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 
-	// Log the exact command being executed
-	log.Debug().
-		Str("claude_path", claudePath).
-		Strs("args", args).
-		Msg("Executing Claude command")
-
-	output, err := cmd.CombinedOutput() // Use CombinedOutput to capture stderr too
-	if err != nil {
-		// Log detailed error information
-		log.Error().
-			Str("claude_path", claudePath).
-			Strs("args", args).
-			Str("output", string(output)).
-			Err(err).
-			Msg("Claude command failed")
-		return nil, fmt.Errorf("failed to execute Claude: %w", err)
+	cmdArgs := []string{
+		"--print",
+		"--output-format", "json",
+		"--model", "sonnet",
+		"--max-turns", "3",
+		input,
 	}
 
+	cmd := exec.CommandContext(ctx, claudePath, cmdArgs...) //nolint:gosec // claudePath is validated via GetClaudePath
+	cmd.Env = append(os.Environ(), "BUMPERS_SKIP=1")
+
 	log.Debug().
 		Str("claude_path", claudePath).
-		Int("output_length", len(output)).
-		Msg("Claude command succeeded")
+		Strs("args", cmdArgs).
+		Int("input_length", len(input)).
+		Msg("executing Claude Code command")
+
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute Claude Code command: %w", err)
+	}
 
 	return output, nil
 }
 
+// ServerToolUse represents server tool usage statistics
+type ServerToolUse struct {
+	WebSearchRequests int `json:"web_search_requests"` //nolint:tagliatelle // matches Claude API format
+}
+
+// Usage represents token usage and service information
+type Usage struct {
+	ServiceTier              string        `json:"service_tier"`
+	InputTokens              int           `json:"input_tokens"`
+	CacheCreationInputTokens int           `json:"cache_creation_input_tokens"`
+	CacheReadInputTokens     int           `json:"cache_read_input_tokens"`
+	OutputTokens             int           `json:"output_tokens"`
+	ServerToolUse            ServerToolUse `json:"server_tool_use"`
+}
+
+// CLIResponse represents the parsed JSON output from Claude Code execution
+type CLIResponse struct {
+	Type              string   `json:"type"`
+	Subtype           string   `json:"subtype"`
+	Result            string   `json:"result"`
+	SessionID         string   `json:"session_id"`
+	UUID              string   `json:"uuid"`
+	PermissionDenials []string `json:"permission_denials"`
+	Usage             Usage    `json:"usage"`
+	DurationMs        int      `json:"duration_ms"`
+	DurationAPIMs     int      `json:"duration_api_ms"`
+	NumTurns          int      `json:"num_turns"`
+	TotalCostUsd      float64  `json:"total_cost_usd"`
+	IsError           bool     `json:"is_error"`
+}
+
 // GenerateMessage uses Claude to generate an AI response for the given prompt
 func (l *Launcher) GenerateMessage(prompt string) (string, error) {
-	output, err := l.Execute("-p", prompt)
+	output, err := l.ExecuteWithInput(prompt)
 	if err != nil {
 		return "", err
 	}
-	return strings.TrimSpace(string(output)), nil
+
+	var response CLIResponse
+	if err := json.Unmarshal(output, &response); err != nil {
+		return "", fmt.Errorf("failed to parse claude code response: %w", err)
+	}
+
+	if response.IsError {
+		return "", fmt.Errorf("claude code returned error response: %s", response.Result)
+	}
+
+	return response.Result, nil
 }
 
 // validateBinary checks if the given path is a valid, executable file
@@ -141,14 +184,14 @@ func validateBinary(path string) error {
 	return nil
 }
 
-// ClaudeNotFoundError provides detailed information when Claude cannot be located
-type ClaudeNotFoundError struct {
+// NotFoundError provides detailed information when Claude cannot be located
+type NotFoundError struct {
 	AttemptedPaths []string
 }
 
-func (e *ClaudeNotFoundError) Error() string {
+func (e *NotFoundError) Error() string {
 	var msg strings.Builder
-	_, _ = msg.WriteString("Claude binary not found. Attempted locations:\n")
+	_, _ = msg.WriteString("Claude Code binary not found. Attempted locations:\n")
 
 	for _, path := range e.AttemptedPaths {
 		_, _ = msg.WriteString(fmt.Sprintf("  - %s\n", path))
@@ -162,8 +205,9 @@ func (e *ClaudeNotFoundError) Error() string {
 	return msg.String()
 }
 
-// IsClaudeNotFoundError returns true if the error is a ClaudeNotFoundError
+// IsClaudeNotFoundError checks if the error is a Claude not found error
 func IsClaudeNotFoundError(err error) bool {
-	var cnfErr *ClaudeNotFoundError
-	return errors.As(err, &cnfErr)
+	notFoundError := &NotFoundError{}
+	ok := errors.As(err, &notFoundError)
+	return ok
 }

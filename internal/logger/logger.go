@@ -172,5 +172,7 @@ func InitWithProjectContext(projectCtx *context.ProjectContext) error {
 		Str("project_name", projectCtx.Name).
 		Logger()
 
+	zerolog.SetGlobalLevel(zerolog.DebugLevel)
+
 	return nil
 }

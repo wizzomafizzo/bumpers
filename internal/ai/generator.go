@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/rs/zerolog/log"
 	"github.com/wizzomafizzo/bumpers/internal/claude"
 )
 
@@ -51,6 +52,10 @@ func (g *Generator) GenerateMessage(req *GenerateRequest) (string, error) {
 	if req.GenerateMode != "always" {
 		if cached, err := g.cache.Get(cacheKey); err == nil && cached != nil {
 			if !cached.IsExpired() {
+				log.Debug().
+					Str("mode", req.GenerateMode).
+					Str("original", req.OriginalMessage).
+					Msg("AI generation from cache")
 				return cached.GeneratedMessage, nil
 			}
 		}
@@ -68,13 +73,17 @@ func (g *Generator) GenerateMessage(req *GenerateRequest) (string, error) {
 		return req.OriginalMessage, fmt.Errorf("claude generation failed: %w", err)
 	}
 
+	log.Debug().
+		Str("mode", req.GenerateMode).
+		Str("original", req.OriginalMessage).
+		Msg("AI generation from fresh Claude call")
+
 	// Cache the result if mode supports caching
 	if req.ShouldCache() {
 		cacheEntry := &CacheEntry{
 			GeneratedMessage: result,
 			OriginalMessage:  req.OriginalMessage,
 			Timestamp:        time.Now(),
-			GenerateMode:     req.GenerateMode,
 			ExpiresAt:        g.calculateExpiry(req.GenerateMode),
 		}
 

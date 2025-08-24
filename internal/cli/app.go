@@ -99,6 +99,11 @@ func (a *App) loadConfigAndMatcher() (*config.Config, *matcher.RuleMatcher, erro
 }
 
 func (a *App) ProcessHook(input io.Reader) (string, error) {
+	if os.Getenv("BUMPERS_SKIP") == "1" {
+		log.Debug().Msg("BUMPERS_SKIP is set, skipping hook processing")
+		return "", nil
+	}
+
 	// Log that we're processing a hook
 	log.Info().Msg("Processing hook input")
 
@@ -218,6 +223,40 @@ func (a *App) getFileSystem() filesystem.FileSystem {
 		return a.fileSystem
 	}
 	return filesystem.NewOSFileSystem()
+}
+
+// clearSessionCache clears all session-based cached AI generation entries
+func (a *App) clearSessionCache() error {
+	// Use XDG-compliant cache path
+	storageManager := storage.New(filesystem.NewOSFileSystem())
+	cachePath, err := storageManager.GetCachePath()
+	if err != nil {
+		return fmt.Errorf("failed to get cache path: %w", err)
+	}
+
+	// Create cache instance with project context
+	cache, err := ai.NewCacheWithProject(cachePath, a.projectRoot)
+	if err != nil {
+		return fmt.Errorf("failed to create cache: %w", err)
+	}
+	defer func() {
+		if closeErr := cache.Close(); closeErr != nil {
+			// Log error but don't fail the function - cache close is non-critical
+			_ = closeErr
+		}
+	}()
+
+	// Clear session cache entries
+	err = cache.ClearSessionCache()
+	if err != nil {
+		return fmt.Errorf("failed to clear session cache: %w", err)
+	}
+
+	log.Debug().
+		Str("project", a.projectRoot).
+		Msg("Session cache cleared on session start")
+
+	return nil
 }
 
 // processAIGeneration applies AI generation to a message if configured

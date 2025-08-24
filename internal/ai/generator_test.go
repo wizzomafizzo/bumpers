@@ -2,11 +2,26 @@ package ai
 
 import (
 	"path/filepath"
+	"sync"
 	"testing"
+
+	"github.com/wizzomafizzo/bumpers/internal/claude"
+	"github.com/wizzomafizzo/bumpers/internal/logger"
 )
+
+var loggerInitOnce sync.Once
+
+// setupTest initializes test logger to prevent race conditions
+func setupTest(t *testing.T) {
+	t.Helper()
+	loggerInitOnce.Do(func() {
+		logger.InitTest()
+	})
+}
 
 func TestGeneratorGenerateMessage(t *testing.T) {
 	t.Parallel()
+	setupTest(t)
 	// Create temporary directory for test database
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "test.db")
@@ -20,6 +35,11 @@ func TestGeneratorGenerateMessage(t *testing.T) {
 			t.Logf("Failed to close generator: %v", closeErr)
 		}
 	}()
+
+	// Replace launcher with mock to avoid slow Claude CLI discovery
+	mock := claude.NewMockLauncher()
+	mock.SetResponseForPattern(".*", "AI enhanced test response")
+	generator.launcher = mock
 
 	req := &GenerateRequest{
 		OriginalMessage: "Use 'just test' instead of 'go test'",
@@ -28,24 +48,20 @@ func TestGeneratorGenerateMessage(t *testing.T) {
 	}
 
 	result, err := generator.GenerateMessage(req)
-	// We expect either a result or an error about Claude not being available
 	if err != nil {
-		t.Logf("GenerateMessage failed (expected in test environment): %v", err)
-		// Should still return original message as fallback
-		if result != req.OriginalMessage {
-			t.Errorf("Expected fallback to original message, got %q", result)
-		}
-		return
+		t.Fatalf("GenerateMessage failed: %v", err)
 	}
 
-	// If successful, result should be non-empty
-	if result == "" {
-		t.Error("GenerateMessage should return a non-empty result")
+	// Should return the mocked response
+	expectedResponse := "AI enhanced test response"
+	if result != expectedResponse {
+		t.Errorf("Expected mocked response %q, got %q", expectedResponse, result)
 	}
 }
 
 func TestGeneratorCaching(t *testing.T) {
 	t.Parallel()
+	setupTest(t)
 	// Create temporary directory for test database
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "test.db")
@@ -60,40 +76,43 @@ func TestGeneratorCaching(t *testing.T) {
 		}
 	}()
 
+	// Replace launcher with mock to avoid slow Claude CLI discovery
+	mock := claude.NewMockLauncher()
+	mock.SetResponseForPattern(".*", "AI cached test response")
+	generator.launcher = mock
+
 	req := &GenerateRequest{
 		OriginalMessage: "Use 'just test' instead of 'go test'",
 		GenerateMode:    "once",
 		Pattern:         "^go test",
 	}
 
-	// First call should potentially generate (or fallback)
+	// First call should generate the response
 	result1, err1 := generator.GenerateMessage(req)
 	if err1 != nil {
-		t.Logf("First GenerateMessage failed (expected in test environment): %v", err1)
-		// Should still return original message as fallback
-		if result1 != req.OriginalMessage {
-			t.Errorf("Expected fallback to original message, got %q", result1)
-		}
+		t.Fatalf("First GenerateMessage failed: %v", err1)
+	}
+
+	expectedResponse := "AI cached test response"
+	if result1 != expectedResponse {
+		t.Errorf("Expected mocked response %q, got %q", expectedResponse, result1)
 	}
 
 	// Second call with same request should use cache for "once" mode
 	result2, err2 := generator.GenerateMessage(req)
 	if err2 != nil {
-		t.Logf("Second GenerateMessage failed (expected in test environment): %v", err2)
-		// Should still return original message as fallback
-		if result2 != req.OriginalMessage {
-			t.Errorf("Expected fallback to original message, got %q", result2)
-		}
+		t.Fatalf("Second GenerateMessage failed: %v", err2)
 	}
 
-	// Results should be the same (cached)
+	// Both calls should return the same result due to caching
 	if result1 != result2 {
-		t.Errorf("Expected cached result to match: %q vs %q", result1, result2)
+		t.Errorf("Caching failed: first result %q != second result %q", result1, result2)
 	}
 }
 
 func TestGeneratorShouldUseCache(t *testing.T) {
 	t.Parallel()
+	setupTest(t)
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "test.db")
 
@@ -106,6 +125,11 @@ func TestGeneratorShouldUseCache(t *testing.T) {
 			t.Logf("Failed to close generator: %v", closeErr)
 		}
 	}()
+
+	// Replace launcher with mock to avoid slow Claude CLI discovery
+	mock := claude.NewMockLauncher()
+	mock.SetResponseForPattern(".*", "AI should use cache test response")
+	generator.launcher = mock
 
 	req := &GenerateRequest{
 		OriginalMessage: "Use 'just test' instead of 'go test'",
@@ -113,35 +137,27 @@ func TestGeneratorShouldUseCache(t *testing.T) {
 		Pattern:         "^go test",
 	}
 
-	// The result should NOT be the stub implementation
+	// Should return the mocked response, demonstrating actual integration
 	result1, err := generator.GenerateMessage(req)
 	if err != nil {
-		t.Logf("GenerateMessage failed (expected in test environment): %v", err)
-		// Should return original message as fallback
-		if result1 != req.OriginalMessage {
-			t.Errorf("Expected fallback to original message, got %q", result1)
-		}
-		return // Test passes - we handled Claude failure correctly
+		t.Fatalf("GenerateMessage failed: %v", err)
 	}
 
+	expectedResponse := "AI should use cache test response"
+	if result1 != expectedResponse {
+		t.Errorf("Expected mocked response %q, got %q", expectedResponse, result1)
+	}
+
+	// Verify it's not using a stub implementation
 	expectedStub := "[AI] " + req.OriginalMessage
 	if result1 == expectedStub {
-		t.Error("Generator is still using stub implementation, expected actual cache/claude integration")
+		t.Error("Generator is using stub implementation, expected actual cache/claude integration")
 	}
-}
-
-// mockLauncher implements a Claude launcher that returns different results each call
-type mockLauncher struct {
-	callCount int
-}
-
-func (m *mockLauncher) GenerateMessage(_ string) (string, error) {
-	m.callCount++
-	return "Mock AI response " + string(rune(m.callCount+'A'-1)), nil
 }
 
 func TestGeneratorCachingWithMock(t *testing.T) {
 	t.Parallel()
+	setupTest(t)
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "test.db")
 
@@ -155,8 +171,9 @@ func TestGeneratorCachingWithMock(t *testing.T) {
 		}
 	}()
 
-	// Replace launcher with mock that returns different results each call
-	mock := &mockLauncher{}
+	// Replace launcher with enhanced mock that returns different results each call
+	mock := claude.NewMockLauncher()
+	mock.SetResponseForPattern(".*", "Mock AI response A")
 	generator.launcher = mock
 
 	req := &GenerateRequest{
@@ -183,7 +200,54 @@ func TestGeneratorCachingWithMock(t *testing.T) {
 	}
 
 	// Mock should only have been called once if caching works
-	if mock.callCount != 1 {
-		t.Errorf("Expected mock to be called once due to caching, but was called %d times", mock.callCount)
+	if mock.GetCallCount() != 1 {
+		t.Errorf("Expected mock to be called once due to caching, but was called %d times", mock.GetCallCount())
+	}
+}
+
+func TestGeneratorLogsCache(t *testing.T) {
+	t.Parallel()
+	setupTest(t)
+
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "test.db")
+
+	generator, err := NewGenerator(dbPath, "test-project")
+	if err != nil {
+		t.Fatalf("Failed to create generator: %v", err)
+	}
+	defer func() {
+		if closeErr := generator.Close(); closeErr != nil {
+			t.Logf("Failed to close generator: %v", closeErr)
+		}
+	}()
+
+	// Replace launcher with enhanced mock
+	mock := claude.NewMockLauncher()
+	mock.SetResponseForPattern(".*", "Mock cache test response")
+	generator.launcher = mock
+
+	req := &GenerateRequest{
+		OriginalMessage: "Use 'just test' instead of 'go test'",
+		GenerateMode:    "once",
+		Pattern:         "^go test",
+	}
+
+	// First call should log cache miss and AI generation
+	_, err = generator.GenerateMessage(req)
+	if err != nil {
+		t.Fatalf("First GenerateMessage failed: %v", err)
+	}
+
+	// Second call should log cache hit
+	_, err = generator.GenerateMessage(req)
+	if err != nil {
+		t.Fatalf("Second GenerateMessage failed: %v", err)
+	}
+
+	// Verify caching behavior through mock call count
+	// Should only call the launcher once due to caching
+	if mock.GetCallCount() != 1 {
+		t.Errorf("Expected mock to be called once due to caching, but was called %d times", mock.GetCallCount())
 	}
 }

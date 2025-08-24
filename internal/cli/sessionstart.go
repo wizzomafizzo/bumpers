@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/rs/zerolog/log"
 	"github.com/wizzomafizzo/bumpers/internal/config"
 	"github.com/wizzomafizzo/bumpers/internal/constants"
 	"github.com/wizzomafizzo/bumpers/internal/template"
@@ -26,6 +27,12 @@ func (a *App) ProcessSessionStart(rawJSON json.RawMessage) (string, error) {
 	// Only process startup and clear sources
 	if event.Source != constants.SessionSourceStartup && event.Source != constants.SessionSourceClear {
 		return "", nil
+	}
+
+	// Clear session-based cache entries when a new session starts
+	if cacheErr := a.clearSessionCache(); cacheErr != nil {
+		// Log error but don't fail the hook - cache clearing is non-critical
+		log.Warn().Err(cacheErr).Msg("Failed to clear session cache")
 	}
 
 	// Load config to get notes

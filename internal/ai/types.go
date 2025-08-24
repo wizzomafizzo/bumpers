@@ -8,7 +8,6 @@ type CacheEntry struct {
 	ExpiresAt        *time.Time `json:"expiresAt,omitempty"`
 	GeneratedMessage string     `json:"generatedMessage"`
 	OriginalMessage  string     `json:"originalMessage"`
-	GenerateMode     string     `json:"generateMode"`
 }
 
 // GenerateRequest contains the parameters for AI message generation

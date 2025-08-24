@@ -27,7 +27,6 @@ func TestCacheBasicOperations(t *testing.T) {
 		GeneratedMessage: "Generated message",
 		OriginalMessage:  "Original message",
 		Timestamp:        time.Now(),
-		GenerateMode:     "once",
 		ExpiresAt:        nil,
 	}
 
@@ -70,7 +69,6 @@ func TestCachePersistenceBetweenSessions(t *testing.T) {
 		GeneratedMessage: "Persistent message",
 		OriginalMessage:  "Original message",
 		Timestamp:        time.Now(),
-		GenerateMode:     "once",
 		ExpiresAt:        nil,
 	}
 
@@ -135,7 +133,6 @@ func TestCacheWithProjectContext(t *testing.T) {
 		GeneratedMessage: "Project-specific message",
 		OriginalMessage:  "Original message",
 		Timestamp:        time.Now(),
-		GenerateMode:     "once",
 	}
 
 	err = cache.Put(key, entry)
@@ -155,5 +152,209 @@ func TestCacheWithProjectContext(t *testing.T) {
 
 	if retrieved.GeneratedMessage != entry.GeneratedMessage {
 		t.Errorf("GeneratedMessage mismatch: got %q, want %q", retrieved.GeneratedMessage, entry.GeneratedMessage)
+	}
+}
+
+func TestCacheClearSessionCache(t *testing.T) {
+	t.Parallel()
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "test.db")
+
+	cache, err := NewCacheWithProject(dbPath, "test-project")
+	if err != nil {
+		t.Fatalf("Failed to create cache: %v", err)
+	}
+	defer func() {
+		if closeErr := cache.Close(); closeErr != nil {
+			t.Logf("Failed to close cache: %v", closeErr)
+		}
+	}()
+
+	// Setup test data
+	setupClearSessionCacheTest(t, cache)
+
+	// Clear session cache
+	err = cache.ClearSessionCache()
+	if err != nil {
+		t.Fatalf("Failed to clear session cache: %v", err)
+	}
+
+	// Verify results
+	verifyClearSessionCacheResults(t, cache)
+}
+
+func setupClearSessionCacheTest(t *testing.T, cache *Cache) {
+	t.Helper()
+
+	now := time.Now()
+	sessionExpiry := now.Add(24 * time.Hour)
+
+	entries := map[string]*CacheEntry{
+		"session-key-1": {
+			GeneratedMessage: "Session message 1",
+			OriginalMessage:  "Original 1",
+			Timestamp:        now,
+			ExpiresAt:        &sessionExpiry,
+		},
+		"session-key-2": {
+			GeneratedMessage: "Session message 2",
+			OriginalMessage:  "Original 2",
+			Timestamp:        now,
+			ExpiresAt:        &sessionExpiry,
+		},
+		"once-key": {
+			GeneratedMessage: "Once message",
+			OriginalMessage:  "Original once",
+			Timestamp:        now,
+			ExpiresAt:        nil,
+		},
+	}
+
+	for key, entry := range entries {
+		err := cache.Put(key, entry)
+		if err != nil {
+			t.Fatalf("Failed to put %s: %v", key, err)
+		}
+	}
+
+	// Verify all entries exist
+	for key := range entries {
+		retrieved, err := cache.Get(key)
+		if err != nil || retrieved == nil {
+			t.Fatalf("%s should exist before clearing", key)
+		}
+	}
+}
+
+func verifyClearSessionCacheResults(t *testing.T, cache *Cache) {
+	t.Helper()
+
+	// Verify session entries are gone
+	sessionKeys := []string{"session-key-1", "session-key-2"}
+	for _, key := range sessionKeys {
+		retrieved, err := cache.Get(key)
+		if err != nil {
+			t.Fatalf("Unexpected error getting %s: %v", key, err)
+		}
+		if retrieved != nil {
+			t.Errorf("%s should be cleared", key)
+		}
+	}
+
+	// Verify once entry still exists
+	retrieved, err := cache.Get("once-key")
+	if err != nil {
+		t.Fatalf("Unexpected error getting once key: %v", err)
+	}
+	if retrieved == nil {
+		t.Error("Once entry should still exist after clearing session cache")
+	}
+}
+
+func TestCacheShouldNotStoreGenerateMode(t *testing.T) {
+	t.Parallel()
+	// This test demonstrates that cache entries should not store generate mode
+	// Cache invalidation should be based on live config, not stored mode
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "test.db")
+
+	cache, err := NewCacheWithProject(dbPath, "test-project")
+	if err != nil {
+		t.Fatalf("Failed to create cache: %v", err)
+	}
+	defer func() {
+		if closeErr := cache.Close(); closeErr != nil {
+			t.Logf("Failed to close cache: %v", closeErr)
+		}
+	}()
+
+	// Create an entry that was cached when mode was "once"
+	// GenerateMode should not be stored in cache - removed from struct
+	entry := &CacheEntry{
+		GeneratedMessage: "Test message",
+		OriginalMessage:  "Original message",
+		Timestamp:        time.Now(),
+	}
+
+	// Store the entry
+	key := "test-key"
+	err = cache.Put(key, entry)
+	if err != nil {
+		t.Fatalf("Failed to put entry: %v", err)
+	}
+
+	// Retrieve and verify GenerateMode is not stored
+	retrieved, err := cache.Get(key)
+	if err != nil {
+		t.Fatalf("Failed to get entry: %v", err)
+	}
+	if retrieved == nil {
+		t.Fatal("Retrieved entry is nil")
+	}
+
+	// Verify that cache entry was stored and retrieved successfully without GenerateMode
+	if retrieved.GeneratedMessage != entry.GeneratedMessage {
+		t.Errorf("GeneratedMessage mismatch: got %q, want %q", retrieved.GeneratedMessage, entry.GeneratedMessage)
+	}
+}
+
+func TestCacheClearByCurrentMode(t *testing.T) {
+	t.Parallel()
+	// Test that cache clearing uses current config mode, not stored mode
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "test.db")
+
+	cache, err := NewCacheWithProject(dbPath, "test-project")
+	if err != nil {
+		t.Fatalf("Failed to create cache: %v", err)
+	}
+	defer func() {
+		if closeErr := cache.Close(); closeErr != nil {
+			t.Logf("Failed to close cache: %v", closeErr)
+		}
+	}()
+
+	// Add some test entries (without GenerateMode since we removed it)
+	now := time.Now()
+	sessionExpiry := now.Add(24 * time.Hour)
+
+	entries := map[string]*CacheEntry{
+		"entry1": {
+			GeneratedMessage: "Message 1",
+			OriginalMessage:  "Original 1",
+			Timestamp:        now,
+			ExpiresAt:        &sessionExpiry, // Session-like expiry
+		},
+		"entry2": {
+			GeneratedMessage: "Message 2",
+			OriginalMessage:  "Original 2",
+			Timestamp:        now,
+			ExpiresAt:        nil, // No expiry (once-like)
+		},
+	}
+
+	// Store entries
+	for key, entry := range entries {
+		if putErr := cache.Put(key, entry); putErr != nil {
+			t.Fatalf("Failed to put %s: %v", key, putErr)
+		}
+	}
+
+	// Test clearing with current mode "session" - should clear session entries
+	// Currently using old method signature, but we want to pass currentMode parameter
+	err = cache.ClearSessionCache()
+	if err != nil {
+		t.Fatalf("Failed to clear cache with current mode: %v", err)
+	}
+
+	// Verify appropriate entries were cleared based on current mode
+	entry1, _ := cache.Get("entry1")
+	entry2, _ := cache.Get("entry2")
+
+	if entry1 != nil {
+		t.Error("Entry with session-like expiry should be cleared when current mode is session")
+	}
+	if entry2 == nil {
+		t.Error("Entry without expiry should remain when current mode is session")
 	}
 }

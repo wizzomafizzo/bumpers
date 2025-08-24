@@ -10,9 +10,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/wizzomafizzo/bumpers/internal/ai"
 	"github.com/wizzomafizzo/bumpers/internal/constants"
 	"github.com/wizzomafizzo/bumpers/internal/filesystem"
 	"github.com/wizzomafizzo/bumpers/internal/logger"
+	"github.com/wizzomafizzo/bumpers/internal/storage"
 )
 
 var loggerInitOnce sync.Once
@@ -1928,6 +1930,103 @@ func TestProcessSessionStartWithTodayVariable(t *testing.T) {
 	expectedMessage := "Today is " + expectedDate
 	if additionalContext != expectedMessage {
 		t.Errorf("Expected %q, got %q", expectedMessage, additionalContext)
+	}
+}
+
+func TestProcessSessionStartClearsSessionCache(t *testing.T) {
+	t.Parallel()
+	setupTest(t)
+
+	app, cachePath, tempDir := setupSessionCacheTest(t)
+	populateSessionCache(t, cachePath, tempDir)
+
+	sessionStartInput := `{
+		"session_id": "abc123",
+		"hook_event_name": "SessionStart",
+		"source": "startup"
+	}`
+
+	// Process session start should clear session cache
+	_, err := app.ProcessSessionStart(json.RawMessage(sessionStartInput))
+	if err != nil {
+		t.Fatalf("ProcessSessionStart failed: %v", err)
+	}
+
+	verifySessionCacheCleared(t, cachePath, tempDir)
+}
+
+func setupSessionCacheTest(t *testing.T) (app *App, cachePath, tempDir string) {
+	t.Helper()
+	tempDir = t.TempDir()
+
+	// Setup environment
+	originalHome := os.Getenv("HOME")
+	t.Cleanup(func() {
+		if originalHome != "" {
+			_ = os.Setenv("HOME", originalHome)
+		} else {
+			_ = os.Unsetenv("HOME")
+		}
+	})
+	_ = os.Setenv("HOME", tempDir)
+
+	configPath := createTempConfig(t, `notes:
+  - message: "Session started"`)
+	app = NewApp(configPath)
+	app.projectRoot = tempDir
+
+	// Get cache path
+	storageManager := storage.New(filesystem.NewOSFileSystem())
+	cachePath, err := storageManager.GetCachePath()
+	if err != nil {
+		t.Fatalf("Failed to get cache path: %v", err)
+	}
+
+	return
+}
+
+func populateSessionCache(t *testing.T, cachePath, tempDir string) {
+	t.Helper()
+	cache, err := ai.NewCacheWithProject(cachePath, tempDir)
+	if err != nil {
+		t.Fatalf("Failed to create cache: %v", err)
+	}
+	defer func() { _ = cache.Close() }()
+
+	expiry := time.Now().Add(24 * time.Hour)
+	sessionEntry := &ai.CacheEntry{
+		GeneratedMessage: "Generated session message",
+		OriginalMessage:  "Original message",
+		Timestamp:        time.Now(),
+		ExpiresAt:        &expiry,
+	}
+
+	err = cache.Put("test-session-key", sessionEntry)
+	if err != nil {
+		t.Fatalf("Failed to put session entry: %v", err)
+	}
+
+	// Verify entry exists
+	retrieved, err := cache.Get("test-session-key")
+	if err != nil || retrieved == nil {
+		t.Fatal("Session entry should exist before ProcessSessionStart")
+	}
+}
+
+func verifySessionCacheCleared(t *testing.T, cachePath, tempDir string) {
+	t.Helper()
+	cache, err := ai.NewCacheWithProject(cachePath, tempDir)
+	if err != nil {
+		t.Fatalf("Failed to reopen cache: %v", err)
+	}
+	defer func() { _ = cache.Close() }()
+
+	retrieved, err := cache.Get("test-session-key")
+	if err != nil {
+		t.Fatalf("Unexpected error getting session key after clearing: %v", err)
+	}
+	if retrieved != nil {
+		t.Error("Session entry should be cleared after ProcessSessionStart")
 	}
 }
 

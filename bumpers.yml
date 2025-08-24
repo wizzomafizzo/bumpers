@@ -9,6 +9,8 @@ commands:
     message: Run "just lint fix" and "just test" and fix ALL issues if any.
   - name: commit
     message: Commit ALL modified files.
+  - name: logs
+    message: Read log files in ~/.local/share/bumpers/bumpers.log
 rules:
   - pattern: "go test "
     message: |
@@ -17,9 +19,9 @@ rules:
       - just test ./internal/claude              # Test only a specific package
       - just test "" TestExample1                # Run all tests with a specific test case
       - just test ./internal/claude TestExample1 # Test only a specific package with a specific test case
-  - pattern: "^(gci|go vet|goimports|gofumpt|go *fmt|golangci-lint)"
+  - pattern: "(gci|go vet|goimports|gofumpt|go *fmt|golangci-lint)"
     message: Use "just lint fix" instead to resolve lint/formatting issues.
-    generate: once
+    generate: session
   - pattern: " /tmp"
     message: Use a "tmp" directory in the project root instead.
   - pattern: "(git commit --no-verify|LEFTHOOK=0)"

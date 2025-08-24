@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 
@@ -105,4 +106,62 @@ func (c *Cache) Get(key string) (*CacheEntry, error) {
 		return nil, err //nolint:wrapcheck // JSON unmarshal error is self-explanatory
 	}
 	return entry, nil
+}
+
+// ClearSessionCache clears all cached entries with "session" generate mode
+func (c *Cache) ClearSessionCache() error {
+	err := c.db.Update(func(tx *bbolt.Tx) error {
+		bucket := tx.Bucket(c.getBucketName())
+		return c.deleteSessionEntries(bucket)
+	})
+	if err != nil {
+		return fmt.Errorf("failed to clear session cache: %w", err)
+	}
+	return nil
+}
+
+// deleteSessionEntries removes all session entries from the bucket
+func (c *Cache) deleteSessionEntries(bucket *bbolt.Bucket) error {
+	keysToDelete := c.findSessionKeys(bucket)
+	return c.deleteKeys(bucket, keysToDelete)
+}
+
+// findSessionKeys identifies all session cache entry keys
+func (c *Cache) findSessionKeys(bucket *bbolt.Bucket) [][]byte {
+	cursor := bucket.Cursor()
+	var keysToDelete [][]byte
+
+	for key, value := cursor.First(); key != nil; key, value = cursor.Next() {
+		if c.isSessionEntry(key, value) {
+			keysToDelete = append(keysToDelete, key)
+		}
+	}
+	return keysToDelete
+}
+
+// isSessionEntry checks if a key-value pair represents a session cache entry
+func (*Cache) isSessionEntry(key, value []byte) bool {
+	// Only process AI cache entries
+	if !bytes.HasPrefix(key, []byte("ai:")) {
+		return false
+	}
+
+	// Unmarshal to check generate mode
+	var entry CacheEntry
+	if unmarshalErr := json.Unmarshal(value, &entry); unmarshalErr != nil {
+		return false // Skip entries we can't parse
+	}
+
+	// Session entries have expiry times, "once" entries do not
+	return entry.ExpiresAt != nil
+}
+
+// deleteKeys removes the specified keys from the bucket
+func (*Cache) deleteKeys(bucket *bbolt.Bucket, keys [][]byte) error {
+	for _, key := range keys {
+		if deleteErr := bucket.Delete(key); deleteErr != nil {
+			return fmt.Errorf("failed to delete key %s: %w", string(key), deleteErr)
+		}
+	}
+	return nil
 }
