@@ -63,14 +63,17 @@ func (a *App) ProcessUserPrompt(rawJSON json.RawMessage) (string, error) {
 	// Find command by name
 	var commandMessage string
 	var foundCommand bool
+	var matchedCommand *config.Command
 
 	for _, cmd := range cfg.Commands {
-		if cmd.Name == commandStr {
-			commandMessage = cmd.Send
-			foundCommand = true
-			log.Info().Str("commandName", commandStr).Str("message", commandMessage).Msg("Found valid command")
-			break
+		if cmd.Name != commandStr {
+			continue
 		}
+		commandMessage = cmd.Send
+		foundCommand = true
+		matchedCommand = &cmd
+		log.Info().Str("commandName", commandStr).Str("message", commandMessage).Msg("Found valid command")
+		break
 	}
 
 	if !foundCommand {
@@ -85,10 +88,18 @@ func (a *App) ProcessUserPrompt(rawJSON json.RawMessage) (string, error) {
 		return "", fmt.Errorf("failed to process command template: %w", err)
 	}
 
+	// Apply AI generation if configured
+	finalMessage, err := a.processAIGenerationGeneric(matchedCommand, processedMessage, commandStr)
+	if err != nil {
+		// Log error but don't fail the hook - fallback to original message
+		log.Error().Err(err).Msg("AI generation failed, using original message")
+		finalMessage = processedMessage
+	}
+
 	// Create hook response that replaces the prompt and continues processing
 	response := HookSpecificOutput{
 		HookEventName:     constants.UserPromptSubmitEvent,
-		AdditionalContext: processedMessage,
+		AdditionalContext: finalMessage,
 	}
 
 	// Wrap in hookSpecificOutput structure as required by Claude Code hook specification

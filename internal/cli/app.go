@@ -375,3 +375,57 @@ func (a *App) processAIGeneration(rule *config.Rule, message, _ string) (string,
 
 	return result, nil
 }
+
+// GenerateConfig interface for types that have GetGenerate method
+type GenerateConfig interface {
+	GetGenerate() config.Generate
+}
+
+// processAIGenerationGeneric method that accepts any type with GetGenerate()
+func (a *App) processAIGenerationGeneric(generateConfig GenerateConfig, message, pattern string) (string, error) {
+	generate := generateConfig.GetGenerate()
+	// Skip if generation mode is "off"
+	if generate.Mode == "off" {
+		return message, nil
+	}
+
+	// Use XDG-compliant cache path
+	storageManager := storage.New(filesystem.NewOSFileSystem())
+	cachePath, err := storageManager.GetCachePath()
+	if err != nil {
+		return message, fmt.Errorf("failed to get cache path: %w", err)
+	}
+
+	// Create AI generator with mock launcher if available
+	var generator *ai.Generator
+	if a.mockLauncher != nil {
+		generator, err = ai.NewGeneratorWithLauncher(cachePath, a.projectRoot, a.mockLauncher)
+	} else {
+		generator, err = ai.NewGenerator(cachePath, a.projectRoot)
+	}
+	if err != nil {
+		return message, fmt.Errorf("failed to create AI generator: %w", err)
+	}
+	defer func() {
+		if closeErr := generator.Close(); closeErr != nil {
+			// Log error but don't fail the hook - generator.Close() error is non-critical
+			_ = closeErr // Silence linter about empty block
+		}
+	}()
+
+	// Create request
+	req := &ai.GenerateRequest{
+		OriginalMessage: message,
+		CustomPrompt:    generate.Prompt,
+		GenerateMode:    generate.Mode,
+		Pattern:         pattern,
+	}
+
+	// Generate message
+	result, err := generator.GenerateMessage(req)
+	if err != nil {
+		return message, fmt.Errorf("failed to generate AI message: %w", err)
+	}
+
+	return result, nil
+}

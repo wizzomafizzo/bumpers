@@ -12,6 +12,8 @@ commands:
     send: "Commit ALL modified files."
   - name: logs
     send: "Read log file in ~/.local/share/bumpers/bumpers.log"
+  - name: branch
+    send: "Create a new feature branch before procerding with changes."
 
 rules:
   - match: " /tmp"
@@ -23,7 +25,7 @@ rules:
       - just test ./internal/claude              # Test only a specific package
       - just test "" TestExample1                # Run all tests with a specific test case
       - just test ./internal/claude TestExample1 # Test only a specific package with a specific test case
-  - match: "gci|go vet|goimports|gofumpt|go *fmt|golangci-lint"
+  - match: "^(gci|go vet|goimports|gofumpt|go *fmt|golangci-lint)"
     send: Use "just lint fix" instead to resolve lint/formatting issues.
   - match: "git commit --no-verify|LEFTHOOK=0"
     send: Pre-commit hooks must not be skipped.

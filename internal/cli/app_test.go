@@ -1317,8 +1317,10 @@ func TestProcessHookRoutesUserPromptSubmit(t *testing.T) {
 commands:
   - name: "help"
     send: "Available commands:\\n$help - Show this help\\n$status - Show project status"
+    generate: "off"
   - name: "status"
-    send: "Project Status: All systems operational"`
+    send: "Project Status: All systems operational"
+    generate: "off"`
 
 	configPath := createTempConfig(t, configContent)
 	app := NewApp(configPath)
@@ -1350,8 +1352,10 @@ func TestProcessUserPrompt(t *testing.T) {
 commands:
   - name: "help"
     send: "Available commands:\\n$help - Show this help\\n$status - Show project status"
+    generate: "off"
   - name: "status"
-    send: "Project Status: All systems operational"`
+    send: "Project Status: All systems operational"
+    generate: "off"`
 
 	configPath := createTempConfig(t, configContent)
 	app := NewApp(configPath)
@@ -1417,6 +1421,7 @@ func TestProcessUserPromptValidationResult(t *testing.T) {
 commands:
   - name: "test"
     send: "Test command message"
+    generate: "off"
 `
 
 	configPath := createTempConfig(t, configContent)
@@ -1436,6 +1441,40 @@ commands:
 	}
 }
 
+func TestProcessUserPromptWithCommandGeneration(t *testing.T) {
+	t.Parallel()
+
+	configContent := `commands:
+  - name: "help"
+    send: "Basic help message"
+    generate: "always"`
+
+	configPath := createTempConfig(t, configContent)
+	app := NewApp(configPath)
+
+	// Set up mock launcher
+	mockLauncher := claude.NewMockLauncher()
+	mockLauncher.SetResponseForPattern("", "Enhanced help message from AI")
+	app.SetMockLauncher(mockLauncher)
+
+	promptJSON := `{"prompt": "$help"}`
+	result, err := app.ProcessUserPrompt(json.RawMessage(promptJSON))
+	if err != nil {
+		t.Fatalf("ProcessUserPrompt failed: %v", err)
+	}
+
+	expectedOutput := `{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit",` +
+		`"additionalContext":"Enhanced help message from AI"}}`
+	if result != expectedOutput {
+		t.Errorf("Expected AI-generated command output %q, got %q", expectedOutput, result)
+	}
+
+	// Verify the mock was called with the right prompt
+	if mockLauncher.GetCallCount() == 0 {
+		t.Error("Expected mock launcher to be called for AI generation")
+	}
+}
+
 func TestCommandPrefixConfiguration(t *testing.T) {
 	t.Parallel()
 
@@ -1443,6 +1482,7 @@ func TestCommandPrefixConfiguration(t *testing.T) {
 commands:
   - name: "test"
     send: "Test command message"
+    generate: "off"
 `
 
 	configPath := createTempConfig(t, configContent)
@@ -1479,7 +1519,8 @@ func TestProcessUserPromptWithTemplate(t *testing.T) {
 
 	configContent := `commands:
   - name: "hello"
-    send: "Hello {{.Name}}!"`
+    send: "Hello {{.Name}}!"
+    generate: "off"`
 
 	configPath := createTempConfig(t, configContent)
 	app := NewApp(configPath)
@@ -1646,7 +1687,9 @@ func TestProcessHookRoutesSessionStart(t *testing.T) {
     generate: "off"
 session:
   - add: "Remember to run tests first"
-  - add: "Check CLAUDE.md for project conventions"`
+    generate: "off"
+  - add: "Check CLAUDE.md for project conventions"
+    generate: "off"`
 
 	configPath := createTempConfig(t, configContent)
 	app := NewApp(configPath)
@@ -1679,7 +1722,8 @@ func TestProcessSessionStartWithDifferentNotes(t *testing.T) {
     send: "Use just test instead"
     generate: "off"
 session:
-  - add: "Different message here"`
+  - add: "Different message here"
+    generate: "off"`
 
 	configPath := createTempConfig(t, configContent)
 	app := NewApp(configPath)
@@ -1734,7 +1778,8 @@ func TestProcessSessionStartWorksWithClear(t *testing.T) {
 	setupTest(t)
 
 	configContent := `session:
-  - add: "Clear message"`
+  - add: "Clear message"
+    generate: "off"`
 
 	configPath := createTempConfig(t, configContent)
 	app := NewApp(configPath)
@@ -1762,7 +1807,8 @@ func TestProcessSessionStartWithTemplate(t *testing.T) {
 	setupTest(t)
 
 	configContent := `session:
-  - add: "Hello from template!"`
+  - add: "Hello from template!"
+    generate: "off"`
 
 	configPath := createTempConfig(t, configContent)
 	app := NewApp(configPath)
@@ -1878,7 +1924,8 @@ func TestProcessUserPromptWithTodayVariable(t *testing.T) {
 
 	configContent := `commands:
   - name: "hello"
-    send: "Hello {{.Name}} on {{.Today}}!"`
+    send: "Hello {{.Name}} on {{.Today}}!"
+    generate: "off"`
 
 	configPath := createTempConfig(t, configContent)
 	app := NewApp(configPath)
@@ -1917,7 +1964,8 @@ func TestProcessSessionStartWithTodayVariable(t *testing.T) {
 	setupTest(t)
 
 	configContent := `session:
-  - add: "Today is {{.Today}}"`
+  - add: "Today is {{.Today}}"
+    generate: "off"`
 
 	configPath := createTempConfig(t, configContent)
 	app := NewApp(configPath)
@@ -2050,6 +2098,45 @@ func verifySessionCacheCleared(t *testing.T, cachePath, tempDir string) {
 	}
 	if retrieved != nil {
 		t.Error("Session entry should be cleared after ProcessSessionStart")
+	}
+}
+
+func TestProcessSessionStartWithAIGeneration(t *testing.T) {
+	t.Parallel()
+	setupTest(t)
+
+	configContent := `session:
+  - add: "Basic session message"
+    generate: "always"`
+
+	configPath := createTempConfig(t, configContent)
+	app := NewApp(configPath)
+
+	// Set up mock launcher
+	mockLauncher := claude.NewMockLauncher()
+	mockLauncher.SetResponseForPattern("", "Enhanced session message from AI")
+	app.SetMockLauncher(mockLauncher)
+
+	sessionStartInput := `{
+		"session_id": "abc123",
+		"hook_event_name": "SessionStart",
+		"source": "startup"
+	}`
+
+	result, err := app.ProcessHook(strings.NewReader(sessionStartInput))
+	if err != nil {
+		t.Fatalf("ProcessHook failed for SessionStart: %v", err)
+	}
+
+	expectedJSON := `{"hookSpecificOutput":{"hookEventName":"SessionStart",` +
+		`"additionalContext":"Enhanced session message from AI"}}`
+	if result != expectedJSON {
+		t.Errorf("Expected AI-generated session output %q, got %q", expectedJSON, result)
+	}
+
+	// Verify the mock was called with the right prompt
+	if mockLauncher.GetCallCount() == 0 {
+		t.Error("Expected mock launcher to be called for AI generation")
 	}
 }
 
