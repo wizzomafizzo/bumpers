@@ -72,6 +72,30 @@ internal/
 
 ## Configuration
 
+### Commands
+
+Commands are defined in `bumpers.yml` and provide helpful shortcuts and responses:
+
+```yaml
+commands:
+  - name: "help"
+    send: "Available commands: $help, $status"
+  - name: "search"
+    send: |
+      Search for "{{argv 1}}" in {{if gt (argc) 1}}{{argv 2}}{{else}}codebase{{end}}:
+      {{if eq (argc) 0}}Usage: $search "term" [directory]
+      {{else}}grep -r "{{argv 1}}" {{if gt (argc) 1}}{{argv 2}}{{else}}.{{end}}{{end}}
+```
+
+**Command Features:**
+- **Arguments**: Commands support arguments parsed from `$command arg1 "arg with spaces"`
+- **Template Variables**: `{{.Name}}` (command name), `{{.Args}}` (raw args), `{{.Argv}}` (parsed array)
+- **Template Functions**: `{{argc}}` (argument count), `{{argv N}}` (Nth argument, 0=command)
+- **Conditional Logic**: Use `{{if}}`, `{{range}}`, and comparison functions for dynamic responses
+- **AI Generation**: Same AI integration options as rules
+
+### Rules
+
 Rules defined in `bumpers.yml` with regex patterns:
 - **pattern**: Regex to match commands (matches result in denial)
 - **tools**: Regex to match tool names (optional, defaults to "^Bash$" if empty)

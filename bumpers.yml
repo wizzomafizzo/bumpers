@@ -12,8 +12,6 @@ commands:
     send: "Commit ALL modified files."
   - name: logs
     send: "Read log file in ~/.local/share/bumpers/bumpers.log"
-  - name: branch
-    send: "Create a new feature branch before proceeding with changes."
 
 rules:
   - match: " /tmp"
@@ -42,5 +40,5 @@ rules:
   - match: "^bumpers\\.yml^"
     tool: "Read|Edit|Grep"
     send: Bumpers configuration file should not be accessed.
-  - match: "cat.*EOF"
-    send: Only use appropriate tools for creating/editing files.
+  - match: "cat.*EOF.*>\\s*[^\\s]"
+    send: Use Write tool instead of cat heredoc redirection to create files.

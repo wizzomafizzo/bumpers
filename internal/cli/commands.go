@@ -46,9 +46,17 @@ func (a *App) ProcessUserPrompt(rawJSON json.RawMessage) (string, error) {
 		return "", nil // Not a command, pass through
 	}
 
-	// Extract command index
+	// Extract command string and parse arguments
 	commandStr := strings.TrimPrefix(event.Prompt, constants.CommandPrefix)
 	log.Debug().Str("commandStr", commandStr).Msg("extracted command string")
+
+	// Parse command name and arguments
+	commandName, args, argv := ParseCommandArgs(commandStr)
+	log.Debug().
+		Str("commandName", commandName).
+		Str("args", args).
+		Int("argc", len(argv)-1).
+		Msg("parsed command arguments")
 
 	// Load config to get commands
 	cfg, err := config.Load(a.configPath)
@@ -63,13 +71,13 @@ func (a *App) ProcessUserPrompt(rawJSON json.RawMessage) (string, error) {
 	var matchedCommand *config.Command
 
 	for _, cmd := range cfg.Commands {
-		if cmd.Name != commandStr {
+		if cmd.Name != commandName {
 			continue
 		}
 		commandMessage = cmd.Send
 		foundCommand = true
 		matchedCommand = &cmd
-		log.Debug().Str("commandName", commandStr).Str("message", commandMessage).Msg("found valid command")
+		log.Debug().Str("commandName", commandName).Str("message", commandMessage).Msg("found valid command")
 		break
 	}
 
@@ -77,10 +85,10 @@ func (a *App) ProcessUserPrompt(rawJSON json.RawMessage) (string, error) {
 		return "", nil // Command not found, pass through
 	}
 
-	// Process template with command context including shared variables
-	processedMessage, err := template.ExecuteCommandTemplate(commandMessage, commandStr)
+	// Process template with command context including shared variables and arguments
+	processedMessage, err := template.ExecuteCommandTemplateWithArgs(commandMessage, commandName, args, argv)
 	if err != nil {
-		log.Error().Err(err).Str("commandName", commandStr).Msg("Failed to process command template")
+		log.Error().Err(err).Str("commandName", commandName).Msg("Failed to process command template")
 		return "", fmt.Errorf("failed to process command template: %w", err)
 	}
 

@@ -3072,3 +3072,82 @@ func TestPostToolUseWithMultipleFieldMatching(t *testing.T) {
 
 	assert.Equal(t, "Operation issue detected", result2)
 }
+
+func TestProcessUserPromptWithCommandArguments(t *testing.T) {
+	t.Parallel()
+	setupTest(t)
+
+	configContent := `commands:
+  - name: "test"
+    send: "Command: {{.Name}}, Args: {{argc}}, First: {{argv 1}}"
+    generate: "off"`
+
+	configPath := createTempConfig(t, configContent)
+	app := NewApp(configPath)
+
+	promptJSON := `{"prompt": "$test arg1 arg2"}`
+	result, err := app.ProcessUserPrompt(json.RawMessage(promptJSON))
+	if err != nil {
+		t.Fatalf("ProcessUserPrompt failed: %v", err)
+	}
+
+	// Parse the response to get the additionalContext
+	var response map[string]any
+	if err := json.Unmarshal([]byte(result), &response); err != nil {
+		t.Fatalf("Failed to parse response: %v", err)
+	}
+
+	hookOutput, ok := response["hookSpecificOutput"].(map[string]any)
+	if !ok {
+		t.Fatal("Response missing hookSpecificOutput")
+	}
+
+	additionalContext, ok := hookOutput["additionalContext"].(string)
+	if !ok {
+		t.Fatal("Response missing additionalContext")
+	}
+
+	expected := "Command: test, Args: 2, First: arg1"
+	if additionalContext != expected {
+		t.Errorf("Expected %q, got %q", expected, additionalContext)
+	}
+}
+
+func TestProcessUserPromptWithNoArguments(t *testing.T) {
+	t.Parallel()
+	setupTest(t)
+
+	configContent := `commands:
+  - name: "test"
+    send: "Command: {{.Name}}, Args: {{argc}}"
+    generate: "off"`
+
+	configPath := createTempConfig(t, configContent)
+	app := NewApp(configPath)
+
+	promptJSON := `{"prompt": "$test"}`
+	result, err := app.ProcessUserPrompt(json.RawMessage(promptJSON))
+	if err != nil {
+		t.Fatalf("ProcessUserPrompt failed: %v", err)
+	}
+
+	// Parse the response
+	var response map[string]any
+	if err := json.Unmarshal([]byte(result), &response); err != nil {
+		t.Fatalf("Failed to parse response: %v", err)
+	}
+
+	hookOutput, ok := response["hookSpecificOutput"].(map[string]any)
+	if !ok {
+		t.Fatalf("Expected hookSpecificOutput to be map[string]any, got %T", response["hookSpecificOutput"])
+	}
+	additionalContext, ok := hookOutput["additionalContext"].(string)
+	if !ok {
+		t.Fatalf("Expected additionalContext to be string, got %T", hookOutput["additionalContext"])
+	}
+
+	expected := "Command: test, Args: 0"
+	if additionalContext != expected {
+		t.Errorf("Expected %q, got %q", expected, additionalContext)
+	}
+}

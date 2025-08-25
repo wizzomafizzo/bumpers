@@ -13,13 +13,19 @@ import (
 )
 
 // createFuncMap creates a function map with custom template functions
-func createFuncMap(fs filesystem.FileSystem) template.FuncMap {
+func createFuncMap(fs filesystem.FileSystem, commandCtx *CommandContext) template.FuncMap {
 	return template.FuncMap{
 		"readFile": func(filename string) string {
 			return readFile(fs, filename)
 		},
 		"testPath": func(filename string) bool {
 			return testPath(fs, filename)
+		},
+		"argc": func() int {
+			return argc(commandCtx)
+		},
+		"argv": func(index int) string {
+			return argv(commandCtx, index)
 		},
 	}
 }
@@ -110,4 +116,23 @@ func testPath(fs filesystem.FileSystem, filename string) bool {
 	// Check if the file or directory exists
 	_, err = fs.Stat(resolvedPath)
 	return err == nil
+}
+
+// argc returns the count of arguments (excluding command name)
+func argc(ctx *CommandContext) int {
+	if ctx == nil || ctx.Argv == nil {
+		return 0
+	}
+	// Return length minus 1 to exclude command name at index 0
+	return len(ctx.Argv) - 1
+}
+
+// argv returns the argument at the specified index
+// Index 0 returns command name, index 1+ returns actual arguments
+// Returns empty string for out-of-bounds access
+func argv(ctx *CommandContext, index int) string {
+	if ctx == nil || ctx.Argv == nil || index < 0 || index >= len(ctx.Argv) {
+		return ""
+	}
+	return ctx.Argv[index]
 }

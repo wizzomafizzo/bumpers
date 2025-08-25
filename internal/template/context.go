@@ -15,6 +15,8 @@ type RuleContext struct {
 // CommandContext contains variables specific to command templates
 type CommandContext struct {
 	Name string
+	Args string   // Raw arguments after command name
+	Argv []string // Parsed arguments including command at index 0
 }
 
 // NoteContext contains variables specific to note templates
@@ -40,6 +42,8 @@ func MergeContexts(shared SharedContext, specific any) map[string]any {
 
 	if cmdCtx, ok := specific.(CommandContext); ok {
 		result["Name"] = cmdCtx.Name
+		result["Args"] = cmdCtx.Args
+		result["Argv"] = cmdCtx.Argv
 	}
 
 	return result
@@ -57,6 +61,16 @@ func BuildCommandContext(name string) map[string]any {
 	shared := NewSharedContext()
 	specific := CommandContext{Name: name}
 	return MergeContexts(shared, specific)
+}
+
+// BuildCommandContextWithArgs creates a complete context for command templates with arguments
+func BuildCommandContextWithArgs(name, args string, argv []string) map[string]any {
+	shared := NewSharedContext()
+	specific := CommandContext{Name: name}
+	result := MergeContexts(shared, specific)
+	result["Args"] = args
+	result["Argv"] = argv
+	return result
 }
 
 // BuildNoteContext creates a complete context for note templates
