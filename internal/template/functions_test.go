@@ -152,7 +152,7 @@ func TestTestPath(t *testing.T) {
 			setupFS: func(t *testing.T) (filesystem.FileSystem, func()) {
 				fs := filesystem.NewOSFileSystem()
 				err := os.Mkdir("../../test-dir", 0o750)
-				if err != nil {
+				if err != nil && !os.IsExist(err) {
 					t.Fatalf("Failed to create test directory: %v", err)
 				}
 				cleanup := func() {
@@ -225,5 +225,98 @@ func TestTestPath_DirectoryTraversal_WithRealFS_ReturnsFalse(t *testing.T) {
 	result := testPath(fs, "../outside.txt")
 	if result {
 		t.Error("Directory traversal should return false, got true")
+	}
+}
+
+func TestArgc_WithNoArgs_ReturnsZero(t *testing.T) {
+	t.Parallel()
+
+	ctx := &CommandContext{
+		Name: "test",
+		Args: "",
+		Argv: []string{"test"},
+	}
+
+	result := argc(ctx)
+	if result != 0 {
+		t.Errorf("Expected argc to return 0, got %d", result)
+	}
+}
+
+func TestArgc_WithArgs_ReturnsCorrectCount(t *testing.T) {
+	t.Parallel()
+
+	ctx := &CommandContext{
+		Name: "test",
+		Args: "arg1 arg2 arg3",
+		Argv: []string{"test", "arg1", "arg2", "arg3"},
+	}
+
+	result := argc(ctx)
+	if result != 3 {
+		t.Errorf("Expected argc to return 3, got %d", result)
+	}
+}
+
+func TestArgc_WithNilContext_ReturnsZero(t *testing.T) {
+	t.Parallel()
+
+	result := argc(nil)
+	if result != 0 {
+		t.Errorf("Expected argc to return 0 for nil context, got %d", result)
+	}
+}
+
+func TestArgv_IndexZero_ReturnsCommandName(t *testing.T) {
+	t.Parallel()
+
+	ctx := &CommandContext{
+		Name: "test",
+		Args: "arg1 arg2",
+		Argv: []string{"test", "arg1", "arg2"},
+	}
+
+	result := argv(ctx, 0)
+	if result != "test" {
+		t.Errorf("Expected argv(0) to return 'test', got %q", result)
+	}
+}
+
+func TestArgv_ValidIndex_ReturnsArgument(t *testing.T) {
+	t.Parallel()
+
+	ctx := &CommandContext{
+		Name: "test",
+		Args: "foo \"bar baz\" qux",
+		Argv: []string{"test", "foo", "bar baz", "qux"},
+	}
+
+	result := argv(ctx, 1)
+	if result != "foo" {
+		t.Errorf("Expected argv(1) to return 'foo', got %q", result)
+	}
+}
+
+func TestArgv_OutOfBoundsIndex_ReturnsEmpty(t *testing.T) {
+	t.Parallel()
+
+	ctx := &CommandContext{
+		Name: "test",
+		Args: "arg1",
+		Argv: []string{"test", "arg1"},
+	}
+
+	result := argv(ctx, 5)
+	if result != "" {
+		t.Errorf("Expected argv(5) to return empty string, got %q", result)
+	}
+}
+
+func TestArgv_WithNilContext_ReturnsEmpty(t *testing.T) {
+	t.Parallel()
+
+	result := argv(nil, 0)
+	if result != "" {
+		t.Errorf("Expected argv to return empty string for nil context, got %q", result)
 	}
 }

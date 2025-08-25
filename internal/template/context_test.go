@@ -73,6 +73,72 @@ func TestBuildCommandContext(t *testing.T) {
 	}
 }
 
+func TestBuildCommandContextWithArgs(t *testing.T) {
+	t.Parallel()
+
+	result := BuildCommandContextWithArgs("test", "foo bar", []string{"test", "foo", "bar"})
+
+	// Should have all context fields
+	expectedDate := time.Now().Format("2006-01-02")
+	if result["Today"] != expectedDate {
+		t.Errorf("Expected Today to be %q, got %v", expectedDate, result["Today"])
+	}
+	if result["Name"] != "test" {
+		t.Errorf("Expected Name to be 'test', got %v", result["Name"])
+	}
+	if result["Args"] != "foo bar" {
+		t.Errorf("Expected Args to be 'foo bar', got %v", result["Args"])
+	}
+
+	argv, ok := result["Argv"].([]string)
+	if !ok {
+		t.Errorf("Expected Argv to be []string, got %T", result["Argv"])
+		return
+	}
+
+	expectedArgv := []string{"test", "foo", "bar"}
+	if len(argv) != len(expectedArgv) {
+		t.Errorf("Expected Argv length %d, got %d", len(expectedArgv), len(argv))
+		return
+	}
+
+	for i, expected := range expectedArgv {
+		if argv[i] != expected {
+			t.Errorf("Expected Argv[%d] to be %q, got %q", i, expected, argv[i])
+		}
+	}
+}
+
+func TestMergeContexts_WithCommandContextArgs(t *testing.T) {
+	t.Parallel()
+
+	shared := SharedContext{Today: "2025-08-25"}
+	specific := CommandContext{
+		Name: "test",
+		Args: "foo bar",
+		Argv: []string{"test", "foo", "bar"},
+	}
+	result := MergeContexts(shared, specific)
+
+	if result["Today"] != "2025-08-25" {
+		t.Errorf("Expected Today to be '2025-08-25', got %v", result["Today"])
+	}
+	if result["Name"] != "test" {
+		t.Errorf("Expected Name to be 'test', got %v", result["Name"])
+	}
+	if result["Args"] != "foo bar" {
+		t.Errorf("Expected Args to be 'foo bar', got %v", result["Args"])
+	}
+
+	argv, ok := result["Argv"].([]string)
+	if !ok {
+		t.Errorf("Expected Argv to be []string, got %T", result["Argv"])
+	}
+	if len(argv) != 3 || argv[0] != "test" || argv[1] != "foo" || argv[2] != "bar" {
+		t.Errorf("Expected Argv to be [test foo bar], got %v", argv)
+	}
+}
+
 func TestBuildNoteContext(t *testing.T) {
 	t.Parallel()
 
@@ -117,8 +183,10 @@ func TestBuildContexts(t *testing.T) {
 			expectedKeys: map[string]any{
 				"Today": expectedDate,
 				"Name":  "lint",
+				"Args":  "",
+				"Argv":  []string(nil),
 			},
-			expectedLen: 2,
+			expectedLen: 4,
 		},
 		{
 			name:      "note context",
@@ -141,10 +209,33 @@ func TestBuildContexts(t *testing.T) {
 			}
 
 			for key, expectedValue := range tc.expectedKeys {
-				if result[key] != expectedValue {
+				if key == "Argv" {
+					checkArgvSlice(t, key, expectedValue, result[key])
+				} else if result[key] != expectedValue {
 					t.Errorf("Expected %s to be %q, got %v", key, expectedValue, result[key])
 				}
 			}
 		})
+	}
+}
+
+func checkArgvSlice(t *testing.T, key string, expectedValue, actualValue any) {
+	expectedSlice, expectedOk := expectedValue.([]string)
+	actualSlice, actualOk := actualValue.([]string)
+	if !expectedOk || !actualOk {
+		if expectedValue != actualValue {
+			t.Errorf("Expected %s to be %v, got %v", key, expectedValue, actualValue)
+		}
+		return
+	}
+
+	if len(expectedSlice) != len(actualSlice) {
+		t.Errorf("Expected %s length to be %d, got %d", key, len(expectedSlice), len(actualSlice))
+		return
+	}
+	for i, exp := range expectedSlice {
+		if actualSlice[i] != exp {
+			t.Errorf("Expected %s[%d] to be %q, got %q", key, i, exp, actualSlice[i])
+		}
 	}
 }

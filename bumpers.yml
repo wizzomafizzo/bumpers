@@ -14,6 +14,28 @@ commands:
     send: "Read log file in ~/.local/share/bumpers/bumpers.log"
   - name: branch
     send: "Create a new feature branch before proceeding with changes."
+  
+  # Examples of commands with argument support
+  - name: search
+    send: |
+      Search for "{{argv 1}}" in the codebase{{if gt (argc) 1}} in {{argv 2}} directory{{end}}:
+      {{if eq (argc) 0}}Please provide a search term: $search "term"
+      {{else if eq (argc) 1}}grep -r "{{argv 1}}" ./
+      {{else}}grep -r "{{argv 1}}" {{argv 2}}/{{end}}
+  - name: create
+    send: |
+      {{if lt (argc) 2}}Usage: $create <type> <name> [description]
+      Examples:
+      - $create file myfile.go "New Go file"  
+      - $create dir mypackage "Package directory"
+      {{else}}Create {{argv 1}}: {{argv 2}}{{if gt (argc) 2}} - {{argv 3}}{{end}}
+      {{if eq (argv 1) "file"}}touch "{{argv 2}}"
+      {{else if eq (argv 1) "dir"}}mkdir -p "{{argv 2}}"
+      {{else}}# Unknown type: {{argv 1}}{{end}}{{end}}
+  - name: note  
+    send: |
+      {{if eq (argc) 0}}Add a note about current work to the session log.
+      {{else}}Note ({{argc}} args): {{.Args}}{{end}}
 
 rules:
   - match: " /tmp"

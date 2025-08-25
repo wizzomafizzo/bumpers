@@ -216,3 +216,47 @@ func BenchmarkExecuteComplex(b *testing.B) {
 		_, _ = Execute(template, context)
 	}
 }
+
+func TestExecuteWithCommandContext_WithArgcFunction(t *testing.T) {
+	t.Parallel()
+
+	templateStr := "Argument count: {{argc}}"
+	ctx := &CommandContext{
+		Name: "test",
+		Args: "arg1 arg2",
+		Argv: []string{"test", "arg1", "arg2"},
+	}
+	data := MergeContexts(NewSharedContext(), *ctx)
+
+	result, err := ExecuteWithCommandContext(templateStr, data, ctx)
+	if err != nil {
+		t.Fatalf("ExecuteWithCommandContext() failed: %v", err)
+	}
+
+	expected := "Argument count: 2"
+	if result != expected {
+		t.Errorf("Expected %q, got %q", expected, result)
+	}
+}
+
+func TestExecuteWithCommandContext_WithArgvFunction(t *testing.T) {
+	t.Parallel()
+
+	templateStr := "Command: {{argv 0}}, First arg: {{argv 1}}"
+	ctx := &CommandContext{
+		Name: "test",
+		Args: "arg1 arg2",
+		Argv: []string{"test", "arg1", "arg2"},
+	}
+	data := MergeContexts(NewSharedContext(), *ctx)
+
+	result, err := ExecuteWithCommandContext(templateStr, data, ctx)
+	if err != nil {
+		t.Fatalf("ExecuteWithCommandContext() failed: %v", err)
+	}
+
+	expected := "Command: test, First arg: arg1"
+	if result != expected {
+		t.Errorf("Expected %q, got %q", expected, result)
+	}
+}
