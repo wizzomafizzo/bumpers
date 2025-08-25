@@ -1,13 +1,21 @@
-# PostToolUse Hook Implementation Plan
+# Post-Tool-Use Hook Implementation Plan
 
 ## 🎯 Project Overview
 
 **Feature:** Post-Tool-Use Hook Support with AI Reasoning Matching  
 **Started:** 2025-08-25  
 **Current Phase:** 3 (PostToolUse Handler Implementation)  
+**Overall Progress:** 45%
 
 ### Core Innovation
 Match AI reasoning patterns like "not related to my changes" immediately after tool execution to catch AI deflection or misattribution of issues.
+
+### Goals
+- Enable post-tool-use hook processing in Bumpers
+- Allow matching against AI reasoning/explanations from transcript files
+- Implement fail-safe design for optional transcript support
+- Maintain full backward compatibility
+- Use intuitive `when` field with smart defaults and exclusions
 
 ---
 
@@ -77,7 +85,68 @@ Match AI reasoning patterns like "not related to my changes" immediately after t
 
 ---
 
-## 🔧 Technical Implementation Details
+## 🏗️ Technical Implementation Details
+
+### Smart Defaults Implementation
+```go
+// Current ExpandWhen() logic in internal/config/config.go
+func (r *Rule) ExpandWhen() []string {
+    if len(r.When) == 0 {
+        return []string{"pre", "input"}  // Backward compatibility
+    }
+    // Smart defaults:
+    // ["reasoning"] → ["post", "reasoning"]
+    // ["post"] → ["post", "output"] 
+    // ["pre"] → ["pre", "input"]
+    // ["!flag"] → Exclude flag from expanded set
+}
+```
+
+### PostToolUse Handler Design
+```go
+// Current implementation in internal/cli/app.go
+func (a *App) ProcessPostToolUse(rawJSON json.RawMessage) (string, error) {
+    // ✅ Parse JSON event
+    // ✅ Extract transcript path
+    // ✅ Read transcript with fail-safe design
+    // ✅ Basic pattern matching
+    // ❌ TODO: Integrate with rule matching system
+    // ❌ TODO: Process When field to determine matching scope
+}
+```
+
+### PostToolUse Hook Data Structure
+```json
+{
+  "session_id": "abc123",
+  "transcript_path": "/path/to/transcript.jsonl",
+  "cwd": "/current/working/directory", 
+  "hook_event_name": "PostToolUse",
+  "tool_name": "Write",
+  "tool_input": { /* tool-specific */ },
+  "tool_response": { /* tool-specific */ }
+}
+```
+
+### Fail-Safe Transcript Design
+```go
+func extractReasoningFromTranscript(path string) (string, error) {
+    // Quick existence check - fail fast
+    if _, err := os.Stat(path); err != nil {
+        log.Debug().Str("path", path).Msg("Transcript unavailable, skipping reasoning")
+        return "", nil  // Empty string, not error
+    }
+    
+    // Attempt read - don't fail hook on error
+    content, err := readLastNLines(path, 100)
+    if err != nil {
+        log.Warn().Err(err).Msg("Could not read transcript")
+        return "", nil  // Continue processing other rules
+    }
+    
+    return extractAssistantText(content), nil
+}
+```
 
 ### Current File Structure
 ```
@@ -99,34 +168,6 @@ testdata/
 └── transcript-not-related.jsonl        # ✅ Test transcript
 ```
 
-### Smart Defaults Implementation
-```go
-// Current ExpandWhen() logic in internal/config/config.go
-func (r *Rule) ExpandWhen() []string {
-    if len(r.When) == 0 {
-        return []string{"pre", "input"}  // Backward compatibility
-    }
-    // Smart defaults:
-    // ["reasoning"] → ["post", "reasoning"]
-    // ["post"] → ["post", "output"] 
-    // ["pre"] → ["pre", "input"]
-    // ["!flag"] → Exclude flag from expanded set
-}
-```
-
-### Current PostToolUse Handler
-```go
-// Current implementation in internal/cli/app.go
-func (a *App) ProcessPostToolUse(rawJSON json.RawMessage) (string, error) {
-    // ✅ Parse JSON event
-    // ✅ Extract transcript path
-    // ✅ Read transcript with fail-safe design
-    // ✅ Basic pattern matching
-    // ❌ TODO: Integrate with rule matching system
-    // ❌ TODO: Process When field to determine matching scope
-}
-```
-
 ---
 
 ## 🧪 Test Cases Status
@@ -143,7 +184,37 @@ func (a *App) ProcessPostToolUse(rawJSON json.RawMessage) (string, error) {
 4. Error handling tests for missing/corrupted transcripts
 5. Performance tests with large transcript files
 
-### 🎯 Example Use Cases to Test
+---
+
+## 📚 Configuration Examples
+
+### Example Configuration
+```yaml
+rules:
+  # Traditional (backward compatible)
+  - pattern: "^rm -rf"
+    tools: "^Bash$"
+    message: "Use safer deletion"
+    # when: ["pre", "input"] - implicit
+    
+  # AI reasoning match (smart default)
+  - pattern: "(not related|pre-existing) to (my|the) changes"
+    tools: ".*"
+    when: ["reasoning"]  # → ["post", "reasoning"]
+    message: "AI claiming changes unrelated - verify"
+    
+  # Tool output only
+  - pattern: "error|failed"
+    when: ["post"]  # → ["post", "output"]
+    message: "Command failed - review error"
+    
+  # Exclusion example
+  - pattern: "exit code"
+    when: ["post", "!reasoning"]  # post+output, exclude reasoning
+    message: "Check exit code in output"
+```
+
+### Example Use Cases
 ```yaml
 # AI deflection detection
 - match: "(not related|pre-existing|unrelated) to (my|the) changes"
@@ -227,6 +298,25 @@ func (a *App) ProcessPostToolUse(rawJSON json.RawMessage) (string, error) {
 - Complex When field logic may introduce bugs
 - Large transcript files could impact performance
 - Different AI providers may have different transcript formats
+
+---
+
+## 📝 Design Decisions
+
+### Key Decisions Made
+1. **List-based `when` field** - More intuitive than single string with sub-syntax
+2. **Smart defaults** - Reduce verbosity for common cases
+3. **Fail-safe transcript support** - Core functionality works without transcripts  
+4. **`!` prefix for exclusions** - Familiar syntax for developers
+5. **Tail-based reading** - Efficient for large transcript files
+
+### Risk Mitigations
+- **Risk:** Large transcript files slow down processing  
+  **Mitigation:** Use tail approach, limit to last 100 lines
+- **Risk:** Different AI providers have different transcript formats  
+  **Mitigation:** Fail-safe design, skip reasoning rules if transcript unavailable
+- **Risk:** Complex `when` syntax confuses users  
+  **Mitigation:** Smart defaults make simple cases simple
 
 ---
 

@@ -11,6 +11,8 @@ coverage.*
 *.coverprofile
 profile.cov
 coverage-*.*
+report.json
+coverage/
 
 go.work
 go.work.sum

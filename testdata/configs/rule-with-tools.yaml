@@ -1,0 +1,5 @@
+rules:
+  - match: "password"
+    tool: "^(Write|Edit)$"
+    send: "Avoid hardcoding secrets"
+    generate: "off"

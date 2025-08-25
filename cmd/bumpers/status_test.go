@@ -2,9 +2,12 @@ package main
 
 import (
 	"testing"
+
+	"github.com/wizzomafizzo/bumpers/internal/testutil"
 )
 
 func TestCreateStatusCommand(t *testing.T) {
+	testutil.InitTestLogger(t)
 	t.Parallel()
 
 	cmd := createStatusCommand()

@@ -43,15 +43,20 @@ type Rule struct {
 
 // ExpandWhen applies smart defaults and exclusion logic to the When field
 func (r *Rule) ExpandWhen() []string {
-	// Default to pre+input when When field is omitted
 	if len(r.When) == 0 {
 		return []string{"pre", "input"}
 	}
 
-	expanded := make(map[string]bool)
-	excludes := make(map[string]bool)
+	expanded, excludes := r.categorizeWhenFlags()
+	r.applySmartDefaults(expanded)
+	r.removeExclusions(expanded, excludes)
+	return r.mapToSlice(expanded)
+}
 
-	// First pass: collect base flags and exclusions
+func (r *Rule) categorizeWhenFlags() (expanded, excludes map[string]bool) {
+	expanded = make(map[string]bool)
+	excludes = make(map[string]bool)
+
 	for _, flag := range r.When {
 		if strings.HasPrefix(flag, "!") {
 			excludes[strings.TrimPrefix(flag, "!")] = true
@@ -59,37 +64,41 @@ func (r *Rule) ExpandWhen() []string {
 			expanded[flag] = true
 		}
 	}
+	return expanded, excludes
+}
 
-	// Second pass: apply smart defaults
+func (r *Rule) applySmartDefaults(expanded map[string]bool) {
 	for flag := range expanded {
-		switch flag {
-		case "reasoning":
-			// reasoning implies post
-			expanded["post"] = true
-		case "post":
-			// post implies output if no explicit source flags
-			if !hasSourceFlag(r.When) {
-				expanded["output"] = true
-			}
-		case "pre":
-			// pre implies input if no explicit source flags
-			if !hasSourceFlag(r.When) {
-				expanded["input"] = true
-			}
+		r.applyDefaultForFlag(flag, expanded)
+	}
+}
+
+func (r *Rule) applyDefaultForFlag(flag string, expanded map[string]bool) {
+	switch flag {
+	case "reasoning":
+		expanded["post"] = true
+	case "post":
+		if !hasSourceFlag(r.When) {
+			expanded["output"] = true
+		}
+	case "pre":
+		if !hasSourceFlag(r.When) {
+			expanded["input"] = true
 		}
 	}
+}
 
-	// Third pass: remove excluded flags
+func (*Rule) removeExclusions(expanded, excludes map[string]bool) {
 	for exclude := range excludes {
 		delete(expanded, exclude)
 	}
+}
 
-	// Convert map to slice
+func (*Rule) mapToSlice(expanded map[string]bool) []string {
 	result := make([]string, 0, len(expanded))
 	for flag := range expanded {
 		result = append(result, flag)
 	}
-
 	return result
 }
 

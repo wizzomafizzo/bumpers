@@ -3,9 +3,12 @@ package hooks
 import (
 	"strings"
 	"testing"
+
+	"github.com/wizzomafizzo/bumpers/internal/testutil"
 )
 
 func TestParseInput(t *testing.T) {
+	testutil.InitTestLogger(t)
 	t.Parallel()
 
 	jsonInput := `{
@@ -26,6 +29,7 @@ func TestParseInput(t *testing.T) {
 }
 
 func TestDetectHookType(t *testing.T) {
+	testutil.InitTestLogger(t)
 	t.Parallel()
 
 	tests := []struct {
@@ -106,6 +110,7 @@ func TestDetectHookType(t *testing.T) {
 }
 
 func TestParseInputWithToolName(t *testing.T) {
+	testutil.InitTestLogger(t)
 	t.Parallel()
 
 	jsonInput := `{
@@ -128,4 +133,18 @@ func TestParseInputWithToolName(t *testing.T) {
 	if event.ToolName != "Bash" {
 		t.Errorf("Expected tool name 'Bash', got '%s'", event.ToolName)
 	}
+}
+
+// Fuzz test for hook JSON parsing
+func FuzzParseInput(f *testing.F) {
+	// Add valid seed inputs
+	f.Add(`{"tool_input": {"command": "test"}}`)
+	f.Add(`{"tool_input": {"command": "go test"}, "tool_name": "Bash"}`)
+	f.Add(`{"tool_input": {"description": "test desc"}}`)
+
+	f.Fuzz(func(_ *testing.T, input string) {
+		reader := strings.NewReader(input)
+		_, _ = ParseInput(reader)
+		// No assertions - just ensuring no panics occur
+	})
 }

@@ -2,7 +2,7 @@
 
 Bumpers is a CLI utility to manage and enforce guard rails for Claude Code. Tearing your hair out because Claude won't remember what's in CLAUDE.md? Use Bumpers to make Claude love following your rules.
 
-![Bumpers blocking a tool in Claude Code](screenshot.png)
+![Bumpers blocking a tool in Claude Code](example.png)
 
 ## Features
 

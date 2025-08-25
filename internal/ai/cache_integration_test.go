@@ -1,3 +1,5 @@
+//go:build integration
+
 package ai
 
 import (
@@ -16,11 +18,11 @@ func TestCacheBasicOperations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create cache: %v", err)
 	}
-	defer func() {
+	t.Cleanup(func() {
 		if closeErr := cache.Close(); closeErr != nil {
 			t.Logf("Failed to close cache: %v", closeErr)
 		}
-	}()
+	})
 
 	key := "test-key"
 	entry := &CacheEntry{
@@ -92,11 +94,11 @@ func TestCachePersistenceBetweenSessions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to reopen cache: %v", err)
 	}
-	defer func() {
+	t.Cleanup(func() {
 		if closeErr := cache2.Close(); closeErr != nil {
 			t.Logf("Failed to close cache2: %v", closeErr)
 		}
-	}()
+	})
 
 	retrieved, err := cache2.Get(key)
 	if err != nil {
@@ -121,11 +123,11 @@ func TestCacheWithProjectContext(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create cache with project: %v", err)
 	}
-	defer func() {
+	t.Cleanup(func() {
 		if closeErr := cache.Close(); closeErr != nil {
 			t.Logf("Failed to close cache: %v", closeErr)
 		}
-	}()
+	})
 
 	// Store entry - should be prefixed internally
 	key := "test-key"
@@ -164,11 +166,11 @@ func TestCacheClearSessionCache(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create cache: %v", err)
 	}
-	defer func() {
+	t.Cleanup(func() {
 		if closeErr := cache.Close(); closeErr != nil {
 			t.Logf("Failed to close cache: %v", closeErr)
 		}
-	}()
+	})
 
 	// Setup test data
 	setupClearSessionCacheTest(t, cache)
@@ -262,11 +264,11 @@ func TestCacheShouldNotStoreGenerateMode(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create cache: %v", err)
 	}
-	defer func() {
+	t.Cleanup(func() {
 		if closeErr := cache.Close(); closeErr != nil {
 			t.Logf("Failed to close cache: %v", closeErr)
 		}
-	}()
+	})
 
 	// Create an entry that was cached when mode was "once"
 	// GenerateMode should not be stored in cache - removed from struct
@@ -308,11 +310,11 @@ func TestCacheClearByCurrentMode(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create cache: %v", err)
 	}
-	defer func() {
+	t.Cleanup(func() {
 		if closeErr := cache.Close(); closeErr != nil {
 			t.Logf("Failed to close cache: %v", closeErr)
 		}
-	}()
+	})
 
 	// Add some test entries (without GenerateMode since we removed it)
 	now := time.Now()
@@ -356,5 +358,62 @@ func TestCacheClearByCurrentMode(t *testing.T) {
 	}
 	if entry2 == nil {
 		t.Error("Entry without expiry should remain when current mode is session")
+	}
+}
+
+// Benchmark tests for cache performance
+func BenchmarkCachePut(b *testing.B) {
+	tempDir := b.TempDir()
+	dbPath := filepath.Join(tempDir, "bench.db")
+
+	cache, err := NewCacheWithProject(dbPath, "bench-project")
+	if err != nil {
+		b.Fatalf("Failed to create cache: %v", err)
+	}
+	defer cache.Close()
+
+	entry := &CacheEntry{
+		GeneratedMessage: "Benchmark generated message",
+		OriginalMessage:  "Benchmark original message",
+		Timestamp:        time.Now(),
+		ExpiresAt:        nil,
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		key := "bench-key-" + string(rune(i))
+		_ = cache.Put(key, entry)
+	}
+}
+
+func BenchmarkCacheGet(b *testing.B) {
+	tempDir := b.TempDir()
+	dbPath := filepath.Join(tempDir, "bench.db")
+
+	cache, err := NewCacheWithProject(dbPath, "bench-project")
+	if err != nil {
+		b.Fatalf("Failed to create cache: %v", err)
+	}
+	defer cache.Close()
+
+	// Pre-populate cache with test data
+	entry := &CacheEntry{
+		GeneratedMessage: "Benchmark generated message",
+		OriginalMessage:  "Benchmark original message",
+		Timestamp:        time.Now(),
+		ExpiresAt:        nil,
+	}
+
+	keys := make([]string, 100)
+	for i := 0; i < 100; i++ {
+		key := "get-bench-key-" + string(rune(i))
+		keys[i] = key
+		_ = cache.Put(key, entry)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		key := keys[i%len(keys)]
+		_, _ = cache.Get(key)
 	}
 }

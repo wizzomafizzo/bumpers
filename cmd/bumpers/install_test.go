@@ -2,9 +2,12 @@ package main
 
 import (
 	"testing"
+
+	"github.com/wizzomafizzo/bumpers/internal/testutil"
 )
 
 func TestCreateInstallCommand(t *testing.T) {
+	testutil.InitTestLogger(t)
 	t.Parallel()
 
 	cmd := createInstallCommand()

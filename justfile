@@ -5,6 +5,7 @@ set shell := ["bash", "-c"]
 alias t := test
 alias l := lint  
 alias b := build
+alias i := install
 
 # List all recipes
 default:
@@ -15,31 +16,47 @@ build:
     mkdir -p bin
     go build -o bin/bumpers ./cmd/bumpers
 
-# Run tests with optional package targeting, test name filtering, and race flag
-test package="./..." run="" race="auto":
+# Run go test with TDD Guard if available
+_test-with-guard *args:
     #!/usr/bin/env bash
     set -euo pipefail
-
-    case "{{race}}" in
-        true)  RACE_FLAG="-race" ;;
-        false) RACE_FLAG="" ;;
-        auto)  [[ -z "${GOOS:-}" ]] && RACE_FLAG="-race" || RACE_FLAG="" ;;
-        *)     echo "Invalid race option: {{race}}" >&2; exit 1 ;;
-    esac
-
-    # Add -run flag if specified
-    if [ -n "{{run}}" ]; then
-        RUN_FLAG="-run {{run}}"
+    if command -v tdd-guard-go >/dev/null 2>&1; then
+        go test -json {{args}} 2>&1 | tdd-guard-go -project-root {{justfile_directory()}}
     else
-        RUN_FLAG=""
+        go test {{args}}
     fi
 
-    # Run tests with or without TDD Guard
-    if command -v tdd-guard-go >/dev/null 2>&1; then
-        go test -json -v $RACE_FLAG $RUN_FLAG -coverprofile=coverage.txt -covermode=atomic {{package}} 2>&1 | \
-            tdd-guard-go -project-root {{justfile_directory()}}
+# Run all test categories  
+test *args:
+    just test-unit {{args}}
+    just test-integration {{args}}
+    just test-e2e {{args}}
+
+# Run unit tests
+test-unit *args="":
+    #!/usr/bin/env bash
+    if [ "{{args}}" = "" ]; then
+        just _test-with-guard -race ./cmd/... ./internal/...
     else
-        go test -v $RACE_FLAG $RUN_FLAG -coverprofile=coverage.txt -covermode=atomic {{package}}
+        just _test-with-guard -race {{args}}
+    fi
+
+# Run integration tests
+test-integration *args="":
+    #!/usr/bin/env bash
+    if [ "{{args}}" = "" ]; then
+        just _test-with-guard -race -tags=integration ./...
+    else
+        just _test-with-guard -race {{args}} -tags=integration
+    fi
+
+# Run end-to-end tests
+test-e2e *args="":
+    #!/usr/bin/env bash
+    if [ "{{args}}" = "" ]; then
+        just _test-with-guard -race -tags=e2e ./...
+    else
+        just _test-with-guard -race {{args}} -tags=e2e
     fi
 
 # Install the bumpers binary
@@ -57,12 +74,63 @@ lint fix="":
         golangci-lint run ./...
     fi
 
-# Clean build artifacts
+# Generate coverage report and open in browser
+coverage:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "Generating coverage report..."
+    go test -race -coverprofile=coverage.out ./cmd/... ./internal/...
+    go tool cover -html=coverage.out -o coverage.html
+    if command -v xdg-open >/dev/null 2>&1; then
+        xdg-open coverage.html
+    elif command -v open >/dev/null 2>&1; then
+        open coverage.html
+    else
+        echo "Coverage report generated: coverage.html"
+    fi
+
+# Generate per-package coverage reports
+coverage-by-package:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "Generating per-package coverage reports..."
+    mkdir -p coverage
+    
+    # Get list of packages with tests
+    packages=$(go list ./cmd/... ./internal/... | grep -v "/testutil$")
+    
+    for pkg in $packages; do
+        pkg_name=$(basename "$pkg")
+        echo "Coverage for $pkg..."
+        if go test -race -coverprofile="coverage/${pkg_name}.out" "$pkg" 2>/dev/null; then
+            if [ -f "coverage-reports/${pkg_name}.out" ]; then
+                coverage=$(go tool cover -func="coverage/${pkg_name}.out" | grep total | awk '{print $3}')
+                echo "  $pkg: $coverage"
+            fi
+        else
+            echo "  $pkg: no tests or test failed"
+        fi
+    done
+    
+    echo ""
+    echo "Summary report:"
+    for pkg in $packages; do
+        pkg_name=$(basename "$pkg")
+        if [ -f "coverage/${pkg_name}.out" ]; then
+            if coverage=$(go tool cover -func="coverage/${pkg_name}.out" | grep total | awk '{print $3}'); then
+                printf "%-30s %s\n" "$pkg" "$coverage"
+            else
+                printf "%-30s %s\n" "$pkg" "error reading coverage"
+            fi
+        else
+            printf "%-30s %s\n" "$pkg" "no coverage data"
+        fi
+    done
+
+# Clean build and test artifacts
 clean:
     go clean
-    rm -f coverage.txt
-    rm -rf bin/
-
-# Show test coverage
-coverage: test
-    go tool cover -html=coverage.txt
+    go clean -testcache
+    rm -f coverage.txt coverage-*.txt coverage.out coverage.html
+    rm -f report.json
+    rm -rf bin/ coverage/

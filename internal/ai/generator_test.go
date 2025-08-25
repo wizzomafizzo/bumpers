@@ -2,21 +2,16 @@ package ai
 
 import (
 	"path/filepath"
-	"sync"
 	"testing"
 
 	"github.com/wizzomafizzo/bumpers/internal/claude"
-	"github.com/wizzomafizzo/bumpers/internal/logger"
+	"github.com/wizzomafizzo/bumpers/internal/testutil"
 )
-
-var loggerInitOnce sync.Once
 
 // setupTest initializes test logger to prevent race conditions
 func setupTest(t *testing.T) {
 	t.Helper()
-	loggerInitOnce.Do(func() {
-		logger.InitTest()
-	})
+	testutil.InitTestLogger(t)
 }
 
 func TestGeneratorGenerateMessage(t *testing.T) {
@@ -30,14 +25,14 @@ func TestGeneratorGenerateMessage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create generator: %v", err)
 	}
-	defer func() {
+	t.Cleanup(func() {
 		if closeErr := generator.Close(); closeErr != nil {
 			t.Logf("Failed to close generator: %v", closeErr)
 		}
-	}()
+	})
 
 	// Replace launcher with mock to avoid slow Claude CLI discovery
-	mock := claude.NewMockLauncher()
+	mock := claude.SetupMockLauncherWithDefaults()
 	mock.SetResponseForPattern(".*", "AI enhanced test response")
 	generator.launcher = mock
 
@@ -70,14 +65,14 @@ func TestGeneratorCaching(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create generator: %v", err)
 	}
-	defer func() {
+	t.Cleanup(func() {
 		if closeErr := generator.Close(); closeErr != nil {
 			t.Logf("Failed to close generator: %v", closeErr)
 		}
-	}()
+	})
 
 	// Replace launcher with mock to avoid slow Claude CLI discovery
-	mock := claude.NewMockLauncher()
+	mock := claude.SetupMockLauncherWithDefaults()
 	mock.SetResponseForPattern(".*", "AI cached test response")
 	generator.launcher = mock
 
@@ -120,14 +115,14 @@ func TestGeneratorShouldUseCache(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create generator: %v", err)
 	}
-	defer func() {
+	t.Cleanup(func() {
 		if closeErr := generator.Close(); closeErr != nil {
 			t.Logf("Failed to close generator: %v", closeErr)
 		}
-	}()
+	})
 
 	// Replace launcher with mock to avoid slow Claude CLI discovery
-	mock := claude.NewMockLauncher()
+	mock := claude.SetupMockLauncherWithDefaults()
 	mock.SetResponseForPattern(".*", "AI should use cache test response")
 	generator.launcher = mock
 
@@ -165,14 +160,14 @@ func TestGeneratorCachingWithMock(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create generator: %v", err)
 	}
-	defer func() {
+	t.Cleanup(func() {
 		if closeErr := generator.Close(); closeErr != nil {
 			t.Logf("Failed to close generator: %v", closeErr)
 		}
-	}()
+	})
 
 	// Replace launcher with enhanced mock that returns different results each call
-	mock := claude.NewMockLauncher()
+	mock := claude.SetupMockLauncherWithDefaults()
 	mock.SetResponseForPattern(".*", "Mock AI response A")
 	generator.launcher = mock
 
@@ -200,9 +195,7 @@ func TestGeneratorCachingWithMock(t *testing.T) {
 	}
 
 	// Mock should only have been called once if caching works
-	if mock.GetCallCount() != 1 {
-		t.Errorf("Expected mock to be called once due to caching, but was called %d times", mock.GetCallCount())
-	}
+	claude.AssertMockCalled(t, mock, 1)
 }
 
 func TestGeneratorLogsCache(t *testing.T) {
@@ -216,14 +209,14 @@ func TestGeneratorLogsCache(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create generator: %v", err)
 	}
-	defer func() {
+	t.Cleanup(func() {
 		if closeErr := generator.Close(); closeErr != nil {
 			t.Logf("Failed to close generator: %v", closeErr)
 		}
-	}()
+	})
 
 	// Replace launcher with enhanced mock
-	mock := claude.NewMockLauncher()
+	mock := claude.SetupMockLauncherWithDefaults()
 	mock.SetResponseForPattern(".*", "Mock cache test response")
 	generator.launcher = mock
 
@@ -247,7 +240,5 @@ func TestGeneratorLogsCache(t *testing.T) {
 
 	// Verify caching behavior through mock call count
 	// Should only call the launcher once due to caching
-	if mock.GetCallCount() != 1 {
-		t.Errorf("Expected mock to be called once due to caching, but was called %d times", mock.GetCallCount())
-	}
+	claude.AssertMockCalled(t, mock, 1)
 }

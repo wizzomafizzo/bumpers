@@ -6,27 +6,23 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/wizzomafizzo/bumpers/internal/ai"
 	"github.com/wizzomafizzo/bumpers/internal/claude"
 	"github.com/wizzomafizzo/bumpers/internal/constants"
 	"github.com/wizzomafizzo/bumpers/internal/filesystem"
 	"github.com/wizzomafizzo/bumpers/internal/hooks"
-	"github.com/wizzomafizzo/bumpers/internal/logger"
 	"github.com/wizzomafizzo/bumpers/internal/storage"
+	"github.com/wizzomafizzo/bumpers/internal/testutil"
 )
-
-var loggerInitOnce sync.Once
 
 // setupTest initializes test logger to prevent race conditions
 func setupTest(t *testing.T) {
 	t.Helper()
-	loggerInitOnce.Do(func() {
-		logger.InitTest()
-	})
+	testutil.InitTestLogger(t)
 }
 
 // createTempConfig creates a temporary config file for testing
@@ -49,13 +45,8 @@ func TestNewAppWithWorkDir(t *testing.T) {
 
 	app := NewAppWithWorkDir(configPath, workDir)
 
-	if app.configPath != configPath {
-		t.Errorf("Expected configPath %s, got %s", configPath, app.configPath)
-	}
-
-	if app.workDir != workDir {
-		t.Errorf("Expected workDir %s, got %s", workDir, app.workDir)
-	}
+	assert.Equal(t, configPath, app.configPath, "configPath should match")
+	assert.Equal(t, workDir, app.workDir, "workDir should match")
 }
 
 // TestAppWithMemoryFileSystem tests App initialization with in-memory filesystem for parallel testing
@@ -261,7 +252,7 @@ func TestProcessHookDangerousCommand(t *testing.T) {
 	app := NewApp(configPath)
 
 	// Set up mock launcher for AI generation
-	mock := claude.NewMockLauncher()
+	mock := claude.SetupMockLauncherWithDefaults()
 	mock.SetResponseForPattern(".*", "AI-generated response about dangerous rm command")
 	app.SetMockLauncher(mock)
 
@@ -983,9 +974,9 @@ func TestInstallUsesPathConstants(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to change to temp directory: %v", err)
 	}
-	defer func() {
+	t.Cleanup(func() {
 		_ = os.Chdir(oldDir)
-	}()
+	})
 
 	app := NewAppWithWorkDir(configPath, tempDir)
 
@@ -1361,39 +1352,44 @@ commands:
 	app := NewApp(configPath)
 
 	tests := []struct {
-		name           string
-		promptJSON     string
-		expectedOutput string
+		name    string
+		input   string
+		want    string
+		wantErr bool
 	}{
 		{
 			name: "Help command ($help)",
-			promptJSON: `{
+			input: `{
 				"prompt": "$help"
 			}`,
-			expectedOutput: `{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit",` +
+			want: `{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit",` +
 				`"additionalContext":"Available commands:\\n$help - Show this help\\n$status - Show project status"}}`,
+			wantErr: false,
 		},
 		{
 			name: "Status command ($status)",
-			promptJSON: `{
+			input: `{
 				"prompt": "$status"
 			}`,
-			expectedOutput: `{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit",` +
+			want: `{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit",` +
 				`"additionalContext":"Project Status: All systems operational"}}`,
+			wantErr: false,
 		},
 		{
 			name: "Non-command prompt",
-			promptJSON: `{
+			input: `{
 				"prompt": "regular question"
 			}`,
-			expectedOutput: "",
+			want:    "",
+			wantErr: false,
 		},
 		{
 			name: "Invalid command index ($5)",
-			promptJSON: `{
+			input: `{
 				"prompt": "$5"
 			}`,
-			expectedOutput: "",
+			want:    "",
+			wantErr: false,
 		},
 	}
 
@@ -1401,13 +1397,15 @@ commands:
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			result, err := app.ProcessUserPrompt(json.RawMessage(tt.promptJSON))
-			if err != nil {
-				t.Fatalf("ProcessUserPrompt failed: %v", err)
+			result, err := app.ProcessUserPrompt(json.RawMessage(tt.input))
+
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ProcessUserPrompt() error = %v, wantErr %v", err, tt.wantErr)
+				return
 			}
 
-			if result != tt.expectedOutput {
-				t.Errorf("Expected %q, got %q", tt.expectedOutput, result)
+			if !tt.wantErr && result != tt.want {
+				t.Errorf("ProcessUserPrompt() = %q, want %q", result, tt.want)
 			}
 		})
 	}
@@ -1453,7 +1451,7 @@ func TestProcessUserPromptWithCommandGeneration(t *testing.T) {
 	app := NewApp(configPath)
 
 	// Set up mock launcher
-	mockLauncher := claude.NewMockLauncher()
+	mockLauncher := claude.SetupMockLauncherWithDefaults()
 	mockLauncher.SetResponseForPattern("", "Enhanced help message from AI")
 	app.SetMockLauncher(mockLauncher)
 
@@ -1544,7 +1542,7 @@ func TestInstallWithPathCommand(t *testing.T) { //nolint:paralleltest // modifie
 
 	// Save original args
 	originalArgs := os.Args
-	defer func() { os.Args = originalArgs }()
+	t.Cleanup(func() { os.Args = originalArgs })
 
 	// Simulate running from PATH
 	os.Args = []string{"bumpers", "install"}
@@ -2004,8 +2002,7 @@ func TestProcessSessionStartWithTodayVariable(t *testing.T) {
 	}
 }
 
-func TestProcessSessionStartClearsSessionCache(t *testing.T) {
-	t.Parallel()
+func TestProcessSessionStartClearsSessionCache(t *testing.T) { //nolint:paralleltest,revive // Cannot use t.Parallel() due to t.Setenv() in setupSessionCacheTest()
 	setupTest(t)
 
 	app, cachePath, tempDir := setupSessionCacheTest(t)
@@ -2030,16 +2027,8 @@ func setupSessionCacheTest(t *testing.T) (app *App, cachePath, tempDir string) {
 	t.Helper()
 	tempDir = t.TempDir()
 
-	// Setup environment
-	originalHome := os.Getenv("HOME")
-	t.Cleanup(func() {
-		if originalHome != "" {
-			_ = os.Setenv("HOME", originalHome)
-		} else {
-			_ = os.Unsetenv("HOME")
-		}
-	})
-	_ = os.Setenv("HOME", tempDir)
+	// Setup environment using t.Setenv for automatic cleanup
+	t.Setenv("HOME", tempDir)
 
 	configPath := createTempConfig(t, `session:
   - add: "Session started"`)
@@ -2062,7 +2051,12 @@ func populateSessionCache(t *testing.T, cachePath, tempDir string) {
 	if err != nil {
 		t.Fatalf("Failed to create cache: %v", err)
 	}
-	defer func() { _ = cache.Close() }()
+	// Close cache after populating to allow ProcessSessionStart to access it
+	defer func() {
+		if closeErr := cache.Close(); closeErr != nil {
+			t.Logf("Failed to close cache: %v", closeErr)
+		}
+	}()
 
 	expiry := time.Now().Add(24 * time.Hour)
 	sessionEntry := &ai.CacheEntry{
@@ -2090,7 +2084,7 @@ func verifySessionCacheCleared(t *testing.T, cachePath, tempDir string) {
 	if err != nil {
 		t.Fatalf("Failed to reopen cache: %v", err)
 	}
-	defer func() { _ = cache.Close() }()
+	t.Cleanup(func() { _ = cache.Close() })
 
 	retrieved, err := cache.Get("test-session-key")
 	if err != nil {
@@ -2113,7 +2107,7 @@ func TestProcessSessionStartWithAIGeneration(t *testing.T) {
 	app := NewApp(configPath)
 
 	// Set up mock launcher
-	mockLauncher := claude.NewMockLauncher()
+	mockLauncher := claude.SetupMockLauncherWithDefaults()
 	mockLauncher.SetResponseForPattern("", "Enhanced session message from AI")
 	app.SetMockLauncher(mockLauncher)
 
@@ -2354,8 +2348,7 @@ func TestProcessHookWithAIGeneration(t *testing.T) {
 	app := NewAppWithWorkDir(configPath, tempDir)
 
 	// Inject mock launcher to ensure tests use mock Claude CLI
-	mock := claude.NewMockLauncher()
-	mock.SetResponseForPattern(".*", "Mock response")
+	mock := claude.SetupMockLauncherWithDefaults()
 	app.SetMockLauncher(mock)
 
 	// Verify mock was set (simple field access test)
@@ -2438,8 +2431,7 @@ func TestProcessHookAIGenerationRequired(t *testing.T) {
 	app := NewAppWithWorkDir(configPath, tempDir)
 
 	// Inject mock launcher to ensure tests use mock Claude CLI
-	mock := claude.NewMockLauncher()
-	mock.SetResponseForPattern(".*", "Mock response")
+	mock := claude.SetupMockLauncherWithDefaults()
 	app.SetMockLauncher(mock)
 
 	hookInput := `{
@@ -2815,7 +2807,8 @@ func TestProcessHookRoutesPostToolUse(t *testing.T) {
 	app := NewApp(configPath)
 
 	// Use static testdata transcript
-	transcriptPath := filepath.Join("../../testdata", "transcript-not-related.jsonl")
+	testdataDir := "../../testdata"
+	transcriptPath := filepath.Join(testdataDir, "transcript-not-related.jsonl")
 	absPath, err := filepath.Abs(transcriptPath)
 	if err != nil {
 		t.Fatalf("Failed to get absolute path: %v", err)
@@ -2864,7 +2857,8 @@ func TestPostToolUseWithDifferentTranscript(t *testing.T) {
 	app := NewApp(configPath)
 
 	// Use static testdata transcript with permission denied content
-	transcriptPath := filepath.Join("../../testdata", "transcript-permission-denied.jsonl")
+	testdataDir := "../../testdata"
+	transcriptPath := filepath.Join(testdataDir, "transcript-permission-denied.jsonl")
 	absPath, err := filepath.Abs(transcriptPath)
 	if err != nil {
 		t.Fatalf("Failed to get absolute path: %v", err)
@@ -2913,7 +2907,8 @@ func TestPostToolUseRuleNotMatching(t *testing.T) {
 	app := NewApp(configPath)
 
 	// Use transcript that won't match the "file not found" pattern
-	transcriptPath := filepath.Join("../../testdata", "transcript-permission-denied.jsonl")
+	testdataDir := "../../testdata"
+	transcriptPath := filepath.Join(testdataDir, "transcript-no-match.jsonl")
 	absPath, err := filepath.Abs(transcriptPath)
 	if err != nil {
 		t.Fatalf("Failed to get absolute path: %v", err)

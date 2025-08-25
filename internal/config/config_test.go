@@ -1,10 +1,14 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // Helper function to test config loading with basic rule validation
@@ -12,18 +16,12 @@ func testConfigLoading(t *testing.T, configFile, expectedPattern string) {
 	t.Helper()
 
 	config, err := Load(configFile)
-	if err != nil {
-		t.Fatalf("Expected no error, got %v", err)
-	}
+	require.NoError(t, err, "Config loading should not error")
 
-	if len(config.Rules) != 1 {
-		t.Fatalf("Expected 1 rule, got %d", len(config.Rules))
-	}
+	require.Len(t, config.Rules, 1, "Should have exactly 1 rule")
 
 	rule := config.Rules[0]
-	if rule.Match != expectedPattern {
-		t.Errorf("Expected rule pattern '%s', got %s", expectedPattern, rule.Match)
-	}
+	assert.Equal(t, expectedPattern, rule.Match, "Rule pattern should match expected")
 }
 
 func TestLoadConfig(t *testing.T) {
@@ -38,9 +36,7 @@ func TestLoadConfig(t *testing.T) {
 `
 
 	err := os.WriteFile(configFile, []byte(yamlContent), 0o600)
-	if err != nil {
-		t.Fatalf("Failed to write test config: %v", err)
-	}
+	require.NoError(t, err, "Should be able to write test config file")
 
 	testConfigLoading(t, configFile, "go test.*")
 }
@@ -102,18 +98,12 @@ func TestLoadConfigWithNewStructure(t *testing.T) {
 	}
 
 	rule := config.Rules[0]
-	if rule.Send == "" {
-		t.Error("Expected message to be populated")
-	}
+	assert.NotEmpty(t, rule.Send, "Expected message to be populated")
 
 	generate := rule.GetGenerate()
-	if generate.Mode != "always" {
-		t.Errorf("Expected Generate.Mode to be 'always', got %s", generate.Mode)
-	}
-
-	if generate.Prompt != "Explain why direct go test is discouraged" {
-		t.Errorf("Expected Generate.Prompt to be set correctly, got %s", generate.Prompt)
-	}
+	assert.Equal(t, "always", generate.Mode, "Expected Generate.Mode to be 'always'")
+	assert.Equal(t, "Explain why direct go test is discouraged", generate.Prompt,
+		"Expected Generate.Prompt to be set correctly")
 }
 
 func TestSimplifiedSchemaHasNoActionConstants(t *testing.T) {
@@ -1076,44 +1066,191 @@ func TestWhenFieldParsing(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			config, err := LoadFromYAML([]byte(tc.yamlContent))
-			if err != nil {
-				t.Fatalf("Failed to load config: %v", err)
-			}
-
-			if len(config.Rules) != 1 {
-				t.Fatalf("Expected 1 rule, got %d", len(config.Rules))
-			}
-
-			rule := config.Rules[0]
+			t.Parallel()
+			rule := loadTestRule(t, tc.yamlContent)
 			expandedWhen := rule.ExpandWhen()
-
-			if len(expandedWhen) != len(tc.expectedWhen) {
-				t.Fatalf("Expected When %v, got %v", tc.expectedWhen, expandedWhen)
-			}
-
-			// Convert to map for order-independent comparison
-			expected := make(map[string]bool)
-			for _, w := range tc.expectedWhen {
-				expected[w] = true
-			}
-
-			actual := make(map[string]bool)
-			for _, w := range expandedWhen {
-				actual[w] = true
-			}
-
-			for expectedFlag := range expected {
-				if !actual[expectedFlag] {
-					t.Errorf("Expected flag '%s' not found in expanded When: %v", expectedFlag, expandedWhen)
-				}
-			}
-
-			for actualFlag := range actual {
-				if !expected[actualFlag] {
-					t.Errorf("Unexpected flag '%s' found in expanded When: %v", actualFlag, expandedWhen)
-				}
-			}
+			validateWhenExpansion(t, expandedWhen, tc.expectedWhen)
 		})
+	}
+}
+
+func loadTestRule(t *testing.T, yamlContent string) Rule {
+	t.Helper()
+	config, err := LoadFromYAML([]byte(yamlContent))
+	if err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
+	if len(config.Rules) != 1 {
+		t.Fatalf("Expected 1 rule, got %d", len(config.Rules))
+	}
+	return config.Rules[0]
+}
+
+func validateWhenExpansion(t *testing.T, actual, expected []string) {
+	t.Helper()
+	if len(actual) != len(expected) {
+		t.Fatalf("Expected When %v, got %v", expected, actual)
+	}
+
+	expectedMap := sliceToMap(expected)
+	actualMap := sliceToMap(actual)
+
+	assertFlagsMatch(t, expectedMap, actualMap, actual)
+}
+
+func sliceToMap(slice []string) map[string]bool {
+	result := make(map[string]bool)
+	for _, item := range slice {
+		result[item] = true
+	}
+	return result
+}
+
+func assertFlagsMatch(t *testing.T, expected, actual map[string]bool, actualSlice []string) {
+	t.Helper()
+	for expectedFlag := range expected {
+		if !actual[expectedFlag] {
+			t.Errorf("Expected flag '%s' not found in expanded When: %v", expectedFlag, actualSlice)
+		}
+	}
+	for actualFlag := range actual {
+		if !expected[actualFlag] {
+			t.Errorf("Unexpected flag '%s' found in expanded When: %v", actualFlag, actualSlice)
+		}
+	}
+}
+
+// Benchmark tests for config parsing performance
+func BenchmarkLoadConfig(b *testing.B) {
+	tempDir := b.TempDir()
+	configFile := filepath.Join(tempDir, "test.yaml")
+
+	yamlContent := `rules:
+  - match: "^go test"
+    send: "Use just test instead"
+  - match: "^rm -rf"
+    send: "Dangerous command"
+  - match: "^git push"
+    send: "Review before pushing"
+`
+
+	err := os.WriteFile(configFile, []byte(yamlContent), 0o600)
+	if err != nil {
+		b.Fatalf("Failed to write config file: %v", err)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = Load(configFile)
+	}
+}
+
+// Fuzz test for config YAML parsing
+func FuzzLoadPartial(f *testing.F) {
+	// Add valid seed inputs
+	f.Add(`rules:
+  - match: "go test"
+    send: "Use just test"`)
+	f.Add(`rules:
+  - match: "^rm -rf"
+    tool: "Bash"
+    send: "Dangerous"`)
+	f.Add(`rules: []`)
+
+	f.Fuzz(func(_ *testing.T, input string) {
+		_, _ = LoadPartial([]byte(input))
+		// No assertions - just ensuring no panics occur
+	})
+}
+
+// Example demonstrates how to create and use a basic configuration
+func ExampleLoadFromYAML() {
+	yamlConfig := `rules:
+  - match: "go test.*"
+    send: "Use 'just test' instead for better TDD integration"
+    generate:
+      mode: "session"
+      prompt: "Explain the benefits of using just test vs go test"`
+
+	config, err := LoadFromYAML([]byte(yamlConfig))
+	if err != nil {
+		_, _ = fmt.Printf("Error: %v\n", err)
+		return
+	}
+
+	_, _ = fmt.Printf("Loaded %d rules\n", len(config.Rules))
+	_, _ = fmt.Printf("First rule pattern: %s\n", config.Rules[0].Match)
+
+	// Output:
+	// Loaded 1 rules
+	// First rule pattern: go test.*
+}
+
+// Example shows how to work with the default configuration
+func ExampleDefaultConfig() {
+	config := DefaultConfig()
+
+	_, _ = fmt.Printf("Default rules: %d\n", len(config.Rules))
+	_, _ = fmt.Printf("Has commands: %v\n", len(config.Commands) > 0)
+	_, _ = fmt.Printf("Has session notes: %v\n", len(config.Session) > 0)
+
+	// Check for go test rule
+	hasGoTestRule := false
+	for _, rule := range config.Rules {
+		if strings.Contains(rule.Match, "go test") {
+			hasGoTestRule = true
+			break
+		}
+	}
+	_, _ = fmt.Printf("Has go test rule: %v\n", hasGoTestRule)
+
+	// Output:
+	// Default rules: 3
+	// Has commands: true
+	// Has session notes: true
+	// Has go test rule: true
+}
+
+// TestFlagExclusionBehavior tests the !flag exclusion logic that mutation testing revealed
+func TestFlagExclusionBehavior(t *testing.T) {
+	t.Parallel()
+
+	rule := Rule{
+		When: []string{"input", "output", "!reasoning"}, // Include input/output but exclude reasoning
+	}
+
+	flags := rule.ExpandWhen()
+
+	// Should have input and output but NOT reasoning
+	expected := []string{"input", "output"}
+
+	if len(flags) != len(expected) {
+		t.Errorf("Expected %d flags, got %d: %v", len(expected), len(flags), flags)
+	}
+
+	// Check specific flags
+	hasInput := false
+	hasOutput := false
+	hasReasoning := false
+
+	for _, flag := range flags {
+		switch flag {
+		case "input":
+			hasInput = true
+		case "output":
+			hasOutput = true
+		case "reasoning":
+			hasReasoning = true
+		}
+	}
+
+	if !hasInput {
+		t.Error("Expected 'input' flag to be present")
+	}
+	if !hasOutput {
+		t.Error("Expected 'output' flag to be present")
+	}
+	if hasReasoning {
+		t.Error("Expected 'reasoning' flag to be excluded due to !reasoning")
 	}
 }

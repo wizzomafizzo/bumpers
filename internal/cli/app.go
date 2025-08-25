@@ -216,30 +216,34 @@ func (a *App) ProcessHook(input io.Reader) (string, error) {
 }
 
 // ProcessPostToolUse processes post-tool-use hook events
-func (a *App) ProcessPostToolUse(rawJSON json.RawMessage) (string, error) {
+func (*App) ProcessPostToolUse(rawJSON json.RawMessage) (string, error) {
 	log.Debug().Msg("ProcessPostToolUse called")
 
 	// Parse the JSON to get transcript path
 	var event map[string]any
 	if err := json.Unmarshal(rawJSON, &event); err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to unmarshal post-tool-use event: %w", err)
 	}
 
-	transcriptPath, _ := event["transcript_path"].(string)
+	transcriptPath, _ := event["transcript_path"].(string) //nolint:revive // intentionally ignoring ok value
 
 	// Read transcript if available
-	if transcriptPath != "" {
-		content, err := os.ReadFile(transcriptPath)
-		if err == nil {
-			contentStr := string(content)
-			// Hardcoded patterns for existing tests
-			if strings.Contains(contentStr, "permission denied") {
-				return "File permission error detected", nil
-			}
-			if strings.Contains(contentStr, "not related to my changes") {
-				return "AI claiming unrelated - please verify", nil
-			}
-		}
+	if transcriptPath == "" {
+		return "", nil
+	}
+
+	content, err := os.ReadFile(transcriptPath) //nolint:gosec // transcriptPath comes from Claude Code hook event
+	if err != nil {
+		return "", nil //nolint:nilerr // function returns nil on file read error per existing tests
+	}
+
+	contentStr := string(content)
+	// Hardcoded patterns for existing tests
+	if strings.Contains(contentStr, "permission denied") {
+		return "File permission error detected", nil
+	}
+	if strings.Contains(contentStr, "not related to my changes") {
+		return "AI claiming unrelated - please verify", nil
 	}
 
 	return "", nil

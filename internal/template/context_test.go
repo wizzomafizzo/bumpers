@@ -89,3 +89,62 @@ func TestBuildNoteContext(t *testing.T) {
 		t.Errorf("Expected 1 field in result, got %d", len(result))
 	}
 }
+
+// Table-driven test for context building functions
+func TestBuildContexts(t *testing.T) {
+	t.Parallel()
+
+	expectedDate := time.Now().Format("2006-01-02")
+
+	tests := []struct {
+		buildFunc    func() map[string]any
+		expectedKeys map[string]any
+		name         string
+		expectedLen  int
+	}{
+		{
+			name:      "rule context",
+			buildFunc: func() map[string]any { return BuildRuleContext("go test") },
+			expectedKeys: map[string]any{
+				"Today":   expectedDate,
+				"Command": "go test",
+			},
+			expectedLen: 2,
+		},
+		{
+			name:      "command context",
+			buildFunc: func() map[string]any { return BuildCommandContext("lint") },
+			expectedKeys: map[string]any{
+				"Today": expectedDate,
+				"Name":  "lint",
+			},
+			expectedLen: 2,
+		},
+		{
+			name:      "note context",
+			buildFunc: BuildNoteContext,
+			expectedKeys: map[string]any{
+				"Today": expectedDate,
+			},
+			expectedLen: 1,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			result := tc.buildFunc()
+
+			if len(result) != tc.expectedLen {
+				t.Errorf("Expected %d fields in result, got %d", tc.expectedLen, len(result))
+			}
+
+			for key, expectedValue := range tc.expectedKeys {
+				if result[key] != expectedValue {
+					t.Errorf("Expected %s to be %q, got %v", key, expectedValue, result[key])
+				}
+			}
+		})
+	}
+}

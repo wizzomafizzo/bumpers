@@ -19,9 +19,9 @@ func TestReadFile_TextFile_ReturnsContent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to write test file: %v", err)
 	}
-	defer func() {
+	t.Cleanup(func() {
 		_ = os.Remove("../../test.txt")
-	}()
+	})
 
 	// Test reading the file through template function
 	result := readFile(fs, "test.txt")
@@ -52,9 +52,9 @@ func TestReadFile_BinaryFile_ReturnsBase64(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to write binary test file: %v", err)
 	}
-	defer func() {
+	t.Cleanup(func() {
 		_ = os.Remove("../../binary.dat")
-	}()
+	})
 
 	// Test reading the binary file
 	result := readFile(fs, "binary.dat")
@@ -76,9 +76,9 @@ func TestReadFile_DirectoryTraversal_WithRealFS_ReturnsEmpty(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer func() {
+	t.Cleanup(func() {
 		_ = os.RemoveAll(tempDir)
-	}()
+	})
 
 	// Create a test file inside the temp dir
 	testFile := filepath.Join(tempDir, "safe.txt")
@@ -93,9 +93,9 @@ func TestReadFile_DirectoryTraversal_WithRealFS_ReturnsEmpty(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create outside file: %v", err)
 	}
-	defer func() {
+	t.Cleanup(func() {
 		_ = os.RemoveAll(outsideFile)
-	}()
+	})
 
 	// Change to the temp directory to simulate project context
 	oldDir, _ := os.Getwd()
@@ -103,9 +103,9 @@ func TestReadFile_DirectoryTraversal_WithRealFS_ReturnsEmpty(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to change directory: %v", err)
 	}
-	defer func() {
+	t.Cleanup(func() {
 		_ = os.Chdir(oldDir)
-	}()
+	})
 
 	// Test directory traversal attempt
 	result := readFile(fs, "../outside.txt")
@@ -114,56 +114,69 @@ func TestReadFile_DirectoryTraversal_WithRealFS_ReturnsEmpty(t *testing.T) {
 	}
 }
 
-func TestTestPath_FileNotFound_ReturnsFalse(t *testing.T) {
+func TestTestPath(t *testing.T) {
 	t.Parallel()
-	fs := filesystem.NewMemoryFileSystem()
 
-	// Test checking a file that doesn't exist
-	result := testPath(fs, "nonexistent.txt")
-	if result {
-		t.Error("Expected false for nonexistent file, got true")
+	tests := []struct {
+		name     string
+		setupFS  func(t *testing.T) (filesystem.FileSystem, func())
+		path     string
+		expected bool
+	}{
+		{
+			name: "file not found returns false",
+			setupFS: func(_ *testing.T) (filesystem.FileSystem, func()) {
+				return filesystem.NewMemoryFileSystem(), func() {}
+			},
+			path:     "nonexistent.txt",
+			expected: false,
+		},
+		{
+			name: "file exists returns true",
+			setupFS: func(t *testing.T) (filesystem.FileSystem, func()) {
+				fs := filesystem.NewOSFileSystem()
+				err := os.WriteFile("../../test-exists.txt", []byte("test content"), 0o600)
+				if err != nil {
+					t.Fatalf("Failed to write test file: %v", err)
+				}
+				cleanup := func() {
+					_ = os.Remove("../../test-exists.txt")
+				}
+				return fs, cleanup
+			},
+			path:     "test-exists.txt",
+			expected: true,
+		},
+		{
+			name: "directory exists returns true",
+			setupFS: func(t *testing.T) (filesystem.FileSystem, func()) {
+				fs := filesystem.NewOSFileSystem()
+				err := os.Mkdir("../../test-dir", 0o750)
+				if err != nil {
+					t.Fatalf("Failed to create test directory: %v", err)
+				}
+				cleanup := func() {
+					_ = os.Remove("../../test-dir")
+				}
+				return fs, cleanup
+			},
+			path:     "test-dir",
+			expected: true,
+		},
 	}
-}
 
-func TestTestPath_FileExists_ReturnsTrue(t *testing.T) {
-	t.Parallel()
-	fs := filesystem.NewOSFileSystem()
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 
-	// Create a temporary test file in the project root
-	err := os.WriteFile("../../test-exists.txt", []byte("test content"), 0o600)
-	if err != nil {
-		t.Fatalf("Failed to write test file: %v", err)
-	}
-	defer func() {
-		_ = os.Remove("../../test-exists.txt")
-	}()
+			fs, cleanup := tt.setupFS(t)
+			t.Cleanup(cleanup)
 
-	// Test checking if the file exists
-	result := testPath(fs, "test-exists.txt")
-
-	if !result {
-		t.Error("Expected true for existing file, got false")
-	}
-}
-
-func TestTestPath_DirectoryExists_ReturnsTrue(t *testing.T) {
-	t.Parallel()
-	fs := filesystem.NewOSFileSystem()
-
-	// Create a temporary test directory in the project root
-	err := os.Mkdir("../../test-dir", 0o750)
-	if err != nil {
-		t.Fatalf("Failed to create test directory: %v", err)
-	}
-	defer func() {
-		_ = os.Remove("../../test-dir")
-	}()
-
-	// Test checking if the directory exists
-	result := testPath(fs, "test-dir")
-
-	if !result {
-		t.Error("Expected true for existing directory, got false")
+			result := testPath(fs, tt.path)
+			if result != tt.expected {
+				t.Errorf("testPath() = %v, expected %v", result, tt.expected)
+			}
+		})
 	}
 }
 
@@ -177,9 +190,9 @@ func TestTestPath_DirectoryTraversal_WithRealFS_ReturnsFalse(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer func() {
+	t.Cleanup(func() {
 		_ = os.RemoveAll(tempDir)
-	}()
+	})
 
 	// Create a test file inside the temp dir
 	testFile := filepath.Join(tempDir, "safe.txt")
@@ -194,9 +207,9 @@ func TestTestPath_DirectoryTraversal_WithRealFS_ReturnsFalse(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create outside file: %v", err)
 	}
-	defer func() {
+	t.Cleanup(func() {
 		_ = os.RemoveAll(outsideFile)
-	}()
+	})
 
 	// Change to the temp directory to simulate project context
 	oldDir, _ := os.Getwd()
@@ -204,9 +217,9 @@ func TestTestPath_DirectoryTraversal_WithRealFS_ReturnsFalse(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to change directory: %v", err)
 	}
-	defer func() {
+	t.Cleanup(func() {
 		_ = os.Chdir(oldDir)
-	}()
+	})
 
 	// Test directory traversal attempt
 	result := testPath(fs, "../outside.txt")

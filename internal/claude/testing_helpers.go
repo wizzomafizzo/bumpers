@@ -72,17 +72,8 @@ func UseMockClaudePath(t *testing.T, mockPath string) {
 	originalPath := os.Getenv("PATH")
 	newPath := mockDir + ":" + originalPath
 
-	// Set the new PATH
-	if err := os.Setenv("PATH", newPath); err != nil {
-		t.Fatalf("Failed to set PATH: %v", err)
-	}
-
-	// Restore original PATH when test finishes
-	t.Cleanup(func() {
-		if err := os.Setenv("PATH", originalPath); err != nil {
-			t.Logf("Failed to restore PATH: %v", err)
-		}
-	})
+	// Set the new PATH using t.Setenv for automatic cleanup
+	t.Setenv("PATH", newPath)
 }
 
 // AssertMockCalled verifies that the mock was called

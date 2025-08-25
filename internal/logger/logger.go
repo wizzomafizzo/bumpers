@@ -98,30 +98,10 @@ func (l *Logger) Close() error {
 	return err //nolint:wrapcheck // simple logger cleanup
 }
 
-// InitLogger initializes the global logger instance
+// InitLogger initializes the global logger instance with lumberjack rotation.
+// Deprecated: Use Init() for production logging with rotation.
 func InitLogger(workDir string) error {
-	logDir := filepath.Join(workDir, constants.ClaudeDir, constants.AppSubDir)
-	logFilePath := filepath.Join(logDir, constants.LogFilename)
-
-	// Create log directory if it doesn't exist
-	err := os.MkdirAll(logDir, 0o750)
-	if err != nil {
-		return fmt.Errorf("failed to create log directory %s: %w", logDir, err)
-	}
-
-	// Open log file for appending
-	file, err := os.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600) //nolint:gosec // safe path
-	if err != nil {
-		return fmt.Errorf("failed to open log file %s: %w", logFilePath, err)
-	}
-
-	// Set global logger
-	log.Logger = zerolog.New(file).With().Timestamp().Logger()
-
-	// Note: Global logger file reference not stored for cleanup
-	// Consider using the Logger instance approach instead of global logger
-
-	return nil
+	return Init(workDir)
 }
 
 // Init initializes the global logger with lumberjack rotation
@@ -129,19 +109,11 @@ func Init(workDir string) error {
 	logDir := filepath.Join(workDir, constants.ClaudeDir, constants.AppSubDir)
 	logFile := filepath.Join(logDir, constants.LogFilename)
 
-	// Create log directory if it doesn't exist
-	err := os.MkdirAll(logDir, 0o750)
-	if err != nil {
-		return fmt.Errorf("failed to create log directory %s: %w", logDir, err)
+	if err := ensureLogDir(logDir); err != nil {
+		return err
 	}
 
-	// Create lumberjack logger for automatic rotation
-	lj := &lumberjack.Logger{
-		Filename:   logFile,
-		MaxSize:    10, // MB
-		MaxBackups: 3,  // number of old files to keep
-		MaxAge:     30, // days
-	}
+	lj := createLumberjackLogger(logFile)
 
 	// Create and set global zerolog logger
 	log.Logger = zerolog.New(lj).With().Timestamp().Logger()
@@ -154,10 +126,10 @@ func InitTest() {
 	log.Logger = zerolog.New(io.Discard)
 }
 
-// InitWithProjectContext initializes the global logger with project context and XDG paths
-func InitWithProjectContext(projectCtx *context.ProjectContext) error {
-	// Use storage manager for XDG-compliant paths
-	storageManager := storage.New(&filesystem.OSFileSystem{})
+// InitWithProjectContextAndFS initializes the global logger with project context and injected filesystem
+func InitWithProjectContextAndFS(projectCtx *context.ProjectContext, fs filesystem.FileSystem) error {
+	// Use storage manager for XDG-compliant paths with injected filesystem
+	storageManager := storage.New(fs)
 	logFile, err := storageManager.GetLogPath()
 	if err != nil {
 		return fmt.Errorf("failed to get log path: %w", err)
@@ -175,4 +147,10 @@ func InitWithProjectContext(projectCtx *context.ProjectContext) error {
 	zerolog.SetGlobalLevel(zerolog.DebugLevel)
 
 	return nil
+}
+
+// InitWithProjectContext initializes the global logger with project context and XDG paths
+// Uses OSFileSystem by default for backward compatibility
+func InitWithProjectContext(projectCtx *context.ProjectContext) error {
+	return InitWithProjectContextAndFS(projectCtx, &filesystem.OSFileSystem{})
 }

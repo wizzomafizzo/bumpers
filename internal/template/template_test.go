@@ -92,9 +92,9 @@ func TestExecute_WithReadFileFunction(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
-	defer func() {
+	t.Cleanup(func() {
 		_ = os.Remove("../../readfile-test.txt")
-	}()
+	})
 
 	// Template that uses the readFile function
 	templateStr := "Content: {{readFile \"readfile-test.txt\"}}"
@@ -137,9 +137,9 @@ func TestExecute_WithTestPathFunction_ExistingFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
-	defer func() {
+	t.Cleanup(func() {
 		_ = os.Remove("../../testpath-test.txt")
-	}()
+	})
 
 	// Template that uses the testPath function to check an existing file
 	templateStr := "File exists: {{testPath \"testpath-test.txt\"}}"
@@ -163,9 +163,9 @@ func TestExecute_WithTestPathFunction_InConditional(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
-	defer func() {
+	t.Cleanup(func() {
 		_ = os.Remove("../../config-test.yml")
-	}()
+	})
 
 	// Template that uses testPath in a conditional statement - different from ExistingFile test
 	templateStr := "{{if testPath \"config-test.yml\"}}Config found{{else}}No config{{end}}"
@@ -178,5 +178,41 @@ func TestExecute_WithTestPathFunction_InConditional(t *testing.T) {
 	expected := "Config found"
 	if result != expected {
 		t.Errorf("Expected %q, got %q", expected, result)
+	}
+}
+
+// Benchmark tests for template rendering performance
+func BenchmarkExecuteSimple(b *testing.B) {
+	template := "Hello {{.Name}}"
+	data := map[string]string{"Name": "World"}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = Execute(template, data)
+	}
+}
+
+func BenchmarkExecuteComplex(b *testing.B) {
+	template := `
+	{{if .HasConfig}}Config: {{.ConfigName}}{{else}}No config{{end}}
+	Today: {{.Today}}
+	{{range .Items}}
+	- Item: {{.Name}} ({{.Type}})
+	{{end}}
+	Total: {{len .Items}} items
+	`
+
+	context := BuildNoteContext()
+	context["HasConfig"] = true
+	context["ConfigName"] = "test.yml"
+	context["Items"] = []map[string]string{
+		{"Name": "test1", "Type": "unit"},
+		{"Name": "test2", "Type": "integration"},
+		{"Name": "test3", "Type": "e2e"},
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = Execute(template, context)
 	}
 }

@@ -13,7 +13,7 @@ commands:
   - name: logs
     send: "Read log file in ~/.local/share/bumpers/bumpers.log"
   - name: branch
-    send: "Create a new feature branch before procerding with changes."
+    send: "Create a new feature branch before proceeding with changes."
 
 rules:
   - match: " /tmp"
@@ -21,10 +21,14 @@ rules:
   - match: "go test "
     send: |
       Use "just test" instead for TDD integration:
-      - just test                                # Run all tests
-      - just test ./internal/claude              # Test only a specific package
-      - just test "" TestExample1                # Run all tests with a specific test case
-      - just test ./internal/claude TestExample1 # Test only a specific package with a specific test case
+      just test                               # Run all test categories (unit, integration, e2e)
+      just test-unit                          # Run only unit tests
+      just test-integration                   # Run only integration tests
+      just test-e2e                           # Run only e2e tests
+      just test-unit ./internal/claude        # Test specific package (unit tests only)
+      just test-integration -run TestExample  # Run specific test pattern (integration)
+      just test-unit -v ./internal/claude     # Verbose output for specific package
+      just test-e2e -race=false ./...         # Disable race detection for e2e tests
   - match: "^(gci|go vet|goimports|gofumpt|go *fmt|golangci-lint)"
     send: Use "just lint fix" instead to resolve lint/formatting issues.
   - match: "git commit --no-verify|LEFTHOOK=0"
@@ -37,4 +41,6 @@ rules:
     send: Bumpers should not be skipped.
   - match: "bumpers.yml"
     tool: "Read|Edit|Grep"
-    send: Bumpers configuration file should not be accessed directly.
+    send: Bumpers configuration file should not be accessed.
+  - match: "cat.*EOF"
+    send: Only use appropriate tools for creating/editing files.

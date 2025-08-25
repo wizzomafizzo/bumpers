@@ -1,0 +1,3 @@
+rules:
+  - match: "go test.*"
+    send: "Use just test instead"
