@@ -38,12 +38,13 @@ type Rule struct {
 	Match    string   `yaml:"match" mapstructure:"match"`
 	Tool     string   `yaml:"tool,omitempty" mapstructure:"tool"`
 	Send     string   `yaml:"send" mapstructure:"send"`
-	When     []string `yaml:"when,omitempty" mapstructure:"when"`
+	When     []string `yaml:"when,omitempty" mapstructure:"when"` // Deprecated: Use Event and Sources instead
 	Event    string   `yaml:"event,omitempty" mapstructure:"event"`
-	Fields   []string `yaml:"fields,omitempty" mapstructure:"fields"`
+	Fields   []string `yaml:"fields,omitempty" mapstructure:"fields"` // Deprecated: Use Sources instead
+	Sources  []string `yaml:"sources,omitempty" mapstructure:"sources"`
 }
 
-// ExpandWhen applies smart defaults and exclusion logic to the When field
+// ExpandWhen is deprecated: Use Event and Sources instead
 func (r *Rule) ExpandWhen() []string {
 	if len(r.When) == 0 {
 		return []string{"pre", "input"}
@@ -104,8 +105,7 @@ func (*Rule) mapToSlice(expanded map[string]bool) []string {
 	return result
 }
 
-// hasSourceFlag checks if the when slice contains any explicit source flags (input, output, reasoning)
-// Exclusions (flags starting with !) don't count as explicit inclusion
+// hasSourceFlag checks if the when slice contains any explicit source flags
 func hasSourceFlag(when []string) bool {
 	sourceFlags := map[string]bool{"input": true, "output": true, "reasoning": true}
 	for _, flag := range when {
@@ -241,6 +241,17 @@ func (r *Rule) ValidateEventFields() {
 			r.Fields = []string{"command"}
 		}
 	}
+}
+
+// ValidateEventSources applies smart defaults to Event and Sources
+func (r *Rule) ValidateEventSources() {
+	// Apply default event if empty
+	if r.Event == "" {
+		r.Event = "pre"
+	}
+
+	// No default sources - when empty, match against all available fields
+	// This allows flexibility while still enabling specific targeting when needed
 }
 
 // GetGenerate converts the interface{} Generate field to a Generate struct

@@ -136,6 +136,100 @@ rules:
 
 **Default Behavior:** Rules without a `tools` field only match Bash commands (backward compatibility).
 
+### Hook Event Configuration
+
+Rules can be configured to match different hook events using the `event` and `sources` fields:
+
+#### Event Types
+
+- **`event: "pre"`** (default): Matches PreToolUse hooks - intercepts commands before execution
+- **`event: "post"`**: Matches PostToolUse hooks - analyzes results after tool execution
+
+#### Sources Configuration
+
+The `sources` field specifies which tool input fields to match against:
+
+```yaml
+rules:
+  # Match against specific tool input fields
+  - match: "rm -rf"
+    event: "pre"
+    sources: ["command"]
+    send: "Consider using safer alternatives"
+    
+  # Match against multiple fields  
+  - match: "password"
+    event: "pre"
+    sources: ["command", "description"]
+    send: "Avoid hardcoding secrets"
+    
+  # Match against all available fields (default behavior)
+  - match: "error_pattern"
+    event: "post"
+    # sources: [] (empty = match all fields)
+    send: "Error handling guidance"
+```
+
+#### Post-Tool-Use Hooks
+
+Post-tool-use hooks analyze Claude's reasoning and tool outputs:
+
+```yaml
+rules:
+  - match: "error_pattern"
+    event: "post"
+    sources: ["reasoning"]  # Match Claude's reasoning from transcript
+    generate: once
+    send: "Helpful guidance message"
+    prompt: "AI prompt for contextual analysis"
+    
+  - match: "failed"
+    event: "post"
+    sources: ["tool_output"]  # Match tool output/errors
+    send: "Consider alternative approaches"
+```
+
+**Common Sources:**
+
+Based on Claude Code tool implementations, these are the most common tool input field names:
+
+**Universal Fields (most tools):**
+- **`description`**: Human-readable description of what the tool will do
+- **`command`**: Shell command to execute (Bash tool)
+
+**File Operations:**
+- **`file_path`**: Target file path (Read, Write, Edit, MultiEdit)
+- **`content`**: File content to write (Write tool)
+- **`old_string`**: Text to replace (Edit, MultiEdit)
+- **`new_string`**: Replacement text (Edit, MultiEdit)
+
+**Search Operations:**
+- **`pattern`**: Search pattern/regex (Grep tool)
+- **`path`**: Search directory or file path (Grep, Glob tools)
+- **`glob`**: File pattern matching (Glob tool)
+
+**Web Operations:**
+- **`url`**: Target URL (WebFetch, WebSearch)
+- **`method`**: HTTP method (WebFetch)
+- **`headers`**: HTTP headers (WebFetch)
+- **`body`**: Request body (WebFetch)
+- **`query`**: Search query (WebSearch)
+
+**Task Operations:**
+- **`prompt`**: AI task description (Task tool)
+- **`subagent_type`**: Specialized agent type (Task tool)
+
+**Special Fields:**
+- **`reasoning`**: Claude's internal reasoning (PostToolUse hooks only)
+- **`tool_output`**: Tool execution results/errors (PostToolUse hooks only)
+
+**Configuration Options:**
+- **`event`**: Hook timing - "pre" (default) or "post"
+- **`sources`**: Tool input fields to match (empty = all fields)
+- **Pattern Matching**: Matches against specified source fields using regex
+- **Contextual AI**: AI responses use original context for enhanced guidance
+- **Efficient Processing**: Only processes relevant hook types and fields
+
 ## Key Patterns
 
 - **Value Types**: Prefer values over pointers for performance

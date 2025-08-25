@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/wizzomafizzo/bumpers/internal/ai"
 	"github.com/wizzomafizzo/bumpers/internal/claude"
 	"github.com/wizzomafizzo/bumpers/internal/constants"
@@ -1667,13 +1668,85 @@ func TestProcessHookWorks(t *testing.T) {
 
 	hookInput := `{
 		"hookEventName": "PreToolUse",
-		"toolInput": {"command": "ls"}
+		"tool_input": {"command": "ls"},
+		"tool_name": "Bash"
 	}`
 
 	_, err := app.ProcessHook(strings.NewReader(hookInput))
 	if err != nil {
 		t.Fatalf("ProcessHook failed: %v", err)
 	}
+}
+
+func TestProcessHookPreToolUseMatchesCommand(t *testing.T) {
+	t.Parallel()
+
+	configContent := `rules:
+  - match: "ls"
+    send: "Use file explorer instead"
+    generate: "off"`
+
+	configPath := createTempConfig(t, configContent)
+	app := NewApp(configPath)
+
+	hookInput := `{
+		"hookEventName": "PreToolUse",
+		"tool_input": {"command": "ls"},
+		"tool_name": "Bash"
+	}`
+
+	response, err := app.ProcessHook(strings.NewReader(hookInput))
+	require.NoError(t, err)
+	assert.NotEmpty(t, response, "Should deny command with message")
+	assert.Contains(t, response, "Use file explorer instead")
+}
+
+func TestProcessHookPreToolUseRespectsEventField(t *testing.T) {
+	t.Parallel()
+
+	// Rule with event: "post" should NOT match PreToolUse hooks
+	configContent := `rules:
+  - match: "ls"
+    event: "post"
+    send: "Use file explorer instead"
+    generate: "off"`
+
+	configPath := createTempConfig(t, configContent)
+	app := NewApp(configPath)
+
+	hookInput := `{
+		"hookEventName": "PreToolUse",
+		"tool_input": {"command": "ls"},
+		"tool_name": "Bash"
+	}`
+
+	response, err := app.ProcessHook(strings.NewReader(hookInput))
+	require.NoError(t, err)
+	assert.Empty(t, response, "Rule with event=post should not match PreToolUse hooks")
+}
+
+func TestProcessHookPreToolUseSourcesFiltering(t *testing.T) {
+	t.Parallel()
+
+	// Rule with sources=[command] should not match description field
+	configContent := `rules:
+  - match: "delete"
+    sources: ["command"]
+    send: "Be careful with delete operations"
+    generate: "off"`
+
+	configPath := createTempConfig(t, configContent)
+	app := NewApp(configPath)
+
+	hookInput := `{
+		"hookEventName": "PreToolUse",
+		"tool_input": {"command": "ls", "description": "delete files"},
+		"tool_name": "Bash"
+	}`
+
+	response, err := app.ProcessHook(strings.NewReader(hookInput))
+	require.NoError(t, err)
+	assert.Empty(t, response, "Rule with sources=[command] should not match description field")
 }
 
 func TestProcessHookRoutesSessionStart(t *testing.T) {
@@ -2799,12 +2872,12 @@ func TestProcessHookRoutesPostToolUse(t *testing.T) {
   - match: "error|failed"
     send: "Command failed - check the output"
     event: "post"
-    fields: ["tool_output"]
+    sources: ["tool_output"]
   # Post-tool-use rule matching reasoning
   - match: "not related to my changes"
     send: "AI claiming unrelated - please verify"
     event: "post"
-    fields: ["reasoning"]`
+    sources: ["reasoning"]`
 
 	configPath := createTempConfig(t, configContent)
 	app := NewApp(configPath)
@@ -2855,7 +2928,7 @@ func TestPostToolUseWithDifferentTranscript(t *testing.T) {
   - match: "permission denied"
     send: "File permission error detected"
     event: "post"
-    fields: ["reasoning"]`
+    sources: ["reasoning"]`
 
 	configPath := createTempConfig(t, configContent)
 	app := NewApp(configPath)
@@ -2906,7 +2979,7 @@ func TestPostToolUseRuleNotMatching(t *testing.T) {
   - match: "file not found"
     send: "Check the file path"
     event: "post"
-    fields: ["reasoning"]`
+    sources: ["reasoning"]`
 
 	configPath := createTempConfig(t, configContent)
 	app := NewApp(configPath)
@@ -2950,7 +3023,7 @@ func TestPostToolUseWithCustomPattern(t *testing.T) {
   - match: "timeout.*occurred"
     send: "Operation timed out - check network connection"
     event: "post"
-    fields: ["reasoning"]`
+    sources: ["reasoning"]`
 
 	configPath := createTempConfig(t, configContent)
 	app := NewApp(configPath)
@@ -2997,7 +3070,7 @@ func TestPostToolUseWithToolOutputMatching(t *testing.T) {
   - match: "error.*exit code"
     send: "Tool execution failed"
     event: "post"
-    fields: ["tool_output"]`
+    sources: ["tool_output"]`
 
 	configPath := createTempConfig(t, configContent)
 	app := NewApp(configPath)
@@ -3028,7 +3101,7 @@ func TestPostToolUseWithMultipleFieldMatching(t *testing.T) {
   - match: "timeout|permission denied"
     send: "Operation issue detected"
     event: "post"
-    fields: ["reasoning", "tool_output"]`
+    sources: ["reasoning", "tool_output"]`
 
 	configPath := createTempConfig(t, configContent)
 	app := NewApp(configPath)

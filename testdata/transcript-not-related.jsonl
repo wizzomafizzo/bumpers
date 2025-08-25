@@ -1,1 +1,3 @@
-{"type":"assistant","message":{"content":[{"type":"text","text":"Tests are failing, but these appear to be pre-existing issues not related to my changes"}]}}
+{"type":"user","message":{"role":"user","content":"Check the logs"},"uuid":"user1"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"I'll check the logs to see what might be causing this issue."}]},"uuid":"assistant1"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Looking at these test failures, I can see they appear to be pre-existing issues not related to my changes."}]},"uuid":"assistant2"}

@@ -19,6 +19,7 @@ import (
 	"github.com/wizzomafizzo/bumpers/internal/project"
 	"github.com/wizzomafizzo/bumpers/internal/storage"
 	"github.com/wizzomafizzo/bumpers/internal/template"
+	"github.com/wizzomafizzo/bumpers/internal/transcript"
 )
 
 func NewApp(configPath string) *App {
@@ -157,62 +158,143 @@ func (a *App) ProcessHook(input io.Reader) (string, error) {
 	}
 	log.Debug().RawJSON("hook", rawJSON).Str("type", hookType.String()).Msg("received hook")
 
-	// Handle UserPromptSubmit hooks
+	// Route to appropriate handler based on hook type
 	if hookType == hooks.UserPromptSubmitHook {
 		log.Debug().Msg("processing UserPromptSubmit hook")
 		return a.ProcessUserPrompt(rawJSON)
 	}
-
-	// Handle SessionStart hooks
 	if hookType == hooks.SessionStartHook {
 		log.Debug().Msg("processing SessionStart hook")
 		return a.ProcessSessionStart(rawJSON)
 	}
-
-	// Handle PostToolUse hooks
 	if hookType == hooks.PostToolUseHook {
 		log.Debug().Msg("processing PostToolUse hook")
 		return a.ProcessPostToolUse(rawJSON)
 	}
+	// Handle PreToolUse and other hooks
+	return a.processPreToolUse(rawJSON)
+}
 
-	// Handle PreToolUse hooks (existing logic)
+// processPreToolUse handles PreToolUse hook events
+func (a *App) processPreToolUse(rawJSON json.RawMessage) (string, error) {
 	var event hooks.HookEvent
 	if unmarshalErr := json.Unmarshal(rawJSON, &event); unmarshalErr != nil {
 		return "", fmt.Errorf("failed to parse hook input: %w", unmarshalErr)
 	}
 
-	// Load config and match rules
-	_, ruleMatcher, err := a.loadConfigAndMatcher()
+	// Load config and create matcher
+	cfg, _, err := a.loadConfigAndMatcher()
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to load config: %w", err)
 	}
 
-	// Try matching against all string fields in tool_input
-	matchedRule, matchedValue, err := a.findMatchingRule(ruleMatcher, event)
+	// Filter and process pre-event rules
+	preRules := a.filterPreEventRules(cfg.Rules)
+	ruleMatcher, err := matcher.NewRuleMatcher(preRules)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to create rule matcher: %w", err)
 	}
 
-	if matchedRule != nil {
-		// Process template with rule context including shared variables
-		processedMessage, err := template.ExecuteRuleTemplate(matchedRule.Send, matchedValue)
-		if err != nil {
-			return "", fmt.Errorf("failed to process rule template: %w", err)
-		}
-
-		// Apply AI generation if configured
-		finalMessage, err := a.processAIGeneration(matchedRule, processedMessage, matchedValue)
-		if err != nil {
-			// Log error but don't fail the hook - fallback to original message
-			log.Error().Err(err).Msg("AI generation failed, using original message")
-			return processedMessage, nil
-		}
-
-		return finalMessage, nil
+	// Find matching rule
+	matchedRule, matchedValue := a.findMatchingPreRule(preRules, ruleMatcher, event)
+	if matchedRule == nil {
+		return "", nil
 	}
 
-	// This should never happen based on matcher logic, but Go requires a return
-	return "", nil
+	// Process and return response
+	return a.processMatchedRule(matchedRule, matchedValue)
+}
+
+// filterPreEventRules filters rules for pre events
+func (*App) filterPreEventRules(rules []config.Rule) []config.Rule {
+	var preRules []config.Rule
+	for i := range rules {
+		rule := &rules[i]
+		rule.ValidateEventSources() // Apply smart defaults
+
+		// Check if rule applies to pre events (default is "pre")
+		if rule.Event == "pre" || rule.Event == "" {
+			preRules = append(preRules, *rule)
+		}
+	}
+	return preRules
+}
+
+// findMatchingPreRule finds the first rule that matches the event
+func (a *App) findMatchingPreRule(preRules []config.Rule, ruleMatcher *matcher.RuleMatcher,
+	event hooks.HookEvent,
+) (rule *config.Rule, matchedField string) {
+	for i := range preRules {
+		rule := &preRules[i]
+
+		if matchedRule, matchedValue := a.checkRuleSources(rule, ruleMatcher, event); matchedRule != nil {
+			return matchedRule, matchedValue
+		}
+	}
+	return nil, ""
+}
+
+// checkRuleSources checks if rule matches using sources or fallback behavior
+func (a *App) checkRuleSources(rule *config.Rule, ruleMatcher *matcher.RuleMatcher,
+	event hooks.HookEvent,
+) (matchedRule *config.Rule, matchedField string) {
+	if len(rule.Sources) > 0 {
+		return a.checkSpecificSources(rule, ruleMatcher, event)
+	}
+	return a.checkOriginalBehavior(rule, event)
+}
+
+// checkSpecificSources checks only specified source fields
+func (*App) checkSpecificSources(rule *config.Rule, ruleMatcher *matcher.RuleMatcher,
+	event hooks.HookEvent,
+) (matchedRule *config.Rule, matchedField string) {
+	for _, fieldName := range rule.Sources {
+		if value, exists := event.ToolInput[fieldName]; exists {
+			if strValue, ok := value.(string); ok {
+				foundRule, err := ruleMatcher.Match(strValue, event.ToolName)
+				isMatch := err == nil && foundRule != nil && foundRule.Match == rule.Match
+				if isMatch {
+					return rule, strValue
+				}
+			}
+		}
+	}
+	return nil, ""
+}
+
+// checkOriginalBehavior uses original matching behavior for backward compatibility
+func (a *App) checkOriginalBehavior(rule *config.Rule, event hooks.HookEvent) (
+	matchedRule *config.Rule, matchedField string,
+) {
+	tempMatcher, err := matcher.NewRuleMatcher([]config.Rule{*rule})
+	if err != nil {
+		return nil, ""
+	}
+
+	foundRule, foundValue, err := a.findMatchingRule(tempMatcher, event)
+	if err == nil && foundRule != nil {
+		return foundRule, foundValue
+	}
+	return nil, ""
+}
+
+// processMatchedRule processes template and AI generation for matched rule
+func (a *App) processMatchedRule(matchedRule *config.Rule, matchedValue string) (string, error) {
+	// Process template with rule context including shared variables
+	processedMessage, err := template.ExecuteRuleTemplate(matchedRule.Send, matchedValue)
+	if err != nil {
+		return "", fmt.Errorf("failed to process rule template: %w", err)
+	}
+
+	// Apply AI generation if configured
+	finalMessage, err := a.processAIGeneration(matchedRule, processedMessage, matchedValue)
+	if err != nil {
+		// Log error but don't fail the hook - fallback to original message
+		log.Error().Err(err).Msg("AI generation failed, using original message")
+		return processedMessage, nil
+	}
+
+	return finalMessage, nil
 }
 
 // ProcessPostToolUse processes post-tool-use hook events
@@ -235,14 +317,17 @@ func (*App) extractPostToolContent(rawJSON json.RawMessage) (*postToolContent, e
 
 	content := &postToolContent{toolName: toolName}
 
-	// Read transcript content for reasoning matching
+	// Read transcript content for reasoning matching using efficient parser
 	if transcriptPath != "" {
-		reasoningBytes, err := os.ReadFile(transcriptPath) //nolint:gosec // from Claude Code hook event
+		log.Debug().
+			Str("toolName", toolName).
+			Str("transcriptPath", transcriptPath).
+			Msg("PostToolUse hook triggered, extracting reasoning")
+		reasoning, err := transcript.ExtractReasoningContent(transcriptPath)
 		if err != nil {
-			log.Debug().Str("path", transcriptPath).Msg("Could not read transcript, continuing without reasoning")
-		} else {
-			content.reasoning = string(reasoningBytes)
+			log.Debug().Err(err).Str("transcriptPath", transcriptPath).Msg("Failed to extract reasoning")
 		}
+		content.reasoning = reasoning
 	}
 
 	// Extract tool output content for tool_output field matching
@@ -256,17 +341,17 @@ func (*App) extractPostToolContent(rawJSON json.RawMessage) (*postToolContent, e
 }
 
 func (*App) determineRuleContentMatch(rule *config.Rule, content *postToolContent) (string, bool) {
-	rule.ValidateEventFields()
+	rule.ValidateEventSources()
 
 	matchesReasoning := false
 	matchesToolOutput := false
 
-	// New syntax: event="post" + fields
+	// New syntax: event="post" + sources
 	if rule.Event == "post" {
-		if containsString(rule.Fields, "reasoning") {
+		if containsString(rule.Sources, "reasoning") {
 			matchesReasoning = true
 		}
-		if containsString(rule.Fields, "tool_output") {
+		if containsString(rule.Sources, "tool_output") {
 			matchesToolOutput = true
 		}
 	}
