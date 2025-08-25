@@ -1196,8 +1196,8 @@ func ExampleDefaultConfig() {
 
 	// Check for go test rule
 	hasGoTestRule := false
-	for _, rule := range config.Rules {
-		if strings.Contains(rule.Match, "go test") {
+	for i := range config.Rules {
+		if strings.Contains(config.Rules[i].Match, "go test") {
 			hasGoTestRule = true
 			break
 		}
@@ -1209,6 +1209,114 @@ func ExampleDefaultConfig() {
 	// Has commands: true
 	// Has session notes: true
 	// Has go test rule: true
+}
+
+func getEventFieldsTestCases() []struct {
+	name           string
+	yamlContent    string
+	expectedEvent  string
+	expectedFields []string
+} {
+	return []struct {
+		name           string
+		yamlContent    string
+		expectedEvent  string
+		expectedFields []string
+	}{
+		{
+			name: "post-tool reasoning matching",
+			yamlContent: `rules:
+  - match: "not related to my changes"
+    send: "AI claiming unrelated"
+    event: "post"
+    fields: ["reasoning"]`,
+			expectedEvent:  "post",
+			expectedFields: []string{"reasoning"},
+		},
+		{
+			name: "pre-tool command matching",
+			yamlContent: `rules:
+  - match: "^rm -rf"
+    send: "Dangerous deletion"
+    event: "pre"
+    fields: ["command"]`,
+			expectedEvent:  "pre",
+			expectedFields: []string{"command"},
+		},
+		{
+			name: "tool output matching",
+			yamlContent: `rules:
+  - match: "error|failed"
+    send: "Command failed"
+    event: "post" 
+    fields: ["tool_output"]`,
+			expectedEvent:  "post",
+			expectedFields: []string{"tool_output"},
+		},
+		{
+			name: "multiple field matching",
+			yamlContent: `rules:
+  - match: "password|secret"
+    send: "Avoid secrets"
+    event: "pre"
+    fields: ["command", "content"]`,
+			expectedEvent:  "pre",
+			expectedFields: []string{"command", "content"},
+		},
+		{
+			name: "defaults to pre event when omitted",
+			yamlContent: `rules:
+  - match: "dangerous"
+    send: "Be careful"
+    fields: ["command"]`,
+			expectedEvent:  "pre",
+			expectedFields: []string{"command"},
+		},
+		{
+			name: "defaults to reasoning field for post event",
+			yamlContent: `rules:
+  - match: "unrelated"
+    send: "AI deflection"
+    event: "post"`,
+			expectedEvent:  "post",
+			expectedFields: []string{"reasoning"},
+		},
+	}
+}
+
+func testEventFieldConfiguration(t *testing.T, tc struct {
+	name           string
+	yamlContent    string
+	expectedEvent  string
+	expectedFields []string
+},
+) {
+	config, err := LoadFromYAML([]byte(tc.yamlContent))
+	if err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
+	if len(config.Rules) != 1 {
+		t.Fatalf("Expected 1 rule, got %d", len(config.Rules))
+	}
+
+	rule := config.Rules[0]
+	rule.ValidateEventFields() // Apply defaults
+	assert.Equal(t, tc.expectedEvent, rule.Event)
+	assert.Equal(t, tc.expectedFields, rule.Fields)
+}
+
+// TestEventFieldsConfiguration tests the new Event and Fields configuration syntax
+func TestEventFieldsConfiguration(t *testing.T) {
+	t.Parallel()
+
+	testCases := getEventFieldsTestCases()
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			testEventFieldConfiguration(t, tc)
+		})
+	}
 }
 
 // TestFlagExclusionBehavior tests the !flag exclusion logic that mutation testing revealed

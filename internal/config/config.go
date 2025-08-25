@@ -39,6 +39,8 @@ type Rule struct {
 	Tool     string   `yaml:"tool,omitempty" mapstructure:"tool"`
 	Send     string   `yaml:"send" mapstructure:"send"`
 	When     []string `yaml:"when,omitempty" mapstructure:"when"`
+	Event    string   `yaml:"event,omitempty" mapstructure:"event"`
+	Fields   []string `yaml:"fields,omitempty" mapstructure:"fields"`
 }
 
 // ExpandWhen applies smart defaults and exclusion logic to the When field
@@ -172,8 +174,8 @@ func (c *Config) Validate() error {
 		return errors.New("config must contain at least one rule, command, or session")
 	}
 
-	for i, rule := range c.Rules {
-		if err := rule.Validate(); err != nil {
+	for i := range c.Rules {
+		if err := c.Rules[i].Validate(); err != nil {
 			return fmt.Errorf("rule %d validation failed: %w", i+1, err)
 		}
 	}
@@ -224,6 +226,23 @@ func (r *Rule) Validate() error {
 	return nil
 }
 
+// ValidateEventFields applies smart defaults to Event and Fields
+func (r *Rule) ValidateEventFields() {
+	// Apply default event if empty
+	if r.Event == "" {
+		r.Event = "pre"
+	}
+
+	// Apply default fields based on event if empty
+	if len(r.Fields) == 0 {
+		if r.Event == "post" {
+			r.Fields = []string{"reasoning"}
+		} else {
+			r.Fields = []string{"command"}
+		}
+	}
+}
+
 // GetGenerate converts the interface{} Generate field to a Generate struct
 func (r *Rule) GetGenerate() Generate {
 	// Handle the special case of Generate struct
@@ -262,15 +281,16 @@ func (c *Config) ValidatePartial() (Config, []ValidationWarning) {
 	var warnings []ValidationWarning
 
 	// Validate each rule separately
-	for i, rule := range c.Rules {
+	for i := range c.Rules {
+		rule := &c.Rules[i]
 		if err := rule.Validate(); err != nil {
 			warnings = append(warnings, ValidationWarning{
 				RuleIndex: i,
-				Rule:      rule,
+				Rule:      *rule,
 				Error:     err,
 			})
 		} else {
-			validRules = append(validRules, rule)
+			validRules = append(validRules, *rule)
 		}
 	}
 

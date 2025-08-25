@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -2794,14 +2795,16 @@ func TestProcessHookRoutesPostToolUse(t *testing.T) {
 	setupTest(t)
 
 	configContent := `rules:
-  # Post-tool-use rule matching output
+  # Post-tool-use rule matching output (TODO: implement tool_output support)
   - match: "error|failed"
     send: "Command failed - check the output"
-    when: ["post"]
+    event: "post"
+    fields: ["tool_output"]
   # Post-tool-use rule matching reasoning
   - match: "not related to my changes"
     send: "AI claiming unrelated - please verify"
-    when: ["reasoning"]`
+    event: "post"
+    fields: ["reasoning"]`
 
 	configPath := createTempConfig(t, configContent)
 	app := NewApp(configPath)
@@ -2851,7 +2854,8 @@ func TestPostToolUseWithDifferentTranscript(t *testing.T) {
 	configContent := `rules:
   - match: "permission denied"
     send: "File permission error detected"
-    when: ["reasoning"]`
+    event: "post"
+    fields: ["reasoning"]`
 
 	configPath := createTempConfig(t, configContent)
 	app := NewApp(configPath)
@@ -2901,7 +2905,8 @@ func TestPostToolUseRuleNotMatching(t *testing.T) {
 	configContent := `rules:
   - match: "file not found"
     send: "Check the file path"
-    when: ["reasoning"]`
+    event: "post"
+    fields: ["reasoning"]`
 
 	configPath := createTempConfig(t, configContent)
 	app := NewApp(configPath)
@@ -2933,4 +2938,137 @@ func TestPostToolUseRuleNotMatching(t *testing.T) {
 	if result != "" {
 		t.Errorf("Expected empty result when no rules match, got %q", result)
 	}
+}
+
+// TestPostToolUseWithCustomPattern tests rule system integration with custom patterns
+func TestPostToolUseWithCustomPattern(t *testing.T) {
+	t.Parallel()
+	setupTest(t)
+
+	// Create a config with a custom pattern that doesn't match hardcoded patterns
+	configContent := `rules:
+  - match: "timeout.*occurred"
+    send: "Operation timed out - check network connection"
+    event: "post"
+    fields: ["reasoning"]`
+
+	configPath := createTempConfig(t, configContent)
+	app := NewApp(configPath)
+
+	// Create a temporary transcript file with the custom pattern
+	tmpDir := t.TempDir()
+	transcriptPath := filepath.Join(tmpDir, "custom-transcript.jsonl")
+	transcriptContent := `{"type":"assistant","message":{"content":[{"type":"text",` +
+		`"text":"The command failed because a timeout occurred while connecting to the server"}]}}`
+
+	if err := os.WriteFile(transcriptPath, []byte(transcriptContent), 0o600); err != nil {
+		t.Fatalf("Failed to write transcript file: %v", err)
+	}
+
+	postToolUseInput := fmt.Sprintf(`{
+		"session_id": "test123",
+		"transcript_path": "%s",
+		"cwd": "/test/dir",
+		"hook_event_name": "PostToolUse",
+		"tool_name": "Bash",
+		"tool_input": {"command": "curl -m 5 example.com"},
+		"tool_output": {"success": false}
+	}`, transcriptPath)
+
+	result, err := app.ProcessHook(strings.NewReader(postToolUseInput))
+	if err != nil {
+		t.Fatalf("ProcessHook failed: %v", err)
+	}
+
+	// Should match the custom pattern and return the configured message
+	expectedMessage := "Operation timed out - check network connection"
+	if result != expectedMessage {
+		t.Errorf("Expected %q, got %q (rule system integration needed)",
+			expectedMessage, result)
+	}
+}
+
+// TestPostToolUseWithToolOutputMatching tests tool_output field matching
+func TestPostToolUseWithToolOutputMatching(t *testing.T) {
+	t.Parallel()
+	setupTest(t)
+
+	configContent := `rules:
+  - match: "error.*exit code"
+    send: "Tool execution failed"
+    event: "post"
+    fields: ["tool_output"]`
+
+	configPath := createTempConfig(t, configContent)
+	app := NewApp(configPath)
+
+	// Create mock JSON with tool_response containing error
+	jsonData := `{
+		"session_id": "test123",
+		"transcript_path": "",
+		"hook_event_name": "PostToolUse",
+		"tool_name": "Bash",
+		"tool_response": "Command failed with error: exit code 1"
+	}`
+
+	result, err := app.ProcessPostToolUse(json.RawMessage(jsonData))
+	if err != nil {
+		t.Fatalf("ProcessPostToolUse failed: %v", err)
+	}
+
+	assert.Equal(t, "Tool execution failed", result)
+}
+
+// TestPostToolUseWithMultipleFieldMatching tests multiple field matching in a single rule
+func TestPostToolUseWithMultipleFieldMatching(t *testing.T) {
+	t.Parallel()
+	setupTest(t)
+
+	configContent := `rules:
+  - match: "timeout|permission denied"
+    send: "Operation issue detected"
+    event: "post"
+    fields: ["reasoning", "tool_output"]`
+
+	configPath := createTempConfig(t, configContent)
+	app := NewApp(configPath)
+
+	// Test with tool_output containing timeout
+	jsonData1 := `{
+		"session_id": "test123",
+		"transcript_path": "",
+		"hook_event_name": "PostToolUse",
+		"tool_name": "Bash",
+		"tool_response": "Connection timeout occurred"
+	}`
+
+	result1, err := app.ProcessPostToolUse(json.RawMessage(jsonData1))
+	if err != nil {
+		t.Fatalf("ProcessPostToolUse failed: %v", err)
+	}
+
+	assert.Equal(t, "Operation issue detected", result1)
+
+	// Test with reasoning content containing permission denied
+	testdataDir := "../../testdata"
+	transcriptPath := filepath.Join(testdataDir, "transcript-permission-denied.jsonl")
+	absPath, err := filepath.Abs(transcriptPath)
+	if err != nil {
+		t.Fatalf("Could not get absolute path: %v", err)
+	}
+
+	jsonData2 := fmt.Sprintf(`{
+		"session_id": "test456",
+		"transcript_path": "%s",
+		"hook_event_name": "PostToolUse",
+		"tool_name": "Bash",
+		"tool_response": "Command executed successfully"
+	}`, absPath)
+
+	result2, err := app.ProcessPostToolUse(json.RawMessage(jsonData2))
+	if err != nil {
+		t.Fatalf("ProcessPostToolUse failed: %v", err)
+	}
+
+	assert.Equal(t, "Operation issue detected", result2)
 }
