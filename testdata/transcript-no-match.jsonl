@@ -1,1 +1,3 @@
-{"type":"assistant","message":{"content":[{"type":"text","text":"Command executed successfully with no issues"}]}}
+{"type":"user","message":{"role":"user","content":"Run the command"},"uuid":"user1"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"I'll run that command for you now."}]},"uuid":"assistant1"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"The command executed successfully with no issues detected."}]},"uuid":"assistant2"}
