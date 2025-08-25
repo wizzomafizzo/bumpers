@@ -141,7 +141,6 @@ func InitWithProjectContextAndFS(projectCtx *context.ProjectContext, fs filesyst
 	log.Logger = zerolog.New(lj).With().
 		Timestamp().
 		Str("project_id", projectCtx.ID).
-		Str("project_name", projectCtx.Name).
 		Logger()
 
 	zerolog.SetGlobalLevel(zerolog.DebugLevel)

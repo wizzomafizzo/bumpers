@@ -39,7 +39,7 @@ rules:
     send: Don't use dangerous exec in find commands.
   - match: "BUMPERS_SKIP=1"
     send: Bumpers should not be skipped.
-  - match: "bumpers.yml"
+  - match: "^bumpers\\.yml^"
     tool: "Read|Edit|Grep"
     send: Bumpers configuration file should not be accessed.
   - match: "cat.*EOF"

@@ -9,8 +9,12 @@ import (
 
 // TestInitWithProjectContextRequiresDependencyInjection demonstrates that we need
 // to inject the filesystem dependency to allow proper testing with different filesystems
+// TestInitWithProjectContextRequiresDependencyInjection verifies dependency injection requirement
+//
+//nolint:paralleltest // modifies global logger state
 func TestInitWithProjectContextRequiresDependencyInjection(t *testing.T) {
-	t.Parallel()
+	// Initialize test logger to prevent race conditions
+	InitTest()
 
 	projectCtx := &context.ProjectContext{
 		ID:   "test-project",

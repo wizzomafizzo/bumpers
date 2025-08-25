@@ -16,6 +16,24 @@ const (
 	SessionStartHook
 )
 
+// String returns a human-readable string representation of the hook type
+func (h HookType) String() string {
+	switch h {
+	case UnknownHook:
+		return "Unknown"
+	case PreToolUseHook:
+		return "PreToolUse"
+	case UserPromptSubmitHook:
+		return "UserPromptSubmit"
+	case PostToolUseHook:
+		return "PostToolUse"
+	case SessionStartHook:
+		return "SessionStart"
+	default:
+		return "Unknown"
+	}
+}
+
 type HookEvent struct {
 	ToolInput map[string]any `json:"tool_input"` //nolint:tagliatelle // API uses snake_case
 	ToolName  string         `json:"tool_name"`  //nolint:tagliatelle // API uses snake_case

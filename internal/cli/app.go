@@ -107,7 +107,7 @@ func (a *App) loadConfigAndMatcher() (*config.Config, *matcher.RuleMatcher, erro
 			Int("ruleIndex", warning.RuleIndex).
 			Str("pattern", warning.Rule.Match).
 			Err(warning.Error).
-			Msg("Invalid rule skipped")
+			Msg("invalid rule skipped")
 	}
 
 	ruleMatcher, err := matcher.NewRuleMatcher(partialCfg.Rules)
@@ -155,25 +155,23 @@ func (a *App) ProcessHook(input io.Reader) (string, error) {
 		log.Error().Err(err).Msg("Failed to detect hook type")
 		return "", fmt.Errorf("failed to detect hook type: %w", err)
 	}
-	log.Debug().RawJSON("hook", rawJSON).Msg("hook JSON")
-
-	log.Info().Int("hookType", int(hookType)).Msg("Detected hook type")
+	log.Debug().RawJSON("hook", rawJSON).Str("type", hookType.String()).Msg("received hook")
 
 	// Handle UserPromptSubmit hooks
 	if hookType == hooks.UserPromptSubmitHook {
-		log.Info().Msg("Processing UserPromptSubmit hook")
+		log.Debug().Msg("processing UserPromptSubmit hook")
 		return a.ProcessUserPrompt(rawJSON)
 	}
 
 	// Handle SessionStart hooks
 	if hookType == hooks.SessionStartHook {
-		log.Info().Msg("Processing SessionStart hook")
+		log.Debug().Msg("processing SessionStart hook")
 		return a.ProcessSessionStart(rawJSON)
 	}
 
 	// Handle PostToolUse hooks
 	if hookType == hooks.PostToolUseHook {
-		log.Info().Msg("Processing PostToolUse hook")
+		log.Debug().Msg("processing PostToolUse hook")
 		return a.ProcessPostToolUse(rawJSON)
 	}
 

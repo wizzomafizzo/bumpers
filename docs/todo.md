@@ -83,6 +83,42 @@ func InitTestLogger(t *testing.T) {
 **Impact**: Low - acceptable trade-off for test utilities
 **Priority**: Very Low (may not need fixing)
 
+## 4. PostToolUse "reasoning" Field Investigation (Medium)
+
+**Location**: `internal/cli/app.go:239-245`, `internal/cli/app_test.go:2804-2806`
+
+**Issue**: The PostToolUse hook processing assumes a "reasoning" field exists in production Claude Code transcripts, but this may not be accurate.
+
+**Current Implementation**:
+```go
+// In extractPostToolContent:
+if transcriptPath != "" {
+    reasoningBytes, err := os.ReadFile(transcriptPath) 
+    if err != nil {
+        log.Debug().Str("path", transcriptPath).Msg("Could not read transcript, continuing without reasoning")
+    } else {
+        content.reasoning = string(reasoningBytes)  // Treats entire file as "reasoning"
+    }
+}
+```
+
+**Test Expectation**:
+```yaml
+- match: "not related to my changes"
+  send: "AI claiming unrelated - please verify"  
+  event: "post"
+  fields: ["reasoning"]
+```
+
+**Investigation Needed**:
+- Verify actual structure of Claude Code transcript files in production
+- Determine if "reasoning" is a real field or if we're misunderstanding the data format
+- Check if transcript parsing should extract specific fields vs. treating entire content as reasoning
+- Validate PostToolUse hook integration works correctly with real Claude Code transcripts
+
+**Impact**: Medium - affects PostToolUse functionality
+**Priority**: Medium - could impact real usage
+
 ---
 
 ## Notes

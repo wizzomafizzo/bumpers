@@ -7,15 +7,7 @@ import (
 	"os"
 	"strings"
 	"testing"
-
-	"github.com/wizzomafizzo/bumpers/internal/testutil"
 )
-
-// setupTest initializes test logger to prevent race conditions
-func setupTest(t *testing.T) {
-	t.Helper()
-	testutil.InitTestLogger(t)
-}
 
 func TestInstallCommandExistence(t *testing.T) {
 	t.Parallel()
