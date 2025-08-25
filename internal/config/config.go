@@ -38,82 +38,8 @@ type Rule struct {
 	Match    string   `yaml:"match" mapstructure:"match"`
 	Tool     string   `yaml:"tool,omitempty" mapstructure:"tool"`
 	Send     string   `yaml:"send" mapstructure:"send"`
-	When     []string `yaml:"when,omitempty" mapstructure:"when"` // Deprecated: Use Event and Sources instead
 	Event    string   `yaml:"event,omitempty" mapstructure:"event"`
-	Fields   []string `yaml:"fields,omitempty" mapstructure:"fields"` // Deprecated: Use Sources instead
 	Sources  []string `yaml:"sources,omitempty" mapstructure:"sources"`
-}
-
-// ExpandWhen is deprecated: Use Event and Sources instead
-func (r *Rule) ExpandWhen() []string {
-	if len(r.When) == 0 {
-		return []string{"pre", "input"}
-	}
-
-	expanded, excludes := r.categorizeWhenFlags()
-	r.applySmartDefaults(expanded)
-	r.removeExclusions(expanded, excludes)
-	return r.mapToSlice(expanded)
-}
-
-func (r *Rule) categorizeWhenFlags() (expanded, excludes map[string]bool) {
-	expanded = make(map[string]bool)
-	excludes = make(map[string]bool)
-
-	for _, flag := range r.When {
-		if strings.HasPrefix(flag, "!") {
-			excludes[strings.TrimPrefix(flag, "!")] = true
-		} else {
-			expanded[flag] = true
-		}
-	}
-	return expanded, excludes
-}
-
-func (r *Rule) applySmartDefaults(expanded map[string]bool) {
-	for flag := range expanded {
-		r.applyDefaultForFlag(flag, expanded)
-	}
-}
-
-func (r *Rule) applyDefaultForFlag(flag string, expanded map[string]bool) {
-	switch flag {
-	case "reasoning":
-		expanded["post"] = true
-	case "post":
-		if !hasSourceFlag(r.When) {
-			expanded["output"] = true
-		}
-	case "pre":
-		if !hasSourceFlag(r.When) {
-			expanded["input"] = true
-		}
-	}
-}
-
-func (*Rule) removeExclusions(expanded, excludes map[string]bool) {
-	for exclude := range excludes {
-		delete(expanded, exclude)
-	}
-}
-
-func (*Rule) mapToSlice(expanded map[string]bool) []string {
-	result := make([]string, 0, len(expanded))
-	for flag := range expanded {
-		result = append(result, flag)
-	}
-	return result
-}
-
-// hasSourceFlag checks if the when slice contains any explicit source flags
-func hasSourceFlag(when []string) bool {
-	sourceFlags := map[string]bool{"input": true, "output": true, "reasoning": true}
-	for _, flag := range when {
-		if !strings.HasPrefix(flag, "!") && sourceFlags[flag] {
-			return true
-		}
-	}
-	return false
 }
 
 type Command struct {
@@ -224,23 +150,6 @@ func (r *Rule) Validate() error {
 	}
 
 	return nil
-}
-
-// ValidateEventFields applies smart defaults to Event and Fields
-func (r *Rule) ValidateEventFields() {
-	// Apply default event if empty
-	if r.Event == "" {
-		r.Event = "pre"
-	}
-
-	// Apply default fields based on event if empty
-	if len(r.Fields) == 0 {
-		if r.Event == "post" {
-			r.Fields = []string{"reasoning"}
-		} else {
-			r.Fields = []string{"command"}
-		}
-	}
 }
 
 // ValidateEventSources applies smart defaults to Event and Sources

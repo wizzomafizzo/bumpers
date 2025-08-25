@@ -356,14 +356,6 @@ func (*App) determineRuleContentMatch(rule *config.Rule, content *postToolConten
 		}
 	}
 
-	// Backward compatibility: when includes "reasoning"
-	if len(rule.When) > 0 {
-		expandedWhen := rule.ExpandWhen()
-		if containsString(expandedWhen, "reasoning") {
-			matchesReasoning = true
-		}
-	}
-
 	// Skip if rule doesn't match any available content
 	if !matchesReasoning && !matchesToolOutput {
 		return "", false
