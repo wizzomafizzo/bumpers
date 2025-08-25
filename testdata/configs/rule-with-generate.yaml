@@ -1,0 +1,6 @@
+rules:
+  - match: "rm -rf"
+    send: "Use safer alternatives"
+    generate:
+      mode: "always"
+      prompt: "Explain safer file deletion methods"

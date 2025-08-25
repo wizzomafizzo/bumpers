@@ -16,6 +16,24 @@ const (
 	SessionStartHook
 )
 
+// String returns a human-readable string representation of the hook type
+func (h HookType) String() string {
+	switch h {
+	case UnknownHook:
+		return "Unknown"
+	case PreToolUseHook:
+		return "PreToolUse"
+	case UserPromptSubmitHook:
+		return "UserPromptSubmit"
+	case PostToolUseHook:
+		return "PostToolUse"
+	case SessionStartHook:
+		return "SessionStart"
+	default:
+		return "Unknown"
+	}
+}
+
 type HookEvent struct {
 	ToolInput map[string]any `json:"tool_input"` //nolint:tagliatelle // API uses snake_case
 	ToolName  string         `json:"tool_name"`  //nolint:tagliatelle // API uses snake_case
@@ -45,7 +63,11 @@ func DetectHookType(reader io.Reader) (HookType, json.RawMessage, error) {
 	}
 
 	// Check for distinctive fields to determine hook type
-	if _, ok := generic["tool_input"]; ok {
+	// PostToolUse has both tool_input and tool_output, so check for it first
+	if _, hasInput := generic["tool_input"]; hasInput {
+		if _, hasOutput := generic["tool_output"]; hasOutput {
+			return PostToolUseHook, json.RawMessage(data), nil
+		}
 		return PreToolUseHook, json.RawMessage(data), nil
 	}
 	if _, ok := generic["prompt"]; ok {

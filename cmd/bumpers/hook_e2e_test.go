@@ -1,3 +1,5 @@
+//go:build e2e
+
 package main
 
 import (
@@ -7,9 +9,12 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/wizzomafizzo/bumpers/internal/testutil"
 )
 
 func TestCreateHookCommand(t *testing.T) {
+	testutil.InitTestLogger(t)
 	t.Parallel()
 
 	cmd := createHookCommand()
@@ -28,13 +33,14 @@ func TestCreateHookCommand(t *testing.T) {
 }
 
 func TestHookCommandBlocksWithProperToolName(t *testing.T) { //nolint:paralleltest // changes working directory
+	testutil.InitTestLogger(t)
 	// Test that hook command blocks when tool_name is provided correctly
 	tempDir := t.TempDir()
 	originalDir, err := os.Getwd()
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer func() { _ = os.Chdir(originalDir) }()
+	t.Cleanup(func() { _ = os.Chdir(originalDir) })
 
 	err = os.Chdir(tempDir)
 	if err != nil {
@@ -93,13 +99,14 @@ func TestHookCommandBlocksWithProperToolName(t *testing.T) { //nolint:parallelte
 }
 
 func TestHookCommandNoDuplicateOutput(t *testing.T) { //nolint:paralleltest // changes working directory
+	testutil.InitTestLogger(t)
 	// Test that blocked commands don't output the message twice
 	tempDir := t.TempDir()
 	originalDir, err := os.Getwd()
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer func() { _ = os.Chdir(originalDir) }()
+	t.Cleanup(func() { _ = os.Chdir(originalDir) })
 
 	err = os.Chdir(tempDir)
 	if err != nil {
@@ -154,13 +161,14 @@ func TestHookCommandNoDuplicateOutput(t *testing.T) { //nolint:paralleltest // c
 }
 
 func TestHookCommandAllowsInputWithMissingToolName(t *testing.T) { //nolint:paralleltest // changes working directory
+	testutil.InitTestLogger(t)
 	// Test that hook command allows input when tool_name is missing (safe default)
 	tempDir := t.TempDir()
 	originalDir, err := os.Getwd()
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer func() { _ = os.Chdir(originalDir) }()
+	t.Cleanup(func() { _ = os.Chdir(originalDir) })
 
 	err = os.Chdir(tempDir)
 	if err != nil {

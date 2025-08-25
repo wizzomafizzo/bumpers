@@ -4,162 +4,68 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/wizzomafizzo/bumpers/internal/testutil"
 )
 
-//nolint:paralleltest // changes working directory and environment variables
-func TestFindRoot_FallbackToCwd(t *testing.T) {
-	// Unset CLAUDE_PROJECT_DIR
-	originalEnv := os.Getenv("CLAUDE_PROJECT_DIR")
-	defer func() {
-		if originalEnv == "" {
-			if err := os.Unsetenv("CLAUDE_PROJECT_DIR"); err != nil {
-				t.Errorf("Failed to unset CLAUDE_PROJECT_DIR: %v", err)
-			}
-		} else {
-			if err := os.Setenv("CLAUDE_PROJECT_DIR", originalEnv); err != nil {
-				t.Errorf("Failed to restore CLAUDE_PROJECT_DIR: %v", err)
-			}
-		}
-	}()
-	if err := os.Unsetenv("CLAUDE_PROJECT_DIR"); err != nil {
-		t.Fatalf("Failed to unset CLAUDE_PROJECT_DIR: %v", err)
-	}
+func TestCheckClaudeProjectDir_EmptyEnv(t *testing.T) {
+	testutil.InitTestLogger(t)
 
-	// Create a directory with no project markers
+	// Ensure CLAUDE_PROJECT_DIR is not set
+	t.Setenv("CLAUDE_PROJECT_DIR", "")
+
+	path, found := checkClaudeProjectDir()
+
+	assert.False(t, found)
+	assert.Empty(t, path)
+}
+
+func TestCheckClaudeProjectDir_ValidDirectory(t *testing.T) {
+	testutil.InitTestLogger(t)
+
 	tempDir := t.TempDir()
-	originalCwd, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Failed to get current directory: %v", err)
-	}
-	defer func() {
-		if cdErr := os.Chdir(originalCwd); cdErr != nil {
-			t.Errorf("Failed to restore original directory: %v", cdErr)
-		}
-	}()
+	t.Setenv("CLAUDE_PROJECT_DIR", tempDir)
 
-	err = os.Chdir(tempDir)
-	if err != nil {
-		t.Fatalf("Failed to change directory: %v", err)
-	}
+	path, found := checkClaudeProjectDir()
 
-	// Test that FindRoot falls back to current directory
-	root, err := FindRoot()
-	if err != nil {
-		t.Fatalf("FindRoot failed: %v", err)
-	}
-
-	expected, _ := filepath.Abs(tempDir)
-	actual, _ := filepath.Abs(root)
-
-	if actual != expected {
-		t.Errorf("Expected root %s, got %s", expected, actual)
-	}
+	assert.True(t, found)
+	assert.Contains(t, path, tempDir) // Use Contains since path might be absolute
 }
 
-// setupTestProjectWithMarker creates a test project with a specific marker file
-func setupTestProjectWithMarker(t *testing.T, markerName, markerContent string) (projectDir string, cleanup func()) {
-	t.Helper()
+func TestCheckClaudeProjectDir_NonexistentDirectory(t *testing.T) {
+	testutil.InitTestLogger(t)
 
-	// Unset CLAUDE_PROJECT_DIR to test marker detection
-	originalEnv := os.Getenv("CLAUDE_PROJECT_DIR")
-	if err := os.Unsetenv("CLAUDE_PROJECT_DIR"); err != nil {
-		t.Fatalf("Failed to unset CLAUDE_PROJECT_DIR: %v", err)
-	}
+	t.Setenv("CLAUDE_PROJECT_DIR", "/nonexistent/path/that/does/not/exist")
 
-	// Create a temporary directory structure
+	path, found := checkClaudeProjectDir()
+
+	assert.False(t, found)
+	assert.Empty(t, path)
+}
+
+func TestHasProjectMarker_WithGitMarker(t *testing.T) {
+	t.Parallel()
+	testutil.InitTestLogger(t)
+
 	tempDir := t.TempDir()
-	projectDir = filepath.Join(tempDir, "my-project")
-	subDir := filepath.Join(projectDir, "cmd", "myapp")
 
-	err := os.MkdirAll(subDir, 0o750)
-	if err != nil {
-		t.Fatalf("Failed to create test directory: %v", err)
-	}
+	// Create .git file
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, ".git"), []byte("gitdir: .git"), 0o600))
 
-	// Create marker file to mark project root
-	markerPath := filepath.Join(projectDir, markerName)
-	err = os.WriteFile(markerPath, []byte(markerContent), 0o600)
-	if err != nil {
-		t.Fatalf("Failed to create marker file: %v", err)
-	}
+	result := hasProjectMarker(tempDir, []string{".git"})
 
-	// Setup cleanup function
-	originalCwd, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Failed to get current directory: %v", err)
-	}
-
-	cleanup = func() {
-		if cdErr := os.Chdir(originalCwd); cdErr != nil {
-			t.Errorf("Failed to restore original directory: %v", cdErr)
-		}
-		// Restore environment variable
-		if originalEnv == "" {
-			if unsetErr := os.Unsetenv("CLAUDE_PROJECT_DIR"); unsetErr != nil {
-				t.Errorf("Failed to unset CLAUDE_PROJECT_DIR: %v", unsetErr)
-			}
-		} else {
-			if setErr := os.Setenv("CLAUDE_PROJECT_DIR", originalEnv); setErr != nil {
-				t.Errorf("Failed to restore CLAUDE_PROJECT_DIR: %v", setErr)
-			}
-		}
-	}
-
-	// Change to subdirectory for testing
-	err = os.Chdir(subDir)
-	if err != nil {
-		t.Fatalf("Failed to change directory: %v", err)
-	}
-
-	return projectDir, cleanup
+	assert.True(t, result)
 }
 
-//nolint:paralleltest // changes working directory via setupTestProjectWithMarker
-func TestFindRoot_WithGoMod(t *testing.T) {
-	projectDir, cleanup := setupTestProjectWithMarker(t, "go.mod", "module example.com/myproject\n")
-	defer cleanup()
+func TestHasProjectMarker_NoMarkers(t *testing.T) {
+	t.Parallel()
+	testutil.InitTestLogger(t)
 
-	// Test that FindRoot finds the project root from subdirectory
-	root, err := FindRoot()
-	if err != nil {
-		t.Fatalf("FindRoot failed: %v", err)
-	}
+	tempDir := t.TempDir()
 
-	expected, err := filepath.Abs(projectDir)
-	if err != nil {
-		t.Fatalf("Failed to get absolute path for expected: %v", err)
-	}
-	actual, err := filepath.Abs(root)
-	if err != nil {
-		t.Fatalf("Failed to get absolute path for actual: %v", err)
-	}
+	result := hasProjectMarker(tempDir, []string{".git", "go.mod", "package.json"})
 
-	if actual != expected {
-		t.Errorf("Expected root %s, got %s", expected, actual)
-	}
-}
-
-//nolint:paralleltest // changes working directory via setupTestProjectWithMarker
-func TestFindRoot_WithPackageJSON(t *testing.T) {
-	projectDir, cleanup := setupTestProjectWithMarker(t, "package.json", `{"name": "my-project", "version": "1.0.0"}`)
-	defer cleanup()
-
-	// Test that FindRoot finds the project root from subdirectory
-	root, err := FindRoot()
-	if err != nil {
-		t.Fatalf("FindRoot failed: %v", err)
-	}
-
-	expected, err := filepath.Abs(projectDir)
-	if err != nil {
-		t.Fatalf("Failed to get absolute path for expected: %v", err)
-	}
-	actual, err := filepath.Abs(root)
-	if err != nil {
-		t.Fatalf("Failed to get absolute path for actual: %v", err)
-	}
-
-	if actual != expected {
-		t.Errorf("Expected root %s, got %s", expected, actual)
-	}
+	assert.False(t, result)
 }

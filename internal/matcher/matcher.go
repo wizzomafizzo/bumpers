@@ -14,8 +14,8 @@ var (
 
 func NewRuleMatcher(rules []config.Rule) (*RuleMatcher, error) {
 	// Validate all patterns can be compiled as regex
-	for _, rule := range rules {
-		if err := validatePattern(rule.Match); err != nil {
+	for i := range rules {
+		if err := validatePattern(rules[i].Match); err != nil {
 			return nil, err
 		}
 	}

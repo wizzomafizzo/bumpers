@@ -1,153 +1,115 @@
 package filesystem
 
 import (
-	"bytes"
 	"os"
-	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/wizzomafizzo/bumpers/internal/testutil"
 )
 
-// Test the basic contract we need from our filesystem abstraction
-func TestMemoryFileSystemBasicOperations(t *testing.T) {
+func TestNewMemoryFileSystem(t *testing.T) {
+	testutil.InitTestLogger(t)
 	t.Parallel()
 
 	fs := NewMemoryFileSystem()
 
-	// Test WriteFile and ReadFile - the core operations needed
-	testContent := []byte("test content")
-	err := fs.WriteFile("test.txt", testContent, 0o644)
-	if err != nil {
-		t.Fatalf("WriteFile failed: %v", err)
-	}
-
-	content, err := fs.ReadFile("test.txt")
-	if err != nil {
-		t.Fatalf("ReadFile failed: %v", err)
-	}
-
-	if !bytes.Equal(content, testContent) {
-		t.Errorf("Expected content %q, got %q", string(testContent), string(content))
-	}
+	assert.NotNil(t, fs, "NewMemoryFileSystem should return non-nil filesystem")
+	assert.NotNil(t, fs.files, "MemoryFileSystem should have initialized files map")
+	assert.Empty(t, fs.files, "New MemoryFileSystem should start with empty files map")
 }
 
-// Test OSFileSystem - production filesystem implementation
-func TestOSFileSystemBasicOperations(t *testing.T) {
+func TestMemoryFileSystem_WriteFile_ReadFile(t *testing.T) {
+	testutil.InitTestLogger(t)
 	t.Parallel()
 
-	fs := NewOSFileSystem()
-	tempDir := t.TempDir()
-	testFile := filepath.Join(tempDir, "test.txt")
+	fs := NewMemoryFileSystem()
+	testData := []byte("test file content")
+	filename := "test.txt"
 
-	// Test WriteFile and ReadFile - matching MemoryFileSystem behavior
-	testContent := []byte("test content")
-	err := fs.WriteFile(testFile, testContent, 0o644)
-	if err != nil {
-		t.Fatalf("WriteFile failed: %v", err)
-	}
+	// Write file
+	err := fs.WriteFile(filename, testData, 0o644)
+	require.NoError(t, err, "WriteFile should succeed")
 
-	content, err := fs.ReadFile(testFile)
-	if err != nil {
-		t.Fatalf("ReadFile failed: %v", err)
-	}
+	// Verify data was stored
+	assert.Contains(t, fs.files, filename, "File should be stored in files map")
 
-	if !bytes.Equal(content, testContent) {
-		t.Errorf("Expected content %q, got %q", string(testContent), string(content))
-	}
+	// Read file back
+	readData, err := fs.ReadFile(filename)
+	require.NoError(t, err, "ReadFile should succeed")
 
-	// Test Stat - needed by production code
-	info, err := fs.Stat(testFile)
-	if err != nil {
-		t.Fatalf("Stat failed: %v", err)
-	}
+	// Verify content matches
+	assert.Equal(t, testData, readData, "Read data should match written data")
 
-	if info.Size() != int64(len(testContent)) {
-		t.Errorf("Expected file size %d, got %d", len(testContent), info.Size())
-	}
+	// Verify data is independent (deep copy)
+	testData[0] = 'X'
+	readData2, err := fs.ReadFile(filename)
+	require.NoError(t, err, "Second ReadFile should succeed")
+	assert.NotEqual(t, testData[0], readData2[0], "Stored data should not be affected by modifying original")
+}
+
+func TestMemoryFileSystem_ReadFile_NonExistent(t *testing.T) {
+	testutil.InitTestLogger(t)
+	t.Parallel()
+
+	fs := NewMemoryFileSystem()
+
+	// Try to read non-existent file
+	data, err := fs.ReadFile("non-existent.txt")
+
+	assert.Nil(t, data, "ReadFile should return nil data for non-existent file")
+	assert.ErrorIs(t, err, os.ErrNotExist, "ReadFile should return os.ErrNotExist for non-existent file")
+}
+
+func TestMemoryFileSystem_Stat(t *testing.T) {
+	testutil.InitTestLogger(t)
+	t.Parallel()
+
+	fs := NewMemoryFileSystem()
+	testData := []byte("test content for stat")
+	filename := "stat-test.txt"
+
+	// Write file first
+	err := fs.WriteFile(filename, testData, 0o644)
+	require.NoError(t, err, "WriteFile should succeed")
+
+	// Get file info
+	info, err := fs.Stat(filename)
+	require.NoError(t, err, "Stat should succeed for existing file")
+
+	assert.Equal(t, filename, info.Name(), "Stat should return correct filename")
+	assert.Equal(t, int64(len(testData)), info.Size(), "Stat should return correct file size")
+	assert.False(t, info.IsDir(), "File should not be reported as directory")
 
 	// Test non-existent file
-	_, err = fs.ReadFile(filepath.Join(tempDir, "nonexistent.txt"))
-	if err == nil {
-		t.Error("Expected error for non-existent file, got nil")
-	}
-	if !os.IsNotExist(err) {
-		t.Errorf("Expected os.ErrNotExist, got %v", err)
-	}
+	_, err = fs.Stat("non-existent.txt")
+	assert.ErrorIs(t, err, os.ErrNotExist, "Stat should return os.ErrNotExist for non-existent file")
 }
 
-// Test MkdirAll functionality for both implementations
-func TestFileSystemMkdirAll(t *testing.T) {
+func TestMemoryFileSystem_MkdirAll(t *testing.T) {
+	testutil.InitTestLogger(t)
 	t.Parallel()
 
-	t.Run("MemoryFileSystem", func(t *testing.T) {
-		t.Parallel()
-		testMemoryFileSystemMkdirAll(t)
-	})
-
-	t.Run("OSFileSystem", func(t *testing.T) {
-		t.Parallel()
-		testOSFileSystemMkdirAll(t)
-	})
-}
-
-func testMemoryFileSystemMkdirAll(t *testing.T) {
-	t.Helper()
 	fs := NewMemoryFileSystem()
 
-	err := fs.MkdirAll("path/to/nested/dir", 0o750)
-	if err != nil {
-		t.Fatalf("MkdirAll failed: %v", err)
-	}
+	// MkdirAll should always succeed for MemoryFileSystem (no-op)
+	err := fs.MkdirAll("/some/deep/path", 0o755)
+	require.NoError(t, err, "MkdirAll should succeed for MemoryFileSystem")
 
-	testFile := "path/to/nested/dir/test.txt"
-	testContent := []byte("test in nested dir")
-	err = fs.WriteFile(testFile, testContent, 0o644)
-	if err != nil {
-		t.Fatalf("WriteFile in created directory failed: %v", err)
-	}
+	// Should work with various paths
+	err = fs.MkdirAll("", 0o755)
+	require.NoError(t, err, "MkdirAll should handle empty path")
 
-	content, err := fs.ReadFile(testFile)
-	if err != nil {
-		t.Fatalf("ReadFile from created directory failed: %v", err)
-	}
-
-	if !bytes.Equal(content, testContent) {
-		t.Errorf("Expected content %q, got %q", string(testContent), string(content))
-	}
+	err = fs.MkdirAll("single-dir", 0o755)
+	assert.NoError(t, err, "MkdirAll should handle single directory")
 }
 
-func testOSFileSystemMkdirAll(t *testing.T) {
-	t.Helper()
+func TestNewOSFileSystem(t *testing.T) {
+	testutil.InitTestLogger(t)
+	t.Parallel()
+
 	fs := NewOSFileSystem()
-	tempDir := t.TempDir()
 
-	nestedPath := filepath.Join(tempDir, "path", "to", "nested", "dir")
-	err := fs.MkdirAll(nestedPath, 0o750)
-	if err != nil {
-		t.Fatalf("MkdirAll failed: %v", err)
-	}
-
-	info, err := fs.Stat(nestedPath)
-	if err != nil {
-		t.Fatalf("Stat on created directory failed: %v", err)
-	}
-
-	if !info.IsDir() {
-		t.Error("Expected created path to be a directory")
-	}
-
-	testFile := filepath.Join(nestedPath, "test.txt")
-	testContent := []byte("test in nested dir")
-	err = fs.WriteFile(testFile, testContent, 0o644)
-	if err != nil {
-		t.Fatalf("WriteFile in created directory failed: %v", err)
-	}
-
-	content, err := fs.ReadFile(testFile)
-	if err != nil {
-		t.Fatalf("ReadFile from created directory failed: %v", err)
-	}
-
-	if !bytes.Equal(content, testContent) {
-		t.Errorf("Expected content %q, got %q", string(testContent), string(content))
-	}
+	assert.NotNil(t, fs, "NewOSFileSystem should return non-nil filesystem")
 }

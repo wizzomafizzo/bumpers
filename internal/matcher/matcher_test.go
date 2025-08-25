@@ -2,12 +2,15 @@ package matcher
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/wizzomafizzo/bumpers/internal/config"
+	"github.com/wizzomafizzo/bumpers/internal/testutil"
 )
 
 func TestRuleMatcher(t *testing.T) {
+	testutil.InitTestLogger(t)
 	t.Parallel()
 
 	rule := config.Rule{
@@ -35,6 +38,7 @@ func TestRuleMatcher(t *testing.T) {
 }
 
 func TestRuleMatcherNoMatch(t *testing.T) {
+	testutil.InitTestLogger(t)
 	t.Parallel()
 
 	rule := config.Rule{
@@ -62,6 +66,7 @@ func TestRuleMatcherNoMatch(t *testing.T) {
 }
 
 func TestRuleMatcherWithPartialConfig(t *testing.T) {
+	testutil.InitTestLogger(t)
 	t.Parallel()
 
 	yamlContent := `rules:
@@ -115,6 +120,7 @@ func TestRuleMatcherWithPartialConfig(t *testing.T) {
 }
 
 func TestRegexPatternMatching(t *testing.T) {
+	testutil.InitTestLogger(t)
 	t.Parallel()
 
 	tests := []struct {
@@ -206,6 +212,7 @@ func assertNoMatch(t *testing.T, match *config.Rule, err error) {
 }
 
 func TestNewRuleMatcherInvalidRegex(t *testing.T) {
+	testutil.InitTestLogger(t)
 	t.Parallel()
 
 	rule := config.Rule{
@@ -224,6 +231,7 @@ func TestNewRuleMatcherInvalidRegex(t *testing.T) {
 }
 
 func TestRuleMatcherWithToolFiltering(t *testing.T) {
+	testutil.InitTestLogger(t)
 	t.Parallel()
 
 	rules := []config.Rule{
@@ -280,6 +288,7 @@ func TestRuleMatcherWithToolFiltering(t *testing.T) {
 }
 
 func TestBumpersYmlToolMatching(t *testing.T) {
+	testutil.InitTestLogger(t)
 	t.Parallel()
 
 	// This test specifically covers the bumpers.yml rule from the config
@@ -335,4 +344,165 @@ func TestBumpersYmlToolMatching(t *testing.T) {
 			t.Errorf("Expected ErrNoRuleMatch for command=%q tool=%q, got: %v", tc.command, tc.toolName, err)
 		}
 	}
+}
+
+// Benchmark tests for critical performance paths
+func BenchmarkRuleMatcherMatch(b *testing.B) {
+	rule := config.Rule{
+		Match: "^go test",
+		Send:  "Use just test instead",
+	}
+
+	matcher, err := NewRuleMatcher([]config.Rule{rule})
+	if err != nil {
+		b.Fatalf("Failed to create matcher: %v", err)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = matcher.Match("go test ./...", "Bash")
+	}
+}
+
+func BenchmarkRuleMatcherMatchComplex(b *testing.B) {
+	rules := []config.Rule{
+		{Match: "^rm -rf", Tool: "^(Bash|Task)$", Send: "Dangerous command"},
+		{Match: "password", Tool: "^(Write|Edit)$", Send: "No secrets"},
+		{Match: "^go test", Tool: "", Send: "Use just test"},
+		{Match: "(npm|yarn|pnpm)", Tool: "^Bash$", Send: "Use package manager"},
+		{Match: "^git (add|commit)", Tool: "^Bash$", Send: "Review changes first"},
+	}
+
+	matcher, err := NewRuleMatcher(rules)
+	if err != nil {
+		b.Fatalf("Failed to create matcher: %v", err)
+	}
+
+	commands := []string{
+		"go test ./...",
+		"rm -rf /tmp",
+		"npm install",
+		"git add .",
+		"echo hello",
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		cmd := commands[i%len(commands)]
+		_, _ = matcher.Match(cmd, "Bash")
+	}
+}
+
+func BenchmarkNewRuleMatcher(b *testing.B) {
+	rules := []config.Rule{
+		{Match: "^rm -rf", Tool: "^(Bash|Task)$", Send: "Dangerous command"},
+		{Match: "password", Tool: "^(Write|Edit)$", Send: "No secrets"},
+		{Match: "^go test", Tool: "", Send: "Use just test"},
+		{Match: "(npm|yarn|pnpm)", Tool: "^Bash$", Send: "Use package manager"},
+		{Match: "^git (add|commit)", Tool: "^Bash$", Send: "Review changes first"},
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = NewRuleMatcher(rules)
+	}
+}
+
+// Fuzz test for pattern matching
+func FuzzRuleMatcherMatch(f *testing.F) {
+	// Create a matcher with common patterns
+	rules := []config.Rule{
+		{Match: "^go test", Send: "Use just test"},
+		{Match: "rm -rf", Send: "Dangerous command"},
+		{Match: "(npm|yarn|pnpm)", Send: "Package manager"},
+	}
+
+	matcher, err := NewRuleMatcher(rules)
+	if err != nil {
+		f.Fatalf("Failed to create matcher: %v", err)
+	}
+
+	// Add seed inputs
+	f.Add("go test ./...")
+	f.Add("rm -rf /tmp")
+	f.Add("npm install")
+	f.Add("invalid command")
+
+	f.Fuzz(func(_ *testing.T, command string) {
+		_, _ = matcher.Match(command, "Bash")
+		// No assertions - just ensuring no panics occur
+	})
+}
+
+// TestMatcherBehaviorWithInvalidPatterns tests what happens when regex compilation fails
+// This addresses mutation testing findings about missing continue vs break logic
+func TestMatcherBehaviorWithInvalidPatterns(t *testing.T) {
+	testutil.InitTestLogger(t)
+	t.Parallel()
+
+	// Create rules where some have invalid patterns that would fail during matching
+	rules := []config.Rule{
+		{
+			Match: "valid_pattern",
+			Tool:  "[invalid-tool-regex", // Invalid tool regex - should skip this rule
+			Send:  "Should be skipped",
+		},
+		{
+			Match: "[invalid-cmd-regex", // Invalid command regex - should skip this rule
+			Tool:  "^Bash$",
+			Send:  "Should also be skipped",
+		},
+		{
+			Match: "working_pattern",
+			Tool:  "^Bash$",
+			Send:  "Should match this one",
+		},
+	}
+
+	// Test that invalid rules are properly skipped during matching
+	// We need to manually create a matcher that bypasses validation to test runtime behavior
+	testMatcher := &RuleMatcher{rules: rules}
+
+	// This should still find the valid rule despite invalid ones being skipped
+	match, err := testMatcher.Match("working_pattern test", "Bash")
+	if err != nil {
+		t.Fatalf("Expected match despite invalid patterns being skipped, got error: %v", err)
+	}
+	if match == nil {
+		t.Fatal("Expected match despite invalid patterns, got nil")
+	}
+	if match.Send != "Should match this one" {
+		t.Errorf("Expected 'Should match this one', got %q", match.Send)
+	}
+}
+
+// Example demonstrates how to create a rule matcher and check commands
+func ExampleNewRuleMatcher() {
+	rules := []config.Rule{
+		{Match: "^go test", Send: "Use 'just test' for better TDD integration"},
+		{Match: "rm -rf", Tool: "^Bash$", Send: "Dangerous command - be more specific"},
+		{Match: "password", Tool: "^(Write|Edit)$", Send: "Avoid hardcoding secrets"},
+	}
+
+	matcher, err := NewRuleMatcher(rules)
+	if err != nil {
+		_, _ = fmt.Printf("Error: %v\n", err)
+		return
+	}
+
+	// Check a go test command
+	match, err := matcher.Match("go test ./...", "Bash")
+	if err != nil {
+		_, _ = fmt.Printf("No match: %v\n", err)
+	} else {
+		_, _ = fmt.Printf("Rule matched: %s\n", match.Send)
+	}
+
+	// Check a command that doesn't match
+	_, err = matcher.Match("echo hello", "Bash")
+	_, _ = fmt.Printf("No rule match: %v\n", errors.Is(err, ErrNoRuleMatch))
+
+	// Output:
+	// Rule matched: Use 'just test' for better TDD integration
+	// No rule match: true
 }

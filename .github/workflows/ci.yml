@@ -24,8 +24,14 @@ jobs:
       run: |
         curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to /usr/local/bin
 
-    - name: Run tests
-      run: just test
+    - name: Run unit tests
+      run: just test-unit
+
+    - name: Run integration tests
+      run: just test-integration
+
+    - name: Run e2e tests
+      run: just test-e2e
 
   lint:
     name: Lint

@@ -9,50 +9,59 @@ import (
 	"github.com/wizzomafizzo/bumpers/internal/filesystem"
 )
 
-func TestGetDataDir(t *testing.T) {
+func TestStorageManagerPaths(t *testing.T) {
 	t.Parallel()
-	fs := filesystem.NewMemoryFileSystem()
-	manager := New(fs)
 
-	dataDir, err := manager.GetDataDir()
-	if err != nil {
-		t.Fatalf("GetDataDir() failed: %v", err)
+	tests := []struct {
+		methodCall   func(*Manager) (string, error)
+		expectedPath func() string
+		name         string
+	}{
+		{
+			name: "GetDataDir returns correct path",
+			methodCall: func(m *Manager) (string, error) {
+				return m.GetDataDir()
+			},
+			expectedPath: func() string {
+				return filepath.Join(xdg.DataHome, AppName)
+			},
+		},
+		{
+			name: "GetLogPath returns correct path",
+			methodCall: func(m *Manager) (string, error) {
+				return m.GetLogPath()
+			},
+			expectedPath: func() string {
+				return filepath.Join(xdg.DataHome, AppName, constants.LogFilename)
+			},
+		},
+		{
+			name: "GetCachePath returns correct path",
+			methodCall: func(m *Manager) (string, error) {
+				return m.GetCachePath()
+			},
+			expectedPath: func() string {
+				return filepath.Join(xdg.DataHome, AppName, constants.CacheFilename)
+			},
+		},
 	}
 
-	expectedPath := filepath.Join(xdg.DataHome, AppName)
-	if dataDir != expectedPath {
-		t.Errorf("GetDataDir() = %s, want %s", dataDir, expectedPath)
-	}
-}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 
-func TestGetLogPath(t *testing.T) {
-	t.Parallel()
-	fs := filesystem.NewMemoryFileSystem()
-	manager := New(fs)
+			fs := filesystem.NewMemoryFileSystem()
+			manager := New(fs)
 
-	logPath, err := manager.GetLogPath()
-	if err != nil {
-		t.Fatalf("GetLogPath() failed: %v", err)
-	}
+			actualPath, err := tt.methodCall(manager)
+			if err != nil {
+				t.Fatalf("method call failed: %v", err)
+			}
 
-	expectedPath := filepath.Join(xdg.DataHome, AppName, constants.LogFilename)
-	if logPath != expectedPath {
-		t.Errorf("GetLogPath() = %s, want %s", logPath, expectedPath)
-	}
-}
-
-func TestGetCachePath(t *testing.T) {
-	t.Parallel()
-	fs := filesystem.NewMemoryFileSystem()
-	manager := New(fs)
-
-	cachePath, err := manager.GetCachePath()
-	if err != nil {
-		t.Fatalf("GetCachePath() failed: %v", err)
-	}
-
-	expectedPath := filepath.Join(xdg.DataHome, AppName, constants.CacheFilename)
-	if cachePath != expectedPath {
-		t.Errorf("GetCachePath() = %s, want %s", cachePath, expectedPath)
+			expectedPath := tt.expectedPath()
+			if actualPath != expectedPath {
+				t.Errorf("got %s, want %s", actualPath, expectedPath)
+			}
+		})
 	}
 }

@@ -39,17 +39,16 @@ func (a *App) ProcessUserPrompt(rawJSON json.RawMessage) (string, error) {
 		return "", fmt.Errorf("failed to parse UserPromptSubmit event: %w", err)
 	}
 
-	log.Info().Str("prompt", event.Prompt).Msg("Processing UserPromptSubmit with prompt")
+	log.Debug().Str("prompt", event.Prompt).Msg("processing UserPromptSubmit with prompt")
 
 	// Check if prompt starts with command prefix
 	if !strings.HasPrefix(event.Prompt, constants.CommandPrefix) {
-		log.Info().Str("prompt", event.Prompt).Msg("Prompt does not start with command prefix, passing through")
 		return "", nil // Not a command, pass through
 	}
 
 	// Extract command index
 	commandStr := strings.TrimPrefix(event.Prompt, constants.CommandPrefix)
-	log.Info().Str("commandStr", commandStr).Msg("Extracted command string")
+	log.Debug().Str("commandStr", commandStr).Msg("extracted command string")
 
 	// Load config to get commands
 	cfg, err := config.Load(a.configPath)
@@ -57,8 +56,6 @@ func (a *App) ProcessUserPrompt(rawJSON json.RawMessage) (string, error) {
 		log.Error().Err(err).Str("configPath", a.configPath).Msg("Failed to load config")
 		return "", fmt.Errorf("failed to load config: %w", err)
 	}
-
-	log.Info().Int("totalCommands", len(cfg.Commands)).Msg("Loaded config")
 
 	// Find command by name
 	var commandMessage string
@@ -72,12 +69,11 @@ func (a *App) ProcessUserPrompt(rawJSON json.RawMessage) (string, error) {
 		commandMessage = cmd.Send
 		foundCommand = true
 		matchedCommand = &cmd
-		log.Info().Str("commandName", commandStr).Str("message", commandMessage).Msg("Found valid command")
+		log.Debug().Str("commandName", commandStr).Str("message", commandMessage).Msg("found valid command")
 		break
 	}
 
 	if !foundCommand {
-		log.Info().Str("commandStr", commandStr).Msg("Command not found, passing through")
 		return "", nil // Command not found, pass through
 	}
 

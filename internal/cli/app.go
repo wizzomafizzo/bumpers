@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/rs/zerolog/log"
@@ -100,12 +101,13 @@ func (a *App) loadConfigAndMatcher() (*config.Config, *matcher.RuleMatcher, erro
 	}
 
 	// Log warnings for invalid rules
-	for _, warning := range partialCfg.ValidationWarnings {
+	for i := range partialCfg.ValidationWarnings {
+		warning := &partialCfg.ValidationWarnings[i]
 		log.Warn().
 			Int("ruleIndex", warning.RuleIndex).
 			Str("pattern", warning.Rule.Match).
 			Err(warning.Error).
-			Msg("Invalid rule skipped")
+			Msg("invalid rule skipped")
 	}
 
 	ruleMatcher, err := matcher.NewRuleMatcher(partialCfg.Rules)
@@ -153,20 +155,24 @@ func (a *App) ProcessHook(input io.Reader) (string, error) {
 		log.Error().Err(err).Msg("Failed to detect hook type")
 		return "", fmt.Errorf("failed to detect hook type: %w", err)
 	}
-	log.Debug().RawJSON("hook", rawJSON).Msg("hook JSON")
-
-	log.Info().Int("hookType", int(hookType)).Msg("Detected hook type")
+	log.Debug().RawJSON("hook", rawJSON).Str("type", hookType.String()).Msg("received hook")
 
 	// Handle UserPromptSubmit hooks
 	if hookType == hooks.UserPromptSubmitHook {
-		log.Info().Msg("Processing UserPromptSubmit hook")
+		log.Debug().Msg("processing UserPromptSubmit hook")
 		return a.ProcessUserPrompt(rawJSON)
 	}
 
 	// Handle SessionStart hooks
 	if hookType == hooks.SessionStartHook {
-		log.Info().Msg("Processing SessionStart hook")
+		log.Debug().Msg("processing SessionStart hook")
 		return a.ProcessSessionStart(rawJSON)
+	}
+
+	// Handle PostToolUse hooks
+	if hookType == hooks.PostToolUseHook {
+		log.Debug().Msg("processing PostToolUse hook")
+		return a.ProcessPostToolUse(rawJSON)
 	}
 
 	// Handle PreToolUse hooks (existing logic)
@@ -207,6 +213,158 @@ func (a *App) ProcessHook(input io.Reader) (string, error) {
 
 	// This should never happen based on matcher logic, but Go requires a return
 	return "", nil
+}
+
+// ProcessPostToolUse processes post-tool-use hook events
+type postToolContent struct {
+	reasoning  string
+	toolOutput string
+	toolName   string
+}
+
+func (*App) extractPostToolContent(rawJSON json.RawMessage) (*postToolContent, error) {
+	// Parse the JSON to get transcript path and tool info
+	var event map[string]any
+	if err := json.Unmarshal(rawJSON, &event); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal post-tool-use event: %w", err)
+	}
+
+	transcriptPath, _ := event["transcript_path"].(string) //nolint:revive // intentionally ignoring ok value
+	toolName, _ := event["tool_name"].(string)             //nolint:revive // intentionally ignoring ok value
+	toolResponse := event["tool_response"]
+
+	content := &postToolContent{toolName: toolName}
+
+	// Read transcript content for reasoning matching
+	if transcriptPath != "" {
+		reasoningBytes, err := os.ReadFile(transcriptPath) //nolint:gosec // from Claude Code hook event
+		if err != nil {
+			log.Debug().Str("path", transcriptPath).Msg("Could not read transcript, continuing without reasoning")
+		} else {
+			content.reasoning = string(reasoningBytes)
+		}
+	}
+
+	// Extract tool output content for tool_output field matching
+	if toolResponse != nil {
+		if str, ok := toolResponse.(string); ok {
+			content.toolOutput = str
+		}
+	}
+
+	return content, nil
+}
+
+func (*App) determineRuleContentMatch(rule *config.Rule, content *postToolContent) (string, bool) {
+	rule.ValidateEventFields()
+
+	matchesReasoning := false
+	matchesToolOutput := false
+
+	// New syntax: event="post" + fields
+	if rule.Event == "post" {
+		if containsString(rule.Fields, "reasoning") {
+			matchesReasoning = true
+		}
+		if containsString(rule.Fields, "tool_output") {
+			matchesToolOutput = true
+		}
+	}
+
+	// Backward compatibility: when includes "reasoning"
+	if len(rule.When) > 0 {
+		expandedWhen := rule.ExpandWhen()
+		if containsString(expandedWhen, "reasoning") {
+			matchesReasoning = true
+		}
+	}
+
+	// Skip if rule doesn't match any available content
+	if !matchesReasoning && !matchesToolOutput {
+		return "", false
+	}
+
+	// Choose content to match against (prioritize reasoning for backward compatibility)
+	switch {
+	case matchesReasoning && content.reasoning != "":
+		return content.reasoning, true
+	case matchesToolOutput && content.toolOutput != "":
+		return content.toolOutput, true
+	default:
+		return "", false // No matching content available
+	}
+}
+
+func (a *App) ProcessPostToolUse(rawJSON json.RawMessage) (string, error) {
+	log.Debug().Msg("ProcessPostToolUse called")
+
+	// Load config for rule matching
+	cfg, _, err := a.loadConfigAndMatcher()
+	if err != nil {
+		return "", err
+	}
+
+	content, err := a.extractPostToolContent(rawJSON)
+	if err != nil {
+		return "", err
+	}
+
+	// Skip if no content to match against (neither reasoning nor tool output)
+	if content.reasoning == "" && content.toolOutput == "" {
+		return "", nil
+	}
+
+	// Check each rule for post-tool-use matching
+	for i := range cfg.Rules {
+		rule := &cfg.Rules[i]
+		contentToMatch, hasMatch := a.determineRuleContentMatch(rule, content)
+		if !hasMatch {
+			continue
+		}
+
+		// Check if pattern matches the selected content
+		if matched, err := a.matchRulePattern(rule, contentToMatch, content.toolName); err == nil && matched {
+			// Process and return the rule's message using existing template system
+			return template.ExecuteRuleTemplate(rule.Send, contentToMatch) //nolint:wrapcheck // preserve behavior
+		}
+	}
+
+	return "", nil
+}
+
+// containsString checks if slice contains the given string
+func containsString(slice []string, item string) bool {
+	for _, s := range slice {
+		if s == item {
+			return true
+		}
+	}
+	return false
+}
+
+// matchRulePattern checks if a rule's pattern matches the given content
+func (*App) matchRulePattern(rule *config.Rule, content, toolName string) (bool, error) {
+	// Check tool pattern if specified (similar to existing matcher logic)
+	toolPattern := rule.Tool
+	if toolPattern != "" {
+		toolRe, err := regexp.Compile("(?i)" + toolPattern)
+		if err != nil {
+			log.Debug().Err(err).Str("pattern", toolPattern).Msg("Invalid tool pattern")
+			return false, err //nolint:wrapcheck // preserving existing behavior
+		}
+		if !toolRe.MatchString(toolName) {
+			return false, nil
+		}
+	}
+
+	// Check content pattern
+	contentRe, err := regexp.Compile(rule.Match)
+	if err != nil {
+		log.Debug().Err(err).Str("pattern", rule.Match).Msg("Invalid content pattern")
+		return false, err //nolint:wrapcheck // preserving existing behavior
+	}
+
+	return contentRe.MatchString(content), nil
 }
 
 func (a *App) TestCommand(command string) (string, error) {
@@ -263,7 +421,8 @@ func (a *App) ValidateConfig() (string, error) {
 		_, _ = result.WriteString(fmt.Sprintf(
 			"Configuration partially valid: %d valid rules, %d invalid rules\n\nInvalid rules:\n",
 			validCount, invalidCount))
-		for _, warning := range partialCfg.ValidationWarnings {
+		for i := range partialCfg.ValidationWarnings {
+			warning := &partialCfg.ValidationWarnings[i]
 			_, _ = result.WriteString(fmt.Sprintf("  Rule %d: %s (pattern: '%s')\n",
 				warning.RuleIndex+1, warning.Error.Error(), warning.Rule.Match))
 		}

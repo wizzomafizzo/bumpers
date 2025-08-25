@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Bumpers is a Claude Code hook guard utility that intercepts hook events and provides intelligent command guarding with positive guidance. Instead of just blocking commands, it suggests better alternatives using encouraging, educational messaging.
+Bumpers is a Claude Code hook guard utility that intercepts hook events and provides intelligent command guarding with positive guidance. Instead of just blocking commands, it suggests better alternatives using encouraging, educational messaging with optional AI-powered responses.
 
 ## CLI Commands
 
@@ -20,23 +20,33 @@ bumpers validate          # Validate configuration files
 just                      # List all available commands
 just build               # Build binary to bin/bumpers
 just install             # Install to $GOPATH/bin
-just test                # Run all tests with coverage and TDD guard
+just test                # Run all tests (unit + integration + e2e)
+just test-unit           # Run unit tests only (fastest)
+just test-integration    # Run integration tests
+just test-e2e            # Run end-to-end tests
 just test ./internal/cli # Test specific package
-just test "" "TestName"  # Run specific test by name
-just test "./..." false  # Run tests without race detection
 just lint                # Run golangci-lint
 just lint fix            # Run golangci-lint with auto-fix
 just clean               # Remove build artifacts and coverage files
 just coverage            # Show test coverage in browser
 ```
 
-**Note**: Always use `just test` instead of `go test` for TDD guard integration.
+## Testing & TDD Workflow
+
+**CRITICAL**: This project follows strict TDD practices. See `TESTING.md` for comprehensive testing guide.
+
+- **Always use `just test-*` commands** - Never use `go test` directly
+- **Three test categories**: Unit (fast), Integration (with dependencies), E2E (full system)
+- **Test utilities**: Custom assertions, mock helpers, resource management
+- **Claude AI mocks**: Comprehensive test helpers for AI interactions
+- **Target coverage**: >75% with mutation testing for quality validation
 
 ## Project Structure
 
 ```
 cmd/bumpers/           # CLI entry point with Cobra commands
 internal/
+├── ai/                # AI generation with caching and rate limiting
 ├── cli/               # Application orchestrator and command logic
 ├── config/            # YAML configuration management
 ├── hooks/             # Hook event processing and JSON parsing
@@ -45,8 +55,12 @@ internal/
 ├── claude/            # Claude binary detection and settings
 │   └── settings/      # Claude settings.json management
 ├── constants/         # Shared constants and paths
+├── context/           # Template context for messaging
 ├── filesystem/        # File system operations
-└── project/           # Project root detection
+├── project/           # Project root detection
+├── storage/           # Persistent storage for session data
+├── template/          # Template engine with custom functions
+└── testutil/          # Testing utilities and assertions
 ```
 
 ## Core Architecture

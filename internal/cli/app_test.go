@@ -3,30 +3,27 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/wizzomafizzo/bumpers/internal/ai"
 	"github.com/wizzomafizzo/bumpers/internal/claude"
 	"github.com/wizzomafizzo/bumpers/internal/constants"
 	"github.com/wizzomafizzo/bumpers/internal/filesystem"
 	"github.com/wizzomafizzo/bumpers/internal/hooks"
-	"github.com/wizzomafizzo/bumpers/internal/logger"
 	"github.com/wizzomafizzo/bumpers/internal/storage"
+	"github.com/wizzomafizzo/bumpers/internal/testutil"
 )
-
-var loggerInitOnce sync.Once
 
 // setupTest initializes test logger to prevent race conditions
 func setupTest(t *testing.T) {
 	t.Helper()
-	loggerInitOnce.Do(func() {
-		logger.InitTest()
-	})
+	testutil.InitTestLogger(t)
 }
 
 // createTempConfig creates a temporary config file for testing
@@ -49,13 +46,8 @@ func TestNewAppWithWorkDir(t *testing.T) {
 
 	app := NewAppWithWorkDir(configPath, workDir)
 
-	if app.configPath != configPath {
-		t.Errorf("Expected configPath %s, got %s", configPath, app.configPath)
-	}
-
-	if app.workDir != workDir {
-		t.Errorf("Expected workDir %s, got %s", workDir, app.workDir)
-	}
+	assert.Equal(t, configPath, app.configPath, "configPath should match")
+	assert.Equal(t, workDir, app.workDir, "workDir should match")
 }
 
 // TestAppWithMemoryFileSystem tests App initialization with in-memory filesystem for parallel testing
@@ -261,7 +253,7 @@ func TestProcessHookDangerousCommand(t *testing.T) {
 	app := NewApp(configPath)
 
 	// Set up mock launcher for AI generation
-	mock := claude.NewMockLauncher()
+	mock := claude.SetupMockLauncherWithDefaults()
 	mock.SetResponseForPattern(".*", "AI-generated response about dangerous rm command")
 	app.SetMockLauncher(mock)
 
@@ -983,9 +975,9 @@ func TestInstallUsesPathConstants(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to change to temp directory: %v", err)
 	}
-	defer func() {
+	t.Cleanup(func() {
 		_ = os.Chdir(oldDir)
-	}()
+	})
 
 	app := NewAppWithWorkDir(configPath, tempDir)
 
@@ -1361,39 +1353,44 @@ commands:
 	app := NewApp(configPath)
 
 	tests := []struct {
-		name           string
-		promptJSON     string
-		expectedOutput string
+		name    string
+		input   string
+		want    string
+		wantErr bool
 	}{
 		{
 			name: "Help command ($help)",
-			promptJSON: `{
+			input: `{
 				"prompt": "$help"
 			}`,
-			expectedOutput: `{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit",` +
+			want: `{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit",` +
 				`"additionalContext":"Available commands:\\n$help - Show this help\\n$status - Show project status"}}`,
+			wantErr: false,
 		},
 		{
 			name: "Status command ($status)",
-			promptJSON: `{
+			input: `{
 				"prompt": "$status"
 			}`,
-			expectedOutput: `{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit",` +
+			want: `{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit",` +
 				`"additionalContext":"Project Status: All systems operational"}}`,
+			wantErr: false,
 		},
 		{
 			name: "Non-command prompt",
-			promptJSON: `{
+			input: `{
 				"prompt": "regular question"
 			}`,
-			expectedOutput: "",
+			want:    "",
+			wantErr: false,
 		},
 		{
 			name: "Invalid command index ($5)",
-			promptJSON: `{
+			input: `{
 				"prompt": "$5"
 			}`,
-			expectedOutput: "",
+			want:    "",
+			wantErr: false,
 		},
 	}
 
@@ -1401,13 +1398,15 @@ commands:
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			result, err := app.ProcessUserPrompt(json.RawMessage(tt.promptJSON))
-			if err != nil {
-				t.Fatalf("ProcessUserPrompt failed: %v", err)
+			result, err := app.ProcessUserPrompt(json.RawMessage(tt.input))
+
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ProcessUserPrompt() error = %v, wantErr %v", err, tt.wantErr)
+				return
 			}
 
-			if result != tt.expectedOutput {
-				t.Errorf("Expected %q, got %q", tt.expectedOutput, result)
+			if !tt.wantErr && result != tt.want {
+				t.Errorf("ProcessUserPrompt() = %q, want %q", result, tt.want)
 			}
 		})
 	}
@@ -1453,7 +1452,7 @@ func TestProcessUserPromptWithCommandGeneration(t *testing.T) {
 	app := NewApp(configPath)
 
 	// Set up mock launcher
-	mockLauncher := claude.NewMockLauncher()
+	mockLauncher := claude.SetupMockLauncherWithDefaults()
 	mockLauncher.SetResponseForPattern("", "Enhanced help message from AI")
 	app.SetMockLauncher(mockLauncher)
 
@@ -1544,7 +1543,7 @@ func TestInstallWithPathCommand(t *testing.T) { //nolint:paralleltest // modifie
 
 	// Save original args
 	originalArgs := os.Args
-	defer func() { os.Args = originalArgs }()
+	t.Cleanup(func() { os.Args = originalArgs })
 
 	// Simulate running from PATH
 	os.Args = []string{"bumpers", "install"}
@@ -2004,8 +2003,7 @@ func TestProcessSessionStartWithTodayVariable(t *testing.T) {
 	}
 }
 
-func TestProcessSessionStartClearsSessionCache(t *testing.T) {
-	t.Parallel()
+func TestProcessSessionStartClearsSessionCache(t *testing.T) { //nolint:paralleltest,revive // Cannot use t.Parallel() due to t.Setenv() in setupSessionCacheTest()
 	setupTest(t)
 
 	app, cachePath, tempDir := setupSessionCacheTest(t)
@@ -2030,16 +2028,8 @@ func setupSessionCacheTest(t *testing.T) (app *App, cachePath, tempDir string) {
 	t.Helper()
 	tempDir = t.TempDir()
 
-	// Setup environment
-	originalHome := os.Getenv("HOME")
-	t.Cleanup(func() {
-		if originalHome != "" {
-			_ = os.Setenv("HOME", originalHome)
-		} else {
-			_ = os.Unsetenv("HOME")
-		}
-	})
-	_ = os.Setenv("HOME", tempDir)
+	// Setup environment using t.Setenv for automatic cleanup
+	t.Setenv("HOME", tempDir)
 
 	configPath := createTempConfig(t, `session:
   - add: "Session started"`)
@@ -2062,7 +2052,12 @@ func populateSessionCache(t *testing.T, cachePath, tempDir string) {
 	if err != nil {
 		t.Fatalf("Failed to create cache: %v", err)
 	}
-	defer func() { _ = cache.Close() }()
+	// Close cache after populating to allow ProcessSessionStart to access it
+	defer func() {
+		if closeErr := cache.Close(); closeErr != nil {
+			t.Logf("Failed to close cache: %v", closeErr)
+		}
+	}()
 
 	expiry := time.Now().Add(24 * time.Hour)
 	sessionEntry := &ai.CacheEntry{
@@ -2090,7 +2085,7 @@ func verifySessionCacheCleared(t *testing.T, cachePath, tempDir string) {
 	if err != nil {
 		t.Fatalf("Failed to reopen cache: %v", err)
 	}
-	defer func() { _ = cache.Close() }()
+	t.Cleanup(func() { _ = cache.Close() })
 
 	retrieved, err := cache.Get("test-session-key")
 	if err != nil {
@@ -2113,7 +2108,7 @@ func TestProcessSessionStartWithAIGeneration(t *testing.T) {
 	app := NewApp(configPath)
 
 	// Set up mock launcher
-	mockLauncher := claude.NewMockLauncher()
+	mockLauncher := claude.SetupMockLauncherWithDefaults()
 	mockLauncher.SetResponseForPattern("", "Enhanced session message from AI")
 	app.SetMockLauncher(mockLauncher)
 
@@ -2354,8 +2349,7 @@ func TestProcessHookWithAIGeneration(t *testing.T) {
 	app := NewAppWithWorkDir(configPath, tempDir)
 
 	// Inject mock launcher to ensure tests use mock Claude CLI
-	mock := claude.NewMockLauncher()
-	mock.SetResponseForPattern(".*", "Mock response")
+	mock := claude.SetupMockLauncherWithDefaults()
 	app.SetMockLauncher(mock)
 
 	// Verify mock was set (simple field access test)
@@ -2438,8 +2432,7 @@ func TestProcessHookAIGenerationRequired(t *testing.T) {
 	app := NewAppWithWorkDir(configPath, tempDir)
 
 	// Inject mock launcher to ensure tests use mock Claude CLI
-	mock := claude.NewMockLauncher()
-	mock.SetResponseForPattern(".*", "Mock response")
+	mock := claude.SetupMockLauncherWithDefaults()
 	app.SetMockLauncher(mock)
 
 	hookInput := `{
@@ -2794,4 +2787,288 @@ func TestFindMatchingRule(t *testing.T) {
 	if value != "/home/user/secrets.txt" {
 		t.Errorf("Expected matched value '/home/user/secrets.txt', got %s", value)
 	}
+}
+
+// TestProcessHookRoutesPostToolUse tests that PostToolUse hooks are properly routed
+func TestProcessHookRoutesPostToolUse(t *testing.T) {
+	t.Parallel()
+	setupTest(t)
+
+	configContent := `rules:
+  # Post-tool-use rule matching output (TODO: implement tool_output support)
+  - match: "error|failed"
+    send: "Command failed - check the output"
+    event: "post"
+    fields: ["tool_output"]
+  # Post-tool-use rule matching reasoning
+  - match: "not related to my changes"
+    send: "AI claiming unrelated - please verify"
+    event: "post"
+    fields: ["reasoning"]`
+
+	configPath := createTempConfig(t, configContent)
+	app := NewApp(configPath)
+
+	// Use static testdata transcript
+	testdataDir := "../../testdata"
+	transcriptPath := filepath.Join(testdataDir, "transcript-not-related.jsonl")
+	absPath, err := filepath.Abs(transcriptPath)
+	if err != nil {
+		t.Fatalf("Failed to get absolute path: %v", err)
+	}
+	transcriptPath = absPath
+
+	// Test PostToolUse hook with reasoning match
+	postToolUseInput := `{
+		"session_id": "abc123",
+		"transcript_path": "` + transcriptPath + `",
+		"cwd": "/test/directory",
+		"hook_event_name": "PostToolUse",
+		"tool_name": "Bash",
+		"tool_input": {
+			"command": "npm test"
+		},
+		"tool_output": {
+			"success": true,
+			"output": "All tests passed"
+		}
+	}`
+
+	result, err := app.ProcessHook(strings.NewReader(postToolUseInput))
+	if err != nil {
+		t.Fatalf("ProcessHook failed for PostToolUse: %v", err)
+	}
+
+	// Should match the reasoning rule and return the message
+	expectedMessage := "AI claiming unrelated - please verify"
+	if result != expectedMessage {
+		t.Errorf("Expected %q, got %q", expectedMessage, result)
+	}
+}
+
+// TestPostToolUseWithDifferentTranscript tests that PostToolUse reads actual transcript content
+func TestPostToolUseWithDifferentTranscript(t *testing.T) {
+	t.Parallel()
+	setupTest(t)
+
+	configContent := `rules:
+  - match: "permission denied"
+    send: "File permission error detected"
+    event: "post"
+    fields: ["reasoning"]`
+
+	configPath := createTempConfig(t, configContent)
+	app := NewApp(configPath)
+
+	// Use static testdata transcript with permission denied content
+	testdataDir := "../../testdata"
+	transcriptPath := filepath.Join(testdataDir, "transcript-permission-denied.jsonl")
+	absPath, err := filepath.Abs(transcriptPath)
+	if err != nil {
+		t.Fatalf("Failed to get absolute path: %v", err)
+	}
+	transcriptPath = absPath
+
+	postToolUseInput := `{
+		"session_id": "test456",
+		"transcript_path": "` + transcriptPath + `",
+		"cwd": "/test/dir",
+		"hook_event_name": "PostToolUse",
+		"tool_name": "Bash",
+		"tool_input": {"command": "ls /root"},
+		"tool_output": {"error": true}
+	}`
+
+	result, err := app.ProcessHook(strings.NewReader(postToolUseInput))
+	if err != nil {
+		t.Fatalf("ProcessHook failed: %v", err)
+	}
+
+	// This should match "permission denied" pattern, not return the hardcoded stub message
+	expectedMessage := "File permission error detected"
+	if result != expectedMessage {
+		t.Errorf("Expected %q (from transcript matching), got %q", expectedMessage, result)
+	}
+
+	// Verify it's NOT returning the hardcoded stub message
+	stubMessage := "AI claiming unrelated - please verify"
+	if result == stubMessage {
+		t.Error("Got hardcoded stub message - PostToolUse handler not reading transcript properly")
+	}
+}
+
+// TestPostToolUseRuleNotMatching tests that PostToolUse returns empty when no rules match
+func TestPostToolUseRuleNotMatching(t *testing.T) {
+	t.Parallel()
+	setupTest(t)
+
+	configContent := `rules:
+  - match: "file not found"
+    send: "Check the file path"
+    event: "post"
+    fields: ["reasoning"]`
+
+	configPath := createTempConfig(t, configContent)
+	app := NewApp(configPath)
+
+	// Use transcript that won't match the "file not found" pattern
+	testdataDir := "../../testdata"
+	transcriptPath := filepath.Join(testdataDir, "transcript-no-match.jsonl")
+	absPath, err := filepath.Abs(transcriptPath)
+	if err != nil {
+		t.Fatalf("Failed to get absolute path: %v", err)
+	}
+
+	postToolUseInput := `{
+		"session_id": "test789",
+		"transcript_path": "` + absPath + `",
+		"cwd": "/test/dir",
+		"hook_event_name": "PostToolUse",
+		"tool_name": "Bash",
+		"tool_input": {"command": "ls"},
+		"tool_output": {"success": true}
+	}`
+
+	result, err := app.ProcessHook(strings.NewReader(postToolUseInput))
+	if err != nil {
+		t.Fatalf("ProcessHook failed: %v", err)
+	}
+
+	// Should return empty string when no rules match
+	if result != "" {
+		t.Errorf("Expected empty result when no rules match, got %q", result)
+	}
+}
+
+// TestPostToolUseWithCustomPattern tests rule system integration with custom patterns
+func TestPostToolUseWithCustomPattern(t *testing.T) {
+	t.Parallel()
+	setupTest(t)
+
+	// Create a config with a custom pattern that doesn't match hardcoded patterns
+	configContent := `rules:
+  - match: "timeout.*occurred"
+    send: "Operation timed out - check network connection"
+    event: "post"
+    fields: ["reasoning"]`
+
+	configPath := createTempConfig(t, configContent)
+	app := NewApp(configPath)
+
+	// Create a temporary transcript file with the custom pattern
+	tmpDir := t.TempDir()
+	transcriptPath := filepath.Join(tmpDir, "custom-transcript.jsonl")
+	transcriptContent := `{"type":"assistant","message":{"content":[{"type":"text",` +
+		`"text":"The command failed because a timeout occurred while connecting to the server"}]}}`
+
+	if err := os.WriteFile(transcriptPath, []byte(transcriptContent), 0o600); err != nil {
+		t.Fatalf("Failed to write transcript file: %v", err)
+	}
+
+	postToolUseInput := fmt.Sprintf(`{
+		"session_id": "test123",
+		"transcript_path": "%s",
+		"cwd": "/test/dir",
+		"hook_event_name": "PostToolUse",
+		"tool_name": "Bash",
+		"tool_input": {"command": "curl -m 5 example.com"},
+		"tool_output": {"success": false}
+	}`, transcriptPath)
+
+	result, err := app.ProcessHook(strings.NewReader(postToolUseInput))
+	if err != nil {
+		t.Fatalf("ProcessHook failed: %v", err)
+	}
+
+	// Should match the custom pattern and return the configured message
+	expectedMessage := "Operation timed out - check network connection"
+	if result != expectedMessage {
+		t.Errorf("Expected %q, got %q (rule system integration needed)",
+			expectedMessage, result)
+	}
+}
+
+// TestPostToolUseWithToolOutputMatching tests tool_output field matching
+func TestPostToolUseWithToolOutputMatching(t *testing.T) {
+	t.Parallel()
+	setupTest(t)
+
+	configContent := `rules:
+  - match: "error.*exit code"
+    send: "Tool execution failed"
+    event: "post"
+    fields: ["tool_output"]`
+
+	configPath := createTempConfig(t, configContent)
+	app := NewApp(configPath)
+
+	// Create mock JSON with tool_response containing error
+	jsonData := `{
+		"session_id": "test123",
+		"transcript_path": "",
+		"hook_event_name": "PostToolUse",
+		"tool_name": "Bash",
+		"tool_response": "Command failed with error: exit code 1"
+	}`
+
+	result, err := app.ProcessPostToolUse(json.RawMessage(jsonData))
+	if err != nil {
+		t.Fatalf("ProcessPostToolUse failed: %v", err)
+	}
+
+	assert.Equal(t, "Tool execution failed", result)
+}
+
+// TestPostToolUseWithMultipleFieldMatching tests multiple field matching in a single rule
+func TestPostToolUseWithMultipleFieldMatching(t *testing.T) {
+	t.Parallel()
+	setupTest(t)
+
+	configContent := `rules:
+  - match: "timeout|permission denied"
+    send: "Operation issue detected"
+    event: "post"
+    fields: ["reasoning", "tool_output"]`
+
+	configPath := createTempConfig(t, configContent)
+	app := NewApp(configPath)
+
+	// Test with tool_output containing timeout
+	jsonData1 := `{
+		"session_id": "test123",
+		"transcript_path": "",
+		"hook_event_name": "PostToolUse",
+		"tool_name": "Bash",
+		"tool_response": "Connection timeout occurred"
+	}`
+
+	result1, err := app.ProcessPostToolUse(json.RawMessage(jsonData1))
+	if err != nil {
+		t.Fatalf("ProcessPostToolUse failed: %v", err)
+	}
+
+	assert.Equal(t, "Operation issue detected", result1)
+
+	// Test with reasoning content containing permission denied
+	testdataDir := "../../testdata"
+	transcriptPath := filepath.Join(testdataDir, "transcript-permission-denied.jsonl")
+	absPath, err := filepath.Abs(transcriptPath)
+	if err != nil {
+		t.Fatalf("Could not get absolute path: %v", err)
+	}
+
+	jsonData2 := fmt.Sprintf(`{
+		"session_id": "test456",
+		"transcript_path": "%s",
+		"hook_event_name": "PostToolUse",
+		"tool_name": "Bash",
+		"tool_response": "Command executed successfully"
+	}`, absPath)
+
+	result2, err := app.ProcessPostToolUse(json.RawMessage(jsonData2))
+	if err != nil {
+		t.Fatalf("ProcessPostToolUse failed: %v", err)
+	}
+
+	assert.Equal(t, "Operation issue detected", result2)
 }

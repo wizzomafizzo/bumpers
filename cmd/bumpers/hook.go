@@ -7,6 +7,9 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/wizzomafizzo/bumpers/internal/cli"
+	"github.com/wizzomafizzo/bumpers/internal/context"
+	"github.com/wizzomafizzo/bumpers/internal/logger"
+	"github.com/wizzomafizzo/bumpers/internal/project"
 )
 
 // HookExitError represents an error with a specific exit code for hook processing
@@ -17,6 +20,24 @@ type HookExitError struct {
 
 func (e *HookExitError) Error() string {
 	return e.Message
+}
+
+// findWorkingDir finds the project working directory
+func findWorkingDir() (string, error) {
+	root, err := project.FindRoot()
+	if err != nil {
+		return "", fmt.Errorf("failed to find project root: %w", err)
+	}
+	return root, nil
+}
+
+// initLogging initializes logging for hook commands
+func initLogging(workingDir string) error {
+	projectCtx := context.New(workingDir)
+	if err := logger.InitWithProjectContext(projectCtx); err != nil {
+		return fmt.Errorf("failed to initialize logger: %w", err)
+	}
+	return nil
 }
 
 // processHookCommand processes hook input and returns exit code and error message
@@ -53,6 +74,16 @@ func createHookCommand() *cobra.Command {
 		Long:         "Process hook input from Claude Code and apply configured rules",
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			// Initialize logging only for hook command
+			workingDir, err := findWorkingDir()
+			if err != nil {
+				return fmt.Errorf("failed to find project root: %w", err)
+			}
+
+			if initErr := initLogging(workingDir); initErr != nil {
+				return fmt.Errorf("logger init failed: %w", initErr)
+			}
+
 			app, err := createAppFromCommand(cmd.Parent())
 			if err != nil {
 				return err
