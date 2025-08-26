@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/wizzomafizzo/bumpers/internal/testutil"
+	"github.com/wizzomafizzo/bumpers/internal/testing"
 )
 
 func TestCreateRootCommand(t *testing.T) {

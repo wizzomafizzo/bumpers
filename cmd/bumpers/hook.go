@@ -7,9 +7,9 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/wizzomafizzo/bumpers/internal/cli"
-	"github.com/wizzomafizzo/bumpers/internal/context"
-	"github.com/wizzomafizzo/bumpers/internal/logger"
-	"github.com/wizzomafizzo/bumpers/internal/project"
+	"github.com/wizzomafizzo/bumpers/internal/core/messaging/context"
+	"github.com/wizzomafizzo/bumpers/internal/infrastructure/logging"
+	"github.com/wizzomafizzo/bumpers/internal/infrastructure/project"
 )
 
 // HookExitError represents an error with a specific exit code for hook processing

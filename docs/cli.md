@@ -30,7 +30,7 @@ bumpers hook < hook_input.json
 
 **Exit Codes:**
 - `0`: Allow operation (or informational message)
-- `1`: Block operation with message
+- `2`: Block operation with message
 
 **Example JSON Input:**
 ```json
@@ -181,12 +181,10 @@ tail -f %LOCALAPPDATA%/bumpers/bumpers.log
 
 ## Configuration File Discovery
 
-When using the default configuration (`bumpers.yml`), Bumpers searches for alternative formats:
+When using the default configuration, Bumpers searches for:
 
 1. `bumpers.yml` (preferred)
 2. `bumpers.yaml`
-3. `bumpers.toml`
-4. `bumpers.json`
 
 **Project Root Detection:**
 - Searches up directory tree from current location
@@ -195,28 +193,17 @@ When using the default configuration (`bumpers.yml`), Bumpers searches for alter
 
 ## Environment Variables
 
-### Required for AI Generation
+### Available Environment Variables
 - **`ANTHROPIC_API_KEY`**: Required for AI-powered responses
-- **`BUMPERS_LOG_LEVEL`**: Set log level (`debug`, `info`, `warn`, `error`)
-
-### Optional Configuration
 - **`BUMPERS_SKIP`**: Set to `1` to temporarily disable all hooks
-- **`BUMPERS_CACHE_DIR`**: Override default cache directory
-- **`BUMPERS_CONFIG`**: Default configuration file path
 
 **Example:**
 ```bash
-# Enable debug logging
-export BUMPERS_LOG_LEVEL=debug
-
 # Set API key for AI generation
 export ANTHROPIC_API_KEY=your_key_here
 
 # Temporarily disable hooks
 export BUMPERS_SKIP=1
-
-# Use hooks normally
-unset BUMPERS_SKIP
 ```
 
 ## Integration with Build Systems

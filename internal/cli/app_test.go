@@ -12,13 +12,13 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/wizzomafizzo/bumpers/internal/ai"
-	"github.com/wizzomafizzo/bumpers/internal/claude"
-	"github.com/wizzomafizzo/bumpers/internal/constants"
-	"github.com/wizzomafizzo/bumpers/internal/filesystem"
-	"github.com/wizzomafizzo/bumpers/internal/hooks"
-	"github.com/wizzomafizzo/bumpers/internal/storage"
-	"github.com/wizzomafizzo/bumpers/internal/testutil"
+	"github.com/wizzomafizzo/bumpers/internal/core/engine/hooks"
+	"github.com/wizzomafizzo/bumpers/internal/infrastructure/constants"
+	"github.com/wizzomafizzo/bumpers/internal/platform/claude"
+	"github.com/wizzomafizzo/bumpers/internal/platform/claude/api"
+	"github.com/wizzomafizzo/bumpers/internal/platform/filesystem"
+	"github.com/wizzomafizzo/bumpers/internal/platform/storage"
+	"github.com/wizzomafizzo/bumpers/internal/testing"
 )
 
 // setupTest initializes test logger to prevent race conditions
@@ -40,6 +40,7 @@ func createTempConfig(t *testing.T, content string) string {
 }
 
 func TestNewAppWithWorkDir(t *testing.T) {
+	setupTest(t)
 	t.Parallel()
 
 	configPath := "/path/to/config.yml"
@@ -78,6 +79,7 @@ func TestCustomConfigPathLoading(t *testing.T) {
 
 // TestAppWithMemoryFileSystem tests App initialization with in-memory filesystem for parallel testing
 func TestAppWithMemoryFileSystem(t *testing.T) {
+	setupTest(t)
 	t.Parallel()
 
 	// Setup in-memory filesystem with test config
@@ -117,6 +119,7 @@ func TestAppWithMemoryFileSystem(t *testing.T) {
 
 // TestAppInitializeWithMemoryFileSystem tests that Initialize works with injected filesystem
 func TestAppInitializeWithMemoryFileSystem(t *testing.T) {
+	setupTest(t)
 	t.Parallel()
 
 	// Setup in-memory filesystem with test config
@@ -159,8 +162,8 @@ func TestAppInitializeWithMemoryFileSystem(t *testing.T) {
 }
 
 func TestInstallClaudeHooksWithWorkDir(t *testing.T) {
-	t.Parallel()
 	setupTest(t)
+	t.Parallel()
 
 	tempDir := t.TempDir()
 	configPath := filepath.Join(tempDir, "bumpers.yml")
@@ -374,6 +377,7 @@ func TestConfigurationIsUsed(t *testing.T) {
 }
 
 func TestTestCommand(t *testing.T) {
+	setupTest(t)
 	t.Parallel()
 
 	configContent := `rules:
@@ -395,6 +399,7 @@ func TestTestCommand(t *testing.T) {
 }
 
 func TestInitialize(t *testing.T) {
+	setupTest(t)
 	t.Parallel()
 	tempDir := t.TempDir()
 	configPath := filepath.Join(tempDir, "bumpers.yml")
@@ -427,6 +432,7 @@ func TestInitialize(t *testing.T) {
 }
 
 func TestStatus(t *testing.T) {
+	setupTest(t)
 	t.Parallel()
 
 	configContent := `rules:
@@ -448,6 +454,7 @@ func TestStatus(t *testing.T) {
 }
 
 func TestStatusEnhanced(t *testing.T) {
+	setupTest(t)
 	t.Parallel()
 
 	tempDir := t.TempDir()
@@ -521,6 +528,7 @@ func TestInstallUsesProjectClaudeDirectory(t *testing.T) {
 }
 
 func TestInitializeInstallsClaudeHooksInProjectDirectory(t *testing.T) {
+	setupTest(t)
 	t.Parallel()
 	// Test resets shared logger state
 	tempDir := t.TempDir()
@@ -577,6 +585,7 @@ func TestInitializeInstallsClaudeHooksInProjectDirectory(t *testing.T) {
 }
 
 func TestProcessHookLogsErrors(t *testing.T) {
+	setupTest(t)
 	t.Parallel()
 	tempDir := t.TempDir()
 
@@ -606,6 +615,7 @@ func TestProcessHookLogsErrors(t *testing.T) {
 }
 
 func TestInstallActuallyAddsHook(t *testing.T) {
+	setupTest(t)
 	t.Parallel()
 	tempDir := t.TempDir()
 	configPath := filepath.Join(tempDir, "bumpers.yml")
@@ -650,6 +660,7 @@ func TestInstallActuallyAddsHook(t *testing.T) {
 }
 
 func TestInstallCreatesBothHooks(t *testing.T) {
+	setupTest(t)
 	t.Parallel()
 	tempDir := t.TempDir()
 	configPath := filepath.Join(tempDir, "bumpers.yml")
@@ -713,6 +724,7 @@ func TestInstallCreatesBothHooks(t *testing.T) {
 }
 
 func TestProcessHookSimplifiedSchemaAlwaysDenies(t *testing.T) {
+	setupTest(t)
 	t.Parallel()
 
 	// Setup test config with simplified schema (no name or action fields)
@@ -778,6 +790,7 @@ func TestProcessHookSimplifiedSchemaAlwaysDenies(t *testing.T) {
 }
 
 func TestCommandWithoutBlockedPrefix(t *testing.T) {
+	setupTest(t)
 	t.Parallel()
 
 	// Test that TestCommand doesn't add "Command blocked:" prefix
@@ -834,6 +847,7 @@ func validateProductionEnvironment(t *testing.T, err error, prodLikeDir string) 
 }
 
 func TestInstallHandlesMissingBumpersBinary(t *testing.T) {
+	setupTest(t)
 	t.Parallel()
 	// Use a directory name that won't trigger test environment detection
 	tempDir := t.TempDir()
@@ -869,6 +883,7 @@ func TestInstallHandlesMissingBumpersBinary(t *testing.T) {
 }
 
 func TestHookInstallationDoesNotIncludeTimeout(t *testing.T) {
+	setupTest(t)
 	t.Parallel()
 	setupTest(t)
 	tempDir := t.TempDir()
@@ -920,6 +935,7 @@ func TestHookInstallationDoesNotIncludeTimeout(t *testing.T) {
 }
 
 func TestInitializeInitializesLogger(t *testing.T) {
+	setupTest(t)
 	t.Parallel()
 	tempDir := t.TempDir()
 	configPath := filepath.Join(tempDir, "bumpers.yml")
@@ -947,6 +963,7 @@ func TestInitializeInitializesLogger(t *testing.T) {
 }
 
 func TestValidateConfig(t *testing.T) {
+	setupTest(t)
 	t.Parallel()
 
 	configContent := `rules:
@@ -971,6 +988,7 @@ func TestValidateConfig(t *testing.T) {
 }
 
 func TestInstallUsesPathConstants(t *testing.T) {
+	setupTest(t)
 	t.Parallel()
 	tempDir := t.TempDir()
 
@@ -1093,6 +1111,7 @@ rules:
 }
 
 func TestNewApp_ProjectRootDetection(t *testing.T) {
+	setupTest(t)
 	t.Parallel()
 
 	projectDir, subDir, cleanup := setupProjectStructure(t, "bumpers.yml")
@@ -1121,6 +1140,7 @@ func TestNewApp_ProjectRootDetection(t *testing.T) {
 }
 
 func TestInstall_UsesProjectRoot(t *testing.T) {
+	setupTest(t)
 	t.Parallel()
 
 	projectDir, subDir, cleanup := setupProjectStructure(t, "bumpers.yml")
@@ -1210,6 +1230,7 @@ func testNewAppAutoFindsConfigFile(t *testing.T, configFileName string) {
 }
 
 func TestNewApp_AutoFindsConfigFile(t *testing.T) {
+	setupTest(t)
 	t.Parallel()
 	setupTest(t)
 	testNewAppAutoFindsConfigFile(t, "bumpers.yaml")
@@ -2103,7 +2124,7 @@ func TestProcessSessionStartWithTodayVariable(t *testing.T) {
 	}
 }
 
-func TestProcessSessionStartClearsSessionCache(t *testing.T) { //nolint:paralleltest,revive // Cannot use t.Parallel() due to t.Setenv() in setupSessionCacheTest()
+func TestProcessSessionStartClearsSessionCache(t *testing.T) { //nolint:paralleltest // t.Setenv() usage
 	setupTest(t)
 
 	app, cachePath, tempDir := setupSessionCacheTest(t)
@@ -2128,17 +2149,19 @@ func setupSessionCacheTest(t *testing.T) (app *App, cachePath, tempDir string) {
 	t.Helper()
 	tempDir = t.TempDir()
 
-	// Setup environment using t.Setenv for automatic cleanup
-	t.Setenv("HOME", tempDir)
+	// Set XDG_DATA_HOME to use temp directory for cache - this works with t.Parallel()
+	dataHome := filepath.Join(tempDir, ".local", "share")
+	t.Setenv("XDG_DATA_HOME", dataHome)
 
 	configPath := createTempConfig(t, `session:
   - add: "Session started"`)
 	app = NewApp(configPath)
 	app.projectRoot = tempDir
 
-	// Get cache path
+	// Get the actual cache path that the app will use
 	storageManager := storage.New(filesystem.NewOSFileSystem())
-	cachePath, err := storageManager.GetCachePath()
+	var err error
+	cachePath, err = storageManager.GetCachePath()
 	if err != nil {
 		t.Fatalf("Failed to get cache path: %v", err)
 	}
@@ -2891,8 +2914,8 @@ func TestFindMatchingRule(t *testing.T) {
 
 // TestProcessHookRoutesPostToolUse tests that PostToolUse hooks are properly routed
 func TestProcessHookRoutesPostToolUse(t *testing.T) {
-	t.Parallel()
 	setupTest(t)
+	t.Parallel()
 
 	configContent := `rules:
   # Post-tool-use rule matching output (TODO: implement tool_output support)
@@ -2950,8 +2973,8 @@ func TestProcessHookRoutesPostToolUse(t *testing.T) {
 
 // TestPostToolUseWithDifferentTranscript tests that PostToolUse reads actual transcript content
 func TestPostToolUseWithDifferentTranscript(t *testing.T) {
-	t.Parallel()
 	setupTest(t)
+	t.Parallel()
 
 	configContent := `rules:
   - match:
@@ -3503,8 +3526,8 @@ func TestIntegrationThinkingAndTextExtraction(t *testing.T) {
 }
 
 func TestIntegrationPerformanceAnalysisDetection(t *testing.T) {
-	t.Parallel()
 	setupTest(t)
+	t.Parallel()
 
 	testPostToolUseIntegration(t, &postToolUseIntegrationTestCase{
 		sessionID:       "perf-test",
