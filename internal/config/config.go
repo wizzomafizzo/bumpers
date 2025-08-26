@@ -3,10 +3,10 @@ package config
 import (
 	"errors"
 	"fmt"
+	"os"
 	"regexp"
-	"strings"
 
-	"github.com/spf13/viper"
+	"gopkg.in/yaml.v3"
 )
 
 type Config struct {
@@ -59,15 +59,13 @@ type Session struct {
 }
 
 func Load(path string) (*Config, error) {
-	viperInstance := viper.New()
-	viperInstance.SetConfigFile(path)
-
-	if err := viperInstance.ReadInConfig(); err != nil {
+	data, err := os.ReadFile(path) //nolint:gosec // Path comes from validated user config
+	if err != nil {
 		return nil, fmt.Errorf("failed to read config: %w", err)
 	}
 
 	var config Config
-	if err := viperInstance.Unmarshal(&config); err != nil {
+	if err := yaml.Unmarshal(data, &config); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
 	}
 
@@ -80,15 +78,8 @@ func Load(path string) (*Config, error) {
 
 // LoadFromYAML loads config from YAML bytes - helper for tests
 func LoadFromYAML(data []byte) (*Config, error) {
-	viperInstance := viper.New()
-	viperInstance.SetConfigType("yaml")
-
-	if err := viperInstance.ReadConfig(strings.NewReader(string(data))); err != nil {
-		return nil, fmt.Errorf("failed to read config: %w", err)
-	}
-
 	var config Config
-	if err := viperInstance.Unmarshal(&config); err != nil {
+	if err := yaml.Unmarshal(data, &config); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
 	}
 
@@ -204,20 +195,49 @@ func (r *Rule) GetGenerate() Generate {
 
 // GetMatch converts the interface{} Match field to a Match struct
 func (r *Rule) GetMatch() Match {
-	return parseMatchField(r.Match, "", nil)
+	if r.Match == nil {
+		return Match{Pattern: "", Event: "pre", Sources: []string{}}
+	}
+
+	// Handle string form: match: "pattern"
+	if patternStr, ok := r.Match.(string); ok {
+		return Match{
+			Pattern: patternStr,
+			Event:   "pre",      // Default event
+			Sources: []string{}, // Default sources (matches all fields)
+		}
+	}
+
+	// Handle struct form: match: { pattern: "...", event: "...", sources: [...] }
+	if matchMap, ok := r.Match.(map[string]any); ok {
+		match := Match{
+			Event:   "pre",      // Default event
+			Sources: []string{}, // Default sources
+		}
+
+		if pattern, ok := matchMap["pattern"].(string); ok {
+			match.Pattern = pattern
+		}
+
+		if event, ok := matchMap["event"].(string); ok {
+			match.Event = event
+		}
+
+		if sources, ok := matchMap["sources"].([]any); ok {
+			match.Sources = convertSourcesSlice(sources)
+		}
+
+		return match
+	}
+
+	// Invalid match field - return empty Match that will fail validation
+	return Match{Pattern: "", Event: "pre", Sources: []string{}}
 }
 
 // LoadPartial loads config from YAML bytes with partial parsing support
 func LoadPartial(data []byte) (*PartialConfig, error) {
-	viperInstance := viper.New()
-	viperInstance.SetConfigType("yaml")
-
-	if err := viperInstance.ReadConfig(strings.NewReader(string(data))); err != nil {
-		return nil, fmt.Errorf("failed to read config: %w", err)
-	}
-
 	var config Config
-	if err := viperInstance.Unmarshal(&config); err != nil {
+	if err := yaml.Unmarshal(data, &config); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
 	}
 
@@ -293,91 +313,6 @@ func (c *Command) GetGenerate() Generate {
 // GetGenerate converts the interface{} Generate field to a Generate struct for Session
 func (s *Session) GetGenerate() Generate {
 	return parseGenerateField(s.Generate, "off")
-}
-
-// parseMatchField converts an interface{} Match field to a Match struct
-func parseMatchField(matchField any, fallbackEvent string, fallbackSources []string) Match {
-	if matchField == nil {
-		return parseNilMatch()
-	}
-
-	if patternStr, ok := matchField.(string); ok {
-		return parseStringMatch(patternStr, fallbackEvent, fallbackSources)
-	}
-
-	if matchMap, ok := matchField.(map[string]any); ok {
-		return parseMapMatch(matchMap)
-	}
-
-	return parseFallbackMatch(fallbackEvent, fallbackSources)
-}
-
-// parseNilMatch handles nil match field case
-func parseNilMatch() Match {
-	return Match{Pattern: "", Event: "pre", Sources: []string{}}
-}
-
-// parseStringMatch handles string match field case
-func parseStringMatch(patternStr, fallbackEvent string, fallbackSources []string) Match {
-	event := fallbackEvent
-	if event == "" {
-		event = "pre"
-	}
-
-	sources := determineSources(fallbackSources, fallbackEvent)
-	return Match{Pattern: patternStr, Event: event, Sources: sources}
-}
-
-// parseMapMatch handles map match field case
-func parseMapMatch(matchMap map[string]any) Match {
-	match := Match{
-		Event:   "pre",      // Default event
-		Sources: []string{}, // Default sources
-	}
-
-	if pattern, ok := matchMap["pattern"].(string); ok {
-		match.Pattern = pattern
-	}
-
-	if event, ok := matchMap["event"].(string); ok {
-		match.Event = event
-	}
-
-	if sources, ok := matchMap["sources"].([]any); ok {
-		match.Sources = convertSourcesSlice(sources)
-	}
-
-	return match
-}
-
-// parseFallbackMatch handles unknown match field types
-func parseFallbackMatch(fallbackEvent string, fallbackSources []string) Match {
-	event := fallbackEvent
-	if event == "" {
-		event = "pre"
-	}
-
-	sources := fallbackSources
-	if sources == nil {
-		sources = []string{}
-	}
-
-	return Match{Pattern: "", Event: event, Sources: sources}
-}
-
-// determineSources determines sources slice for string match case
-func determineSources(fallbackSources []string, fallbackEvent string) []string {
-	if fallbackSources == nil && fallbackEvent == "" {
-		// New format: no Event/Sources at rule level, use empty slice
-		return []string{}
-	}
-
-	if fallbackSources == nil {
-		// Old format: preserve nil for backward compatibility
-		return nil
-	}
-
-	return fallbackSources
 }
 
 // convertSourcesSlice converts []any sources to []string

@@ -31,7 +31,8 @@ func TestLoadConfig(t *testing.T) {
 	configFile := filepath.Join(tempDir, "test.yaml")
 
 	yamlContent := `rules:
-  - match: "go test.*"
+  - match:
+      pattern: "go test.*"
     send: "Use just test instead"
 `
 
@@ -48,7 +49,8 @@ func TestLoadConfigWithAlternatives(t *testing.T) {
 	configFile := filepath.Join(tempDir, "test.yaml")
 
 	yamlContent := `rules:
-  - match: "go test.*"
+  - match:
+      pattern: "go test.*"
     send: "Use just test instead for better TDD integration"
 `
 
@@ -72,7 +74,8 @@ func TestLoadConfigWithNewStructure(t *testing.T) {
 	t.Parallel()
 
 	yamlContent := `rules:
-  - match: "go test*"
+  - match:
+      pattern: "go test*"
     send: |
       Use just test instead for better TDD integration
       
@@ -115,7 +118,8 @@ func TestSimplifiedSchemaHasNoActionConstants(t *testing.T) {
 	// that the simplified schema works without them
 
 	yamlContent := `rules:
-  - match: "test*"
+  - match:
+      pattern: "test*"
     send: "Test response"
 `
 	tempDir := t.TempDir()
@@ -151,7 +155,8 @@ func TestLoadConfigFromFile(t *testing.T) {
 	tempDir := t.TempDir()
 	configPath := filepath.Join(tempDir, "test-config.yaml")
 	configContent := `rules:
-  - match: "go test.*"
+  - match:
+      pattern: "go test.*"
     send: "Use just test instead for better TDD integration"
     generate:
       mode: "session"
@@ -182,7 +187,8 @@ func TestGenerateFieldAsString(t *testing.T) {
 	t.Parallel()
 
 	yamlContent := `rules:
-  - match: "go test"
+  - match:
+      pattern: "go test"
     send: "Use just test instead"
     generate: "session"
 `
@@ -203,7 +209,8 @@ func TestGenerateFieldDefaultToSession(t *testing.T) {
 	t.Parallel()
 
 	yamlContent := `rules:
-  - match: "go test"
+  - match:
+      pattern: "go test"
     send: "Use just test instead"
 `
 
@@ -223,14 +230,16 @@ func TestLoadConfigSimplifiedSchema(t *testing.T) {
 	t.Parallel()
 
 	yamlContent := `rules:
-  - match: "go test*"
+  - match:
+      pattern: "go test*"
     send: |
       Use just test instead for better TDD integration
       
       Try one of these alternatives:
       • just test          # Run all tests
       • just test-unit     # Run unit tests only
-  - match: "rm -rf /*"
+  - match:
+      pattern: "rm -rf /*"
     send: "Dangerous rm command detected! Be more specific with your rm command."
     generate:
       mode: "always"
@@ -297,14 +306,16 @@ func testValidConfigs(t *testing.T) {
 		{
 			name: "valid config",
 			yamlContent: `rules:
-  - match: "go test.*"
+  - match:
+      pattern: "go test.*"
     send: "Use just test instead"`,
 			expectError: false,
 		},
 		{
 			name: "valid generate with prompt",
 			yamlContent: `rules:
-  - match: "test.*"
+  - match:
+      pattern: "test.*"
     generate:
       mode: "always"
       prompt: "Test prompt"`,
@@ -313,7 +324,8 @@ func testValidConfigs(t *testing.T) {
 		{
 			name: "rule with message only",
 			yamlContent: `rules:
-  - match: "test.*"
+  - match:
+      pattern: "test.*"
     send: "Use just test instead"`,
 			expectError: false,
 		},
@@ -345,7 +357,8 @@ func testInvalidConfigs(t *testing.T) {
 		{
 			name: "empty pattern",
 			yamlContent: `rules:
-  - match: ""
+  - match:
+      pattern: ""
     send: "Empty pattern"`,
 			expectError:   true,
 			errorContains: "match field is required",
@@ -353,7 +366,8 @@ func testInvalidConfigs(t *testing.T) {
 		{
 			name: "invalid regex pattern",
 			yamlContent: `rules:
-  - match: "[invalid"
+  - match:
+      pattern: "[invalid"
     send: "Invalid regex"`,
 			expectError:   true,
 			errorContains: "invalid regex pattern",
@@ -361,7 +375,8 @@ func testInvalidConfigs(t *testing.T) {
 		{
 			name: "rule with generate off and no send",
 			yamlContent: `rules:
-  - match: "test.*"
+  - match:
+      pattern: "test.*"
     generate: "off"`,
 			expectError:   true,
 			errorContains: "must provide either a message or generate configuration",
@@ -369,9 +384,11 @@ func testInvalidConfigs(t *testing.T) {
 		{
 			name: "multiple rules with one invalid",
 			yamlContent: `rules:
-  - match: "valid.*"
+  - match:
+      pattern: "valid.*"
     send: "Valid rule"
-  - match: "[invalid"
+  - match:
+      pattern: "[invalid"
     send: "Invalid rule"`,
 			expectError:   true,
 			errorContains: "rule 2 validation failed",
@@ -414,7 +431,8 @@ func TestConfigWithoutLogging(t *testing.T) {
 	t.Parallel()
 
 	yamlContent := `rules:
-  - match: "go test.*"
+  - match:
+      pattern: "go test.*"
     send: "Use just test instead"`
 
 	tempDir := t.TempDir()
@@ -441,13 +459,17 @@ func TestPartialConfigLoading(t *testing.T) {
 	t.Parallel()
 
 	yamlContent := `rules:
-  - match: "go test.*"
+  - match:
+      pattern: "go test.*"
     send: "Use just test instead"
-  - match: "[invalid regex"
+  - match:
+      pattern: "[invalid regex"
     send: "This rule has invalid regex"
-  - match: "rm -rf"
+  - match:
+      pattern: "rm -rf"
     send: "Dangerous command - use safer alternatives"
-  - match: ""
+  - match:
+      pattern: ""
     send: "Empty pattern rule"
 `
 
@@ -569,7 +591,7 @@ func TestDefaultConfigYAML(t *testing.T) {
 	yamlStr := string(yamlBytes)
 	expectedPatterns := []string{
 		"rules:",
-		"match: ^go test",
+		"pattern: ^go test",
 		"just test",
 		"gci|go vet",
 		"just lint fix",
@@ -589,7 +611,8 @@ func TestConfigWithCommands(t *testing.T) {
 	t.Parallel()
 
 	yamlContent := `rules:
-  - match: "go test.*"
+  - match:
+      pattern: "go test.*"
     send: "Use just test instead"
 commands:
   - name: "help"
@@ -781,7 +804,8 @@ func TestConfigWithNotes(t *testing.T) {
 	t.Parallel()
 
 	yamlContent := `rules:
-  - match: "go test"
+  - match:
+      pattern: "go test"
     send: "Use just test instead"
 session:
   - add: "Remember to run tests first"
@@ -856,13 +880,16 @@ func TestRuleWithToolsField(t *testing.T) {
 
 	yamlData := `
 rules:
-  - match: "^rm -rf"
+  - match:
+      pattern: "^rm -rf"
     tool: "^(Bash|Task)$"
     send: "Dangerous command"
-  - match: "password"
+  - match:
+      pattern: "password"
     tool: "^(Write|Edit)$"
     send: "No hardcoded secrets"
-  - match: "test"
+  - match:
+      pattern: "test"
     send: "Bash only rule (no tool field)"
 `
 
@@ -899,7 +926,8 @@ func TestRuleValidationWithInvalidToolsRegex(t *testing.T) {
 
 	yamlData := `
 rules:
-  - match: "test"
+  - match:
+      pattern: "test"
     tool: "[invalid regex"
     send: "Test message"
 `
@@ -928,7 +956,8 @@ func TestRuleValidationWithGenerateField(t *testing.T) {
 			name: "valid generate field - once",
 			yamlData: `
 rules:
-  - match: "test"
+  - match:
+      pattern: "test"
     send: "Test message"
     generate:
       mode: "once"
@@ -939,7 +968,8 @@ rules:
 			name: "valid generate field - session",
 			yamlData: `
 rules:
-  - match: "test"
+  - match:
+      pattern: "test"
     send: "Test message"
     generate:
       mode: "session"
@@ -950,7 +980,8 @@ rules:
 			name: "valid generate field - always",
 			yamlData: `
 rules:
-  - match: "test"
+  - match:
+      pattern: "test"
     send: "Test message"
     generate:
       mode: "always"
@@ -961,7 +992,8 @@ rules:
 			name: "valid generate field - off",
 			yamlData: `
 rules:
-  - match: "test"  
+  - match:
+      pattern: "test"  
     send: "Test message"
     generate:
       mode: "off"
@@ -972,7 +1004,8 @@ rules:
 			name: "invalid generate field",
 			yamlData: `
 rules:
-  - match: "test"
+  - match:
+      pattern: "test"
     send: "Test message"
     generate:
       mode: "invalid"
@@ -1020,11 +1053,14 @@ func BenchmarkLoadConfig(b *testing.B) {
 	configFile := filepath.Join(tempDir, "test.yaml")
 
 	yamlContent := `rules:
-  - match: "^go test"
+  - match:
+      pattern: "^go test"
     send: "Use just test instead"
-  - match: "^rm -rf"
+  - match:
+      pattern: "^rm -rf"
     send: "Dangerous command"
-  - match: "^git push"
+  - match:
+      pattern: "^git push"
     send: "Review before pushing"
 `
 
@@ -1043,10 +1079,12 @@ func BenchmarkLoadConfig(b *testing.B) {
 func FuzzLoadPartial(f *testing.F) {
 	// Add valid seed inputs
 	f.Add(`rules:
-  - match: "go test"
+  - match:
+      pattern: "go test"
     send: "Use just test"`)
 	f.Add(`rules:
-  - match: "^rm -rf"
+  - match:
+      pattern: "^rm -rf"
     tool: "Bash"
     send: "Dangerous"`)
 	f.Add(`rules: []`)
@@ -1060,7 +1098,8 @@ func FuzzLoadPartial(f *testing.F) {
 // Example demonstrates how to create and use a basic configuration
 func ExampleLoadFromYAML() {
 	yamlConfig := `rules:
-  - match: "go test.*"
+  - match:
+      pattern: "go test.*"
     send: "Use 'just test' instead for better TDD integration"
     generate:
       mode: "session"
@@ -1255,13 +1294,43 @@ func TestIntentSourceNoValidation(t *testing.T) {
 	}
 }
 
+func TestStringMatchFormatAccepted(t *testing.T) {
+	t.Parallel()
+
+	// Test that string format is accepted (simple form)
+	yamlWithStringFormat := `rules:
+  - match: "test-pattern"
+    send: "Test message"`
+
+	config, err := LoadFromYAML([]byte(yamlWithStringFormat))
+	if err != nil {
+		t.Fatalf("Expected no error for string match format, got: %v", err)
+	}
+
+	if len(config.Rules) != 1 {
+		t.Fatalf("Expected 1 rule, got %d", len(config.Rules))
+	}
+
+	match := config.Rules[0].GetMatch()
+	if match.Pattern != "test-pattern" {
+		t.Errorf("Expected pattern 'test-pattern', got '%s'", match.Pattern)
+	}
+	if match.Event != "pre" {
+		t.Errorf("Expected default event 'pre', got '%s'", match.Event)
+	}
+	if len(match.Sources) != 0 {
+		t.Errorf("Expected empty sources, got %v", match.Sources)
+	}
+}
+
 // TestOldFormatIgnored tests that old event/sources format at rule level is ignored (breaking backward compatibility)
 func TestOldFormatIgnored(t *testing.T) {
 	t.Parallel()
 
 	// Test that old format with event at rule level is ignored (defaults used instead)
 	yamlWithOldEvent := `rules:
-  - match: "test"
+  - match:
+      pattern: "test"
     send: "Test message"
     event: "post"`
 
@@ -1279,7 +1348,8 @@ func TestOldFormatIgnored(t *testing.T) {
 
 	// Test that old format with sources at rule level is ignored
 	yamlWithOldSources := `rules:
-  - match: "test"  
+  - match:
+      pattern: "test"  
     send: "Test message"
     sources: ["command"]`
 
@@ -1300,10 +1370,11 @@ func TestOldFormatIgnored(t *testing.T) {
 func TestMatchFieldParsing(t *testing.T) {
 	t.Parallel()
 
-	t.Run("string form with defaults", func(t *testing.T) {
+	t.Run("struct form with pattern only", func(t *testing.T) {
 		t.Parallel()
 		testMatchFieldCase(t, `rules:
-  - match: "rm -rf"
+  - match:
+      pattern: "rm -rf"
     send: "Use safer deletion"`, "rm -rf", "pre", []string{})
 	})
 
