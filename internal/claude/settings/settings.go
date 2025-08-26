@@ -1,6 +1,8 @@
 // Package settings provides programmatic access to Claude settings.json files.
 package settings
 
+// Schema: https://www.schemastore.org/claude-code-settings.json
+
 // Settings represents the complete Claude settings.json structure.
 type Settings struct {
 	Permissions *Permissions `json:"permissions,omitempty"`

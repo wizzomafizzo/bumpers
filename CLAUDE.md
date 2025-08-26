@@ -138,46 +138,59 @@ rules:
 
 ### Hook Event Configuration
 
-Rules can be configured to match different hook events using the `event` and `sources` fields:
+### Match Field Configuration
 
-#### Event Types
+The `match` field supports both simple string and advanced struct forms:
 
-- **`event: "pre"`** (default): Matches PreToolUse hooks - intercepts commands before execution
-- **`event: "post"`**: Matches PostToolUse hooks - analyzes results after tool execution
+#### Simple Form (String)
 
-#### Sources Configuration
+```yaml
+rules:
+  - match: "rm -rf"  # Defaults: event="pre", sources=[]
+    send: "Consider using safer alternatives"
+```
 
-The `sources` field specifies which fields to match against:
-
-**Pre-event rules**: Match against tool input field names + `#intent`
-**Post-event rules**: Match against tool output field names + `#intent`
+#### Advanced Form (Struct)
 
 ```yaml
 rules:
   # Match against specific tool input fields
-  - match: "rm -rf"
-    event: "pre"
-    sources: ["command"]
+  - match:
+      pattern: "rm -rf"
+      event: "pre"
+      sources: ["command"]
     send: "Consider using safer alternatives"
     
   # Match against multiple fields  
-  - match: "password"
-    event: "pre"
-    sources: ["command", "description"]
+  - match:
+      pattern: "password"
+      event: "pre"  # Optional, defaults to "pre"
+      sources: ["command", "description"]
     send: "Avoid hardcoding secrets"
     
   # Match against Claude's intent (thinking + explanations)
-  - match: "I need to.*database"
-    event: "pre"
-    sources: ["#intent"]
+  - match:
+      pattern: "I need to.*database"
+      event: "pre"
+      sources: ["#intent"]
     send: "Remember to check database connections first"
     
   # Match against all available fields (default behavior)
-  - match: "error_pattern"
-    event: "post"
-    # sources: [] (empty = match all fields)
+  - match:
+      pattern: "error_pattern"
+      event: "post"
+      sources: []  # Empty = match all fields
     send: "Error handling guidance"
 ```
+
+**Event Types:**
+- **`event: "pre"`** (default): Matches PreToolUse hooks - intercepts commands before execution
+- **`event: "post"`**: Matches PostToolUse hooks - analyzes results after tool execution
+
+**Sources Configuration:**
+- **Pre-event rules**: Match against tool input field names + `#intent`
+- **Post-event rules**: Match against tool output field names + `#intent`
+- **Empty sources**: Matches all available fields
 
 #### Post-Tool-Use Hooks
 
@@ -185,16 +198,18 @@ Post-tool-use hooks analyze Claude's intent and tool outputs:
 
 ```yaml
 rules:
-  - match: "error_pattern"
-    event: "post"
-    sources: ["#intent"]  # Match Claude's intent from transcript (thinking + explanations)
+  - match:
+      pattern: "error_pattern"
+      event: "post"
+      sources: ["#intent"]  # Match Claude's intent from transcript (thinking + explanations)
     generate: once
     send: "Helpful guidance message"
     prompt: "AI prompt for contextual analysis"
     
-  - match: "failed"
-    event: "post"
-    sources: ["tool_output"]  # Match tool output/errors
+  - match:
+      pattern: "failed"
+      event: "post"
+      sources: ["tool_output"]  # Match tool output/errors
     send: "Consider alternative approaches"
 ```
 

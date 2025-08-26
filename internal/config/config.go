@@ -33,13 +33,18 @@ type Generate struct {
 	Prompt string `yaml:"prompt" mapstructure:"prompt"`
 }
 
+// Match represents the match configuration for a rule
+type Match struct {
+	Pattern string   `yaml:"pattern" mapstructure:"pattern"`
+	Event   string   `yaml:"event,omitempty" mapstructure:"event"`
+	Sources []string `yaml:"sources,omitempty" mapstructure:"sources"`
+}
+
 type Rule struct {
-	Generate any      `yaml:"generate,omitempty" mapstructure:"generate"`
-	Match    string   `yaml:"match" mapstructure:"match"`
-	Tool     string   `yaml:"tool,omitempty" mapstructure:"tool"`
-	Send     string   `yaml:"send" mapstructure:"send"`
-	Event    string   `yaml:"event,omitempty" mapstructure:"event"`
-	Sources  []string `yaml:"sources,omitempty" mapstructure:"sources"`
+	Generate any    `yaml:"generate,omitempty" mapstructure:"generate"`
+	Match    any    `yaml:"match" mapstructure:"match"`
+	Tool     string `yaml:"tool,omitempty" mapstructure:"tool"`
+	Send     string `yaml:"send" mapstructure:"send"`
 }
 
 type Command struct {
@@ -123,22 +128,27 @@ func (r *Rule) Validate() error {
 	if err := r.validateGenerateMode(); err != nil {
 		return err
 	}
-	if err := r.ValidateEventSources(); err != nil {
-		return fmt.Errorf("event/sources validation failed: %w", err)
+	if err := r.validateEventValue(); err != nil {
+		return fmt.Errorf("event validation failed: %w", err)
 	}
 	return nil
 }
 
 func (r *Rule) validateRequiredFields() error {
-	if r.Match == "" {
+	if r.Match == nil {
+		return errors.New("match field is required and cannot be empty")
+	}
+	match := r.GetMatch()
+	if match.Pattern == "" {
 		return errors.New("match field is required and cannot be empty")
 	}
 	return nil
 }
 
 func (r *Rule) validateRegexPatterns() error {
-	if _, err := regexp.Compile(r.Match); err != nil {
-		return fmt.Errorf("invalid regex pattern '%s': %w", r.Match, err)
+	match := r.GetMatch()
+	if _, err := regexp.Compile(match.Pattern); err != nil {
+		return fmt.Errorf("invalid regex pattern '%s': %w", match.Pattern, err)
 	}
 	if r.Tool != "" {
 		if _, err := regexp.Compile(r.Tool); err != nil {
@@ -170,16 +180,13 @@ func (r *Rule) validateGenerateMode() error {
 	return fmt.Errorf("invalid generate mode '%s': must be one of: off, once, session, always", generate.Mode)
 }
 
-// ValidateEventSources applies smart defaults to Event
-func (r *Rule) ValidateEventSources() error {
-	// Apply default event if empty
-	if r.Event == "" {
-		r.Event = "pre"
-	}
+// validateEventValue validates the event field in the match configuration
+func (r *Rule) validateEventValue() error {
+	match := r.GetMatch()
 
-	// Validate event value
-	if r.Event != "pre" && r.Event != "post" {
-		return fmt.Errorf("invalid event '%s': must be 'pre' or 'post'", r.Event)
+	// Validate event value (should be pre or post)
+	if match.Event != "pre" && match.Event != "post" {
+		return fmt.Errorf("invalid event '%s': must be 'pre' or 'post'", match.Event)
 	}
 
 	// No source validation - any source name is valid
@@ -193,6 +200,11 @@ func (r *Rule) GetGenerate() Generate {
 		return generateValue
 	}
 	return parseGenerateField(r.Generate, "session")
+}
+
+// GetMatch converts the interface{} Match field to a Match struct
+func (r *Rule) GetMatch() Match {
+	return parseMatchField(r.Match, "", nil)
 }
 
 // LoadPartial loads config from YAML bytes with partial parsing support
@@ -281,4 +293,100 @@ func (c *Command) GetGenerate() Generate {
 // GetGenerate converts the interface{} Generate field to a Generate struct for Session
 func (s *Session) GetGenerate() Generate {
 	return parseGenerateField(s.Generate, "off")
+}
+
+// parseMatchField converts an interface{} Match field to a Match struct
+func parseMatchField(matchField any, fallbackEvent string, fallbackSources []string) Match {
+	if matchField == nil {
+		return parseNilMatch()
+	}
+
+	if patternStr, ok := matchField.(string); ok {
+		return parseStringMatch(patternStr, fallbackEvent, fallbackSources)
+	}
+
+	if matchMap, ok := matchField.(map[string]any); ok {
+		return parseMapMatch(matchMap)
+	}
+
+	return parseFallbackMatch(fallbackEvent, fallbackSources)
+}
+
+// parseNilMatch handles nil match field case
+func parseNilMatch() Match {
+	return Match{Pattern: "", Event: "pre", Sources: []string{}}
+}
+
+// parseStringMatch handles string match field case
+func parseStringMatch(patternStr, fallbackEvent string, fallbackSources []string) Match {
+	event := fallbackEvent
+	if event == "" {
+		event = "pre"
+	}
+
+	sources := determineSources(fallbackSources, fallbackEvent)
+	return Match{Pattern: patternStr, Event: event, Sources: sources}
+}
+
+// parseMapMatch handles map match field case
+func parseMapMatch(matchMap map[string]any) Match {
+	match := Match{
+		Event:   "pre",      // Default event
+		Sources: []string{}, // Default sources
+	}
+
+	if pattern, ok := matchMap["pattern"].(string); ok {
+		match.Pattern = pattern
+	}
+
+	if event, ok := matchMap["event"].(string); ok {
+		match.Event = event
+	}
+
+	if sources, ok := matchMap["sources"].([]any); ok {
+		match.Sources = convertSourcesSlice(sources)
+	}
+
+	return match
+}
+
+// parseFallbackMatch handles unknown match field types
+func parseFallbackMatch(fallbackEvent string, fallbackSources []string) Match {
+	event := fallbackEvent
+	if event == "" {
+		event = "pre"
+	}
+
+	sources := fallbackSources
+	if sources == nil {
+		sources = []string{}
+	}
+
+	return Match{Pattern: "", Event: event, Sources: sources}
+}
+
+// determineSources determines sources slice for string match case
+func determineSources(fallbackSources []string, fallbackEvent string) []string {
+	if fallbackSources == nil && fallbackEvent == "" {
+		// New format: no Event/Sources at rule level, use empty slice
+		return []string{}
+	}
+
+	if fallbackSources == nil {
+		// Old format: preserve nil for backward compatibility
+		return nil
+	}
+
+	return fallbackSources
+}
+
+// convertSourcesSlice converts []any sources to []string
+func convertSourcesSlice(sources []any) []string {
+	result := make([]string, len(sources))
+	for i, source := range sources {
+		if sourceStr, ok := source.(string); ok {
+			result[i] = sourceStr
+		}
+	}
+	return result
 }

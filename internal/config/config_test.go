@@ -21,7 +21,7 @@ func testConfigLoading(t *testing.T, configFile, expectedPattern string) {
 	require.Len(t, config.Rules, 1, "Should have exactly 1 rule")
 
 	rule := config.Rules[0]
-	assert.Equal(t, expectedPattern, rule.Match, "Rule pattern should match expected")
+	assert.Equal(t, expectedPattern, rule.GetMatch().Pattern, "Rule pattern should match expected")
 }
 
 func TestLoadConfig(t *testing.T) {
@@ -133,8 +133,8 @@ func TestSimplifiedSchemaHasNoActionConstants(t *testing.T) {
 
 	// Verify that rules work without action constants
 	rule := config.Rules[0]
-	if rule.Match != "test*" {
-		t.Errorf("Expected pattern 'test*', got %s", rule.Match)
+	if rule.GetMatch().Pattern != "test*" {
+		t.Errorf("Expected pattern 'test*', got %s", rule.GetMatch().Pattern)
 	}
 	if rule.Send != "Test response" {
 		t.Errorf("Expected message 'Test response', got %s", rule.Send)
@@ -173,8 +173,8 @@ func TestLoadConfigFromFile(t *testing.T) {
 
 	// Check first rule
 	rule := config.Rules[0]
-	if rule.Match != "go test.*" {
-		t.Errorf("Expected first rule pattern 'go test.*', got %s", rule.Match)
+	if rule.GetMatch().Pattern != "go test.*" {
+		t.Errorf("Expected first rule pattern 'go test.*', got %s", rule.GetMatch().Pattern)
 	}
 }
 
@@ -256,8 +256,8 @@ func TestLoadConfigSimplifiedSchema(t *testing.T) {
 
 	// Test first rule (go test)
 	rule1 := config.Rules[0]
-	if rule1.Match != "go test*" {
-		t.Errorf("Expected pattern 'go test*', got %s", rule1.Match)
+	if rule1.GetMatch().Pattern != "go test*" {
+		t.Errorf("Expected pattern 'go test*', got %s", rule1.GetMatch().Pattern)
 	}
 	if rule1.Send == "" {
 		t.Error("Expected message to be populated")
@@ -270,8 +270,8 @@ func TestLoadConfigSimplifiedSchema(t *testing.T) {
 
 	// Test second rule (dangerous rm)
 	rule2 := config.Rules[1]
-	if rule2.Match != "rm -rf /*" {
-		t.Errorf("Expected pattern 'rm -rf /*', got %s", rule2.Match)
+	if rule2.GetMatch().Pattern != "rm -rf /*" {
+		t.Errorf("Expected pattern 'rm -rf /*', got %s", rule2.GetMatch().Pattern)
 	}
 	generate2 := rule2.GetGenerate()
 	if generate2.Mode != "always" {
@@ -470,15 +470,15 @@ func TestPartialConfigLoading(t *testing.T) {
 	// Verify the valid rules are the correct ones
 	expectedPatterns := []string{"go test.*", "rm -rf"}
 	for i, rule := range partialConfig.Rules {
-		if rule.Match != expectedPatterns[i] {
-			t.Errorf("Expected rule %d pattern '%s', got '%s'", i, expectedPatterns[i], rule.Match)
+		if rule.GetMatch().Pattern != expectedPatterns[i] {
+			t.Errorf("Expected rule %d pattern '%s', got '%s'", i, expectedPatterns[i], rule.GetMatch().Pattern)
 		}
 	}
 
 	// Debug: print warnings
 	for i, warning := range partialConfig.ValidationWarnings {
 		t.Logf("Warning %d: Rule index %d, pattern '%s', error: %v",
-			i, warning.RuleIndex, warning.Rule.Match, warning.Error)
+			i, warning.RuleIndex, warning.Rule.GetMatch().Pattern, warning.Error)
 	}
 }
 
@@ -489,7 +489,7 @@ func contains(s, substr string) bool {
 
 // checkRulePattern validates a specific rule pattern and message
 func checkRulePattern(t *testing.T, rule *Rule, patternName, expectedPattern, expectedMessage string) bool {
-	if strings.Contains(rule.Match, expectedPattern) {
+	if strings.Contains(rule.GetMatch().Pattern, expectedPattern) {
 		if !strings.Contains(rule.Send, expectedMessage) {
 			t.Errorf("Expected %s rule to mention %s", patternName, expectedMessage)
 		}
@@ -527,7 +527,7 @@ func TestDefaultConfig(t *testing.T) {
 		if checkRulePattern(t, &rule, "lint", "gci|go vet", "just lint fix") {
 			foundLint = true
 		}
-		if strings.Contains(rule.Match, "cd /tmp") {
+		if strings.Contains(rule.GetMatch().Pattern, "cd /tmp") {
 			foundTmp = true
 			if !strings.Contains(rule.Send, "tmp") {
 				t.Errorf("Expected tmp rule to mention tmp, got: %s", rule.Send)
@@ -876,8 +876,8 @@ rules:
 	}
 
 	// First rule with tools field
-	if config.Rules[0].Match != "^rm -rf" {
-		t.Errorf("Expected pattern '^rm -rf', got '%s'", config.Rules[0].Match)
+	if config.Rules[0].GetMatch().Pattern != "^rm -rf" {
+		t.Errorf("Expected pattern '^rm -rf', got '%s'", config.Rules[0].GetMatch().Pattern)
 	}
 	if config.Rules[0].Tool != "^(Bash|Task)$" {
 		t.Errorf("Expected tools '^(Bash|Task)$', got '%s'", config.Rules[0].Tool)
@@ -1073,7 +1073,7 @@ func ExampleLoadFromYAML() {
 	}
 
 	_, _ = fmt.Printf("Loaded %d rules\n", len(config.Rules))
-	_, _ = fmt.Printf("First rule pattern: %s\n", config.Rules[0].Match)
+	_, _ = fmt.Printf("First rule pattern: %s\n", config.Rules[0].GetMatch().Pattern)
 
 	// Output:
 	// Loaded 1 rules
@@ -1091,7 +1091,7 @@ func ExampleDefaultConfig() {
 	// Check for go test rule
 	hasGoTestRule := false
 	for i := range config.Rules {
-		if strings.Contains(config.Rules[i].Match, "go test") {
+		if strings.Contains(config.Rules[i].GetMatch().Pattern, "go test") {
 			hasGoTestRule = true
 			break
 		}
@@ -1120,60 +1120,66 @@ func getEventSourcesTestCases() []struct {
 		{
 			name: "post-tool intent matching",
 			yamlContent: `rules:
-  - match: "not related to my changes"
-    send: "AI claiming unrelated"
-    event: "post"
-    sources: ["#intent"]`,
+  - match:
+      pattern: "not related to my changes"
+      event: "post"
+      sources: ["#intent"]
+    send: "AI claiming unrelated"`,
 			expectedEvent:   "post",
 			expectedSources: []string{"#intent"},
 		},
 		{
 			name: "pre-tool command matching",
 			yamlContent: `rules:
-  - match: "^rm -rf"
-    send: "Dangerous deletion"
-    event: "pre"
-    sources: ["command"]`,
+  - match:
+      pattern: "^rm -rf"
+      event: "pre"
+      sources: ["command"]
+    send: "Dangerous deletion"`,
 			expectedEvent:   "pre",
 			expectedSources: []string{"command"},
 		},
 		{
 			name: "tool output matching",
 			yamlContent: `rules:
-  - match: "error|failed"
-    send: "Command failed"
-    event: "post" 
-    sources: ["tool_output"]`,
+  - match:
+      pattern: "error|failed"
+      event: "post"
+      sources: ["tool_output"]
+    send: "Command failed"`,
 			expectedEvent:   "post",
 			expectedSources: []string{"tool_output"},
 		},
 		{
 			name: "multiple field matching",
 			yamlContent: `rules:
-  - match: "password|secret"
-    send: "Avoid secrets"
-    event: "pre"
-    sources: ["command", "content"]`,
+  - match:
+      pattern: "password|secret"
+      event: "pre"
+      sources: ["command", "content"]
+    send: "Avoid secrets"`,
 			expectedEvent:   "pre",
 			expectedSources: []string{"command", "content"},
 		},
 		{
 			name: "defaults to pre event when omitted",
 			yamlContent: `rules:
-  - match: "dangerous"
-    send: "Be careful"
-    sources: ["command"]`,
+  - match:
+      pattern: "dangerous"
+      sources: ["command"]
+    send: "Be careful"`,
 			expectedEvent:   "pre",
 			expectedSources: []string{"command"},
 		},
 		{
 			name: "no default sources when omitted",
 			yamlContent: `rules:
-  - match: "unrelated"
-    send: "AI deflection"
-    event: "post"`,
+  - match:
+      pattern: "unrelated"
+      event: "post"
+    send: "AI deflection"`,
 			expectedEvent:   "post",
-			expectedSources: nil,
+			expectedSources: []string{},
 		},
 	}
 }
@@ -1194,12 +1200,10 @@ func runEventSourcesConfigurationTest(t *testing.T, tc struct {
 	}
 
 	rule := config.Rules[0]
-	err = rule.ValidateEventSources() // Apply defaults
-	if err != nil {
-		t.Fatalf("ValidateEventSources failed: %v", err)
-	}
-	assert.Equal(t, tc.expectedEvent, rule.Event)
-	assert.Equal(t, tc.expectedSources, rule.Sources)
+	// Test the new GetMatch() method instead of old Event/Sources fields
+	match := rule.GetMatch()
+	assert.Equal(t, tc.expectedEvent, match.Event)
+	assert.Equal(t, tc.expectedSources, match.Sources)
 }
 
 // TestEventSourcesConfiguration tests the new Event and Sources configuration syntax
@@ -1220,12 +1224,13 @@ func TestEventSourcesConfiguration(t *testing.T) {
 func TestIntentSourceNoValidation(t *testing.T) {
 	t.Parallel()
 
-	// Test that all sources are accepted without validation
+	// Test that all sources are accepted without validation using new match format
 	yamlContent := `rules:
-  - match: "test"
-    send: "Test message"
-    event: "pre"
-    sources: ["#intent", "any_arbitrary_field", "command"]`
+  - match:
+      pattern: "test"
+      event: "pre"
+      sources: ["#intent", "any_arbitrary_field", "command"]
+    send: "Test message"`
 
 	config, err := LoadFromYAML([]byte(yamlContent))
 	if err != nil {
@@ -1237,14 +1242,118 @@ func TestIntentSourceNoValidation(t *testing.T) {
 	}
 
 	rule := config.Rules[0]
-	if len(rule.Sources) != 3 {
-		t.Fatalf("Expected 3 sources, got %d", len(rule.Sources))
+	match := rule.GetMatch()
+	if len(match.Sources) != 3 {
+		t.Fatalf("Expected 3 sources, got %d", len(match.Sources))
 	}
 
 	expectedSources := []string{"#intent", "any_arbitrary_field", "command"}
 	for i, expected := range expectedSources {
-		if rule.Sources[i] != expected {
-			t.Errorf("Expected source %d to be %q, got %q", i, expected, rule.Sources[i])
+		if match.Sources[i] != expected {
+			t.Errorf("Expected source %d to be %q, got %q", i, expected, match.Sources[i])
 		}
 	}
+}
+
+// TestOldFormatIgnored tests that old event/sources format at rule level is ignored (breaking backward compatibility)
+func TestOldFormatIgnored(t *testing.T) {
+	t.Parallel()
+
+	// Test that old format with event at rule level is ignored (defaults used instead)
+	yamlWithOldEvent := `rules:
+  - match: "test"
+    send: "Test message"
+    event: "post"`
+
+	config, err := LoadFromYAML([]byte(yamlWithOldEvent))
+	if err != nil {
+		t.Fatalf("Expected no error for ignored old event format, got: %v", err)
+	}
+
+	// Verify the old event field was ignored and defaults are used (breaking backward compatibility)
+	rule := config.Rules[0]
+	match := rule.GetMatch()
+	if match.Event != "pre" {
+		t.Errorf("Expected default event 'pre' (old format ignored), got %q", match.Event)
+	}
+
+	// Test that old format with sources at rule level is ignored
+	yamlWithOldSources := `rules:
+  - match: "test"  
+    send: "Test message"
+    sources: ["command"]`
+
+	config, err = LoadFromYAML([]byte(yamlWithOldSources))
+	if err != nil {
+		t.Fatalf("Expected no error for ignored old sources format, got: %v", err)
+	}
+
+	// Verify the old sources field was ignored and defaults are used (breaking backward compatibility)
+	rule = config.Rules[0]
+	match = rule.GetMatch()
+	if len(match.Sources) != 0 {
+		t.Errorf("Expected default empty sources (old format ignored), got %v", match.Sources)
+	}
+}
+
+// TestMatchFieldParsing tests the new match field structure supporting both string and struct forms
+func TestMatchFieldParsing(t *testing.T) {
+	t.Parallel()
+
+	t.Run("string form with defaults", func(t *testing.T) {
+		t.Parallel()
+		testMatchFieldCase(t, `rules:
+  - match: "rm -rf"
+    send: "Use safer deletion"`, "rm -rf", "pre", []string{})
+	})
+
+	t.Run("struct form with all fields", func(t *testing.T) {
+		t.Parallel()
+		testMatchFieldCase(t, `rules:
+  - match:
+      pattern: "not related to my changes"
+      event: "post"
+      sources: ["#intent"]
+    send: "AI claiming unrelated"`, "not related to my changes", "post", []string{"#intent"})
+	})
+
+	t.Run("struct form with defaults", func(t *testing.T) {
+		t.Parallel()
+		testMatchFieldCase(t, `rules:
+  - match:
+      pattern: "production"
+      sources: ["url"]
+    send: "Production URL detected"`, "production", "pre", []string{"url"})
+	})
+
+	t.Run("struct form minimal", func(t *testing.T) {
+		t.Parallel()
+		testMatchFieldCase(t, `rules:
+  - match:
+      pattern: "password"
+    send: "Avoid hardcoding secrets"`, "password", "pre", []string{})
+	})
+
+	t.Run("invalid - nil match field", func(t *testing.T) {
+		t.Parallel()
+		_, err := LoadFromYAML([]byte(`rules:
+  - send: "Test message"`))
+		assert.Error(t, err, "Expected error for invalid config")
+	})
+}
+
+// testMatchFieldCase helper function for testing match field parsing
+func testMatchFieldCase(t *testing.T, yamlContent, expectedPattern, expectedEvent string, expectedSources []string) {
+	t.Helper()
+
+	config, err := LoadFromYAML([]byte(yamlContent))
+	require.NoError(t, err, "Config loading should not error")
+	require.Len(t, config.Rules, 1, "Should have exactly 1 rule")
+
+	rule := config.Rules[0]
+	matchResult := rule.GetMatch()
+
+	assert.Equal(t, expectedPattern, matchResult.Pattern)
+	assert.Equal(t, expectedEvent, matchResult.Event)
+	assert.Equal(t, expectedSources, matchResult.Sources)
 }

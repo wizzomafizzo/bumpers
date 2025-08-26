@@ -51,6 +51,31 @@ func TestNewAppWithWorkDir(t *testing.T) {
 	assert.Equal(t, workDir, app.workDir, "workDir should match")
 }
 
+func TestCustomConfigPathLoading(t *testing.T) {
+	setupTest(t)
+	t.Parallel()
+
+	// Create a custom config with a specific rule
+	configContent := `rules:
+  - match: "test-pattern"
+    send: "Custom config loaded!"`
+
+	customConfigPath := createTempConfig(t, configContent)
+
+	// Create app with custom config path
+	app := NewAppWithWorkDir(customConfigPath, t.TempDir())
+
+	// Test that the custom config is actually loaded by validating it
+	result, err := app.ValidateConfig()
+	require.NoError(t, err)
+	assert.Contains(t, result, "Configuration is valid")
+
+	// Test that the rule from custom config works
+	response, err := app.TestCommand("test-pattern should match")
+	require.NoError(t, err)
+	assert.Contains(t, response, "Custom config loaded!")
+}
+
 // TestAppWithMemoryFileSystem tests App initialization with in-memory filesystem for parallel testing
 func TestAppWithMemoryFileSystem(t *testing.T) {
 	t.Parallel()
@@ -1706,8 +1731,9 @@ func TestProcessHookPreToolUseRespectsEventField(t *testing.T) {
 
 	// Rule with event: "post" should NOT match PreToolUse hooks
 	configContent := `rules:
-  - match: "ls"
-    event: "post"
+  - match:
+      pattern: "ls"
+      event: "post"
     send: "Use file explorer instead"
     generate: "off"`
 
@@ -1730,8 +1756,9 @@ func TestProcessHookPreToolUseSourcesFiltering(t *testing.T) {
 
 	// Rule with sources=[command] should not match description field
 	configContent := `rules:
-  - match: "delete"
-    sources: ["command"]
+  - match:
+      pattern: "delete"
+      sources: ["command"]
     send: "Be careful with delete operations"
     generate: "off"`
 
@@ -2869,15 +2896,17 @@ func TestProcessHookRoutesPostToolUse(t *testing.T) {
 
 	configContent := `rules:
   # Post-tool-use rule matching output (TODO: implement tool_output support)
-  - match: "error|failed"
+  - match:
+      pattern: "error|failed"
+      event: "post"
+      sources: ["tool_output"]
     send: "Command failed - check the output"
-    event: "post"
-    sources: ["tool_output"]
   # Post-tool-use rule matching reasoning
-  - match: "not related to my changes"
-    send: "AI claiming unrelated - please verify"
-    event: "post"
-    sources: ["#intent"]`
+  - match:
+      pattern: "not related to my changes"
+      event: "post"
+      sources: ["#intent"]
+    send: "AI claiming unrelated - please verify"`
 
 	configPath := createTempConfig(t, configContent)
 	app := NewApp(configPath)
@@ -2925,10 +2954,11 @@ func TestPostToolUseWithDifferentTranscript(t *testing.T) {
 	setupTest(t)
 
 	configContent := `rules:
-  - match: "permission denied"
-    send: "File permission error detected"
-    event: "post"
-    sources: ["#intent"]`
+  - match:
+      pattern: "permission denied"
+      event: "post"
+      sources: ["#intent"]
+    send: "File permission error detected"`
 
 	configPath := createTempConfig(t, configContent)
 	app := NewApp(configPath)
@@ -2976,10 +3006,11 @@ func TestPostToolUseRuleNotMatching(t *testing.T) {
 	setupTest(t)
 
 	configContent := `rules:
-  - match: "file not found"
-    send: "Check the file path"
-    event: "post"
-    sources: ["#intent"]`
+  - match:
+      pattern: "file not found"
+      event: "post"
+      sources: ["#intent"]
+    send: "Check the file path"`
 
 	configPath := createTempConfig(t, configContent)
 	app := NewApp(configPath)
@@ -3020,10 +3051,11 @@ func TestPostToolUseWithCustomPattern(t *testing.T) {
 
 	// Create a config with a custom pattern that doesn't match hardcoded patterns
 	configContent := `rules:
-  - match: "timeout.*occurred"
-    send: "Operation timed out - check network connection"
-    event: "post"
-    sources: ["#intent"]`
+  - match:
+      pattern: "timeout.*occurred"
+      event: "post"
+      sources: ["#intent"]
+    send: "Operation timed out - check network connection"`
 
 	configPath := createTempConfig(t, configContent)
 	app := NewApp(configPath)
@@ -3067,10 +3099,11 @@ func TestPostToolUseWithToolOutputMatching(t *testing.T) {
 	setupTest(t)
 
 	configContent := `rules:
-  - match: "error.*exit code"
-    send: "Tool execution failed"
-    event: "post"
-    sources: ["tool_response"]`
+  - match:
+      pattern: "error.*exit code"
+      event: "post"
+      sources: ["tool_response"]
+    send: "Tool execution failed"`
 
 	configPath := createTempConfig(t, configContent)
 	app := NewApp(configPath)
@@ -3098,10 +3131,11 @@ func TestPostToolUseWithMultipleFieldMatching(t *testing.T) {
 	setupTest(t)
 
 	configContent := `rules:
-  - match: "timeout|permission denied"
-    send: "Operation issue detected"
-    event: "post"
-    sources: ["#intent", "tool_response"]`
+  - match:
+      pattern: "timeout|permission denied"
+      event: "post"
+      sources: ["#intent", "tool_response"]
+    send: "Operation issue detected"`
 
 	configPath := createTempConfig(t, configContent)
 	app := NewApp(configPath)
@@ -3152,10 +3186,11 @@ func TestPostToolUseWithThinkingAndTextBlocks(t *testing.T) {
 	setupTest(t)
 
 	configContent := `rules:
-  - match: "need to analyze.*performance"
-    send: "Performance analysis detected"
-    event: "post"
-    sources: ["#intent"]`
+  - match:
+      pattern: "need to analyze.*performance"
+      event: "post"
+      sources: ["#intent"]
+    send: "Performance analysis detected"`
 
 	configPath := createTempConfig(t, configContent)
 	app := NewApp(configPath)
@@ -3304,9 +3339,10 @@ func testPreToolUseIntentMatching(t *testing.T, tc *preToolUseIntentTestCase) {
 	}
 
 	configContent := fmt.Sprintf(`rules:
-  - match: "%s"
-    event: "pre"
-    sources: ["#intent"]
+  - match:
+      pattern: "%s"
+      event: "pre"
+      sources: ["#intent"]
     send: "%s"
     generate: "off"`, tc.matchPattern, tc.expectedMessage)
 
@@ -3371,9 +3407,10 @@ func TestPreToolUseIntentWithMissingTranscript(t *testing.T) {
 	setupTest(t)
 
 	configContent := `rules:
-  - match: "anything"
-    event: "pre"
-    sources: ["#intent"]
+  - match:
+      pattern: "anything"
+      event: "pre"
+      sources: ["#intent"]
     send: "This should not match"
     generate: "off"`
 
@@ -3421,9 +3458,10 @@ func testPostToolUseIntegration(t *testing.T, tc *postToolUseIntegrationTestCase
 	}
 
 	configContent := fmt.Sprintf(`rules:
-  - match: "%s"
-    event: "post"
-    sources: ["#intent"]
+  - match:
+      pattern: "%s"
+      event: "post"
+      sources: ["#intent"]
     send: "%s"
     generate: "off"`, tc.matchPattern, tc.expectedMessage)
 
@@ -3485,10 +3523,11 @@ func TestPostToolUseStructuredToolResponseFields(t *testing.T) {
 
 	// Test that rules can match against specific tool output fields by name
 	configContent := `rules:
-  - match: "JWT_SECRET"
-    send: "Configuration file contains sensitive data"
-    event: "post"
-    sources: ["content"]  # Should match the "content" field in tool_response`
+  - match:
+      pattern: "JWT_SECRET"
+      event: "post"
+      sources: ["content"]  # Should match the "content" field in tool_response
+    send: "Configuration file contains sensitive data"`
 
 	configPath := createTempConfig(t, configContent)
 	app := NewApp(configPath)

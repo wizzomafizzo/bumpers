@@ -49,6 +49,12 @@ func NewApp(configPath string) *App {
 		projectRoot: projectRoot,
 	}
 
+	log.Debug().
+		Str("originalConfigPath", configPath).
+		Str("resolvedConfigPath", resolvedConfigPath).
+		Str("projectRoot", projectRoot).
+		Msg("created new app instance")
+
 	return app
 }
 
@@ -90,6 +96,7 @@ type App struct {
 // loadConfigAndMatcher loads configuration and creates a rule matcher
 func (a *App) loadConfigAndMatcher() (*config.Config, *matcher.RuleMatcher, error) {
 	// Read config file content
+	log.Debug().Str("configPath", a.configPath).Msg("loading config file")
 	data, err := os.ReadFile(a.configPath)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to read config from %s: %w", a.configPath, err)
@@ -106,7 +113,7 @@ func (a *App) loadConfigAndMatcher() (*config.Config, *matcher.RuleMatcher, erro
 		warning := &partialCfg.ValidationWarnings[i]
 		log.Warn().
 			Int("ruleIndex", warning.RuleIndex).
-			Str("pattern", warning.Rule.Match).
+			Str("pattern", warning.Rule.GetMatch().Pattern).
 			Err(warning.Error).
 			Msg("invalid rule skipped")
 	}
@@ -210,10 +217,10 @@ func (*App) filterPreEventRules(rules []config.Rule) []config.Rule {
 	var preRules []config.Rule
 	for i := range rules {
 		rule := &rules[i]
-		_ = rule.ValidateEventSources() // Apply smart defaults
+		match := rule.GetMatch()
 
 		// Check if rule applies to pre events (default is "pre")
-		if rule.Event == "pre" || rule.Event == "" {
+		if match.Event == "pre" || match.Event == "" {
 			preRules = append(preRules, *rule)
 		}
 	}
@@ -238,7 +245,8 @@ func (a *App) findMatchingPreRule(preRules []config.Rule, ruleMatcher *matcher.R
 func (a *App) checkRuleSources(rule *config.Rule, ruleMatcher *matcher.RuleMatcher,
 	event hooks.HookEvent,
 ) (matchedRule *config.Rule, matchedField string) {
-	if len(rule.Sources) > 0 {
+	match := rule.GetMatch()
+	if len(match.Sources) > 0 {
 		return a.checkSpecificSources(rule, ruleMatcher, event)
 	}
 	return a.checkOriginalBehavior(rule, event)
@@ -248,7 +256,8 @@ func (a *App) checkRuleSources(rule *config.Rule, ruleMatcher *matcher.RuleMatch
 func (*App) checkSpecificSources(rule *config.Rule, ruleMatcher *matcher.RuleMatcher,
 	event hooks.HookEvent,
 ) (matchedRule *config.Rule, matchedField string) {
-	for _, fieldName := range rule.Sources {
+	match := rule.GetMatch()
+	for _, fieldName := range match.Sources {
 		if matched, content := checkIntentSource(fieldName, rule, ruleMatcher, event); matched {
 			return rule, content
 		}
@@ -296,7 +305,8 @@ func matchRuleContent(
 	content string, rule *config.Rule, ruleMatcher *matcher.RuleMatcher, toolName string,
 ) (matched bool, matchedContent string) {
 	foundRule, err := ruleMatcher.Match(content, toolName)
-	isMatch := err == nil && foundRule != nil && foundRule.Match == rule.Match
+	// Compare using pattern strings instead of interface{} values to avoid panic
+	isMatch := err == nil && foundRule != nil && foundRule.GetMatch().Pattern == rule.GetMatch().Pattern
 	if isMatch {
 		return true, content
 	}
@@ -389,9 +399,9 @@ func (*App) extractPostToolContent(rawJSON json.RawMessage) (*postToolContent, e
 }
 
 func (*App) determineRuleContentMatch(rule *config.Rule, content *postToolContent) (string, bool) {
-	_ = rule.ValidateEventSources()
+	match := rule.GetMatch()
 
-	if rule.Event != "post" {
+	if match.Event != "post" {
 		return "", false
 	}
 
@@ -399,12 +409,13 @@ func (*App) determineRuleContentMatch(rule *config.Rule, content *postToolConten
 }
 
 func determinePostEventMatch(rule *config.Rule, content *postToolContent) (string, bool) {
+	match := rule.GetMatch()
 	// If no sources specified, match against all tool output fields by default
-	if len(rule.Sources) == 0 {
+	if len(match.Sources) == 0 {
 		return findFirstToolOutputValue(content.toolOutputMap)
 	}
 
-	matchesIntent, matchesToolOutput := analyzeSourceMatches(rule.Sources)
+	matchesIntent, matchesToolOutput := analyzeSourceMatches(match.Sources)
 
 	// Skip if rule doesn't match any available content
 	if !matchesIntent && !matchesToolOutput {
@@ -417,7 +428,7 @@ func determinePostEventMatch(rule *config.Rule, content *postToolContent) (strin
 	}
 
 	if matchesToolOutput {
-		return findMatchingToolOutputField(rule.Sources, content.toolOutputMap)
+		return findMatchingToolOutputField(match.Sources, content.toolOutputMap)
 	}
 
 	return "", false
@@ -514,9 +525,10 @@ func (*App) matchRulePattern(rule *config.Rule, content, toolName string) (bool,
 	}
 
 	// Check content pattern
-	contentRe, err := regexp.Compile(rule.Match)
+	match := rule.GetMatch()
+	contentRe, err := regexp.Compile(match.Pattern)
 	if err != nil {
-		log.Debug().Err(err).Str("pattern", rule.Match).Msg("Invalid content pattern")
+		log.Debug().Err(err).Str("pattern", match.Pattern).Msg("Invalid content pattern")
 		return false, err //nolint:wrapcheck // preserving existing behavior
 	}
 
@@ -675,11 +687,12 @@ func (a *App) processAIGeneration(rule *config.Rule, message, _ string) (string,
 	}()
 
 	// Create request
+	match := rule.GetMatch()
 	req := &ai.GenerateRequest{
 		OriginalMessage: message,
 		CustomPrompt:    generate.Prompt,
 		GenerateMode:    generate.Mode,
-		Pattern:         rule.Match,
+		Pattern:         match.Pattern,
 	}
 
 	// Generate message

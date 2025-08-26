@@ -11,17 +11,17 @@ import (
 	"github.com/wizzomafizzo/bumpers/internal/testutil"
 )
 
+//nolint:paralleltest // Cannot use t.Parallel() due to shared global logger state causing race conditions
 func TestLoggingOnlyInitializedForHookCommand(t *testing.T) {
-	t.Parallel()
 	setupTest(t)
 
+	//nolint:paralleltest // Cannot be parallel due to shared global logger state
 	t.Run("status command doesn't initialize logging", func(t *testing.T) {
-		t.Parallel()
 		testStatusCommandLogging(t)
 	})
 
+	//nolint:paralleltest // Cannot be parallel due to shared global logger state
 	t.Run("hook command initializes logging", func(t *testing.T) {
-		t.Parallel()
 		testHookCommandLogging(t)
 	})
 }
