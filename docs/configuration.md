@@ -48,6 +48,26 @@ rules:
 - `event` (optional): `pre` (default) or `post`
 - `sources` (optional): Field names to match, empty = all fields
 
+### Template Patterns
+
+Patterns support template variables for dynamic matching:
+
+```yaml
+rules:
+  # Block bumpers.yml access in project root but allow test files
+  - match: "^{{.ProjectRoot}}/bumpers\\.yml$"
+    tool: "Read|Edit|Grep"
+    send: "Bumpers configuration file should not be accessed."
+```
+
+**Available Variables:**
+- `{{.ProjectRoot}}`: Project root directory path
+- `{{.Today}}`: Current date (YYYY-MM-DD format)
+
+**Template/Regex Compatibility:**
+- Templates use `{{}}` syntax, regex quantifiers use `{}`
+- Fully compatible: `{{.ProjectRoot}}/[a-z]{2,4}/config\\.yml`
+
 ### Tool Filter
 
 ```yaml
