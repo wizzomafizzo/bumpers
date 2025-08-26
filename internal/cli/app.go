@@ -340,9 +340,9 @@ func (a *App) processMatchedRule(matchedRule *config.Rule, matchedValue string) 
 
 // ProcessPostToolUse processes post-tool-use hook events
 type postToolContent struct {
-	intent     string
-	toolOutput string
-	toolName   string
+	intent        string
+	toolOutputMap map[string]any
+	toolName      string
 }
 
 func (*App) extractPostToolContent(rawJSON json.RawMessage) (*postToolContent, error) {
@@ -356,7 +356,10 @@ func (*App) extractPostToolContent(rawJSON json.RawMessage) (*postToolContent, e
 	toolName, _ := event["tool_name"].(string)             //nolint:revive // intentionally ignoring ok value
 	toolResponse := event["tool_response"]
 
-	content := &postToolContent{toolName: toolName}
+	content := &postToolContent{
+		toolName:      toolName,
+		toolOutputMap: make(map[string]any),
+	}
 
 	// Read transcript content for intent matching using efficient parser
 	if transcriptPath != "" {
@@ -371,10 +374,14 @@ func (*App) extractPostToolContent(rawJSON json.RawMessage) (*postToolContent, e
 		content.intent = intent
 	}
 
-	// Extract tool output content for tool_output field matching
+	// Extract tool output fields from structured response
 	if toolResponse != nil {
-		if str, ok := toolResponse.(string); ok {
-			content.toolOutput = str
+		switch v := toolResponse.(type) {
+		case map[string]any:
+			content.toolOutputMap = v
+		case string:
+			// Handle simple string responses for backward compatibility
+			content.toolOutputMap["tool_response"] = v
 		}
 	}
 
@@ -384,22 +391,20 @@ func (*App) extractPostToolContent(rawJSON json.RawMessage) (*postToolContent, e
 func (*App) determineRuleContentMatch(rule *config.Rule, content *postToolContent) (string, bool) {
 	_ = rule.ValidateEventSources()
 
-	matchesIntent := false
-	matchesToolOutput := false
-
-	// New syntax: event="post" + sources
-	if rule.Event == "post" {
-		if containsString(rule.Sources, "#intent") {
-			matchesIntent = true
-		}
-		// All other sources are treated as tool output field names
-		for _, source := range rule.Sources {
-			if source != "#intent" {
-				matchesToolOutput = true
-				break
-			}
-		}
+	if rule.Event != "post" {
+		return "", false
 	}
+
+	return determinePostEventMatch(rule, content)
+}
+
+func determinePostEventMatch(rule *config.Rule, content *postToolContent) (string, bool) {
+	// If no sources specified, match against all tool output fields by default
+	if len(rule.Sources) == 0 {
+		return findFirstToolOutputValue(content.toolOutputMap)
+	}
+
+	matchesIntent, matchesToolOutput := analyzeSourceMatches(rule.Sources)
 
 	// Skip if rule doesn't match any available content
 	if !matchesIntent && !matchesToolOutput {
@@ -407,14 +412,53 @@ func (*App) determineRuleContentMatch(rule *config.Rule, content *postToolConten
 	}
 
 	// Choose content to match against (prioritize intent for backward compatibility)
-	switch {
-	case matchesIntent && content.intent != "":
+	if matchesIntent && content.intent != "" {
 		return content.intent, true
-	case matchesToolOutput && content.toolOutput != "":
-		return content.toolOutput, true
-	default:
-		return "", false // No matching content available
 	}
+
+	if matchesToolOutput {
+		return findMatchingToolOutputField(rule.Sources, content.toolOutputMap)
+	}
+
+	return "", false
+}
+
+func findFirstToolOutputValue(toolOutputMap map[string]any) (string, bool) {
+	for _, value := range toolOutputMap {
+		if strValue, ok := value.(string); ok && strValue != "" {
+			return strValue, true
+		}
+	}
+	return "", false
+}
+
+func analyzeSourceMatches(sources []string) (matchesIntent, matchesToolOutput bool) {
+	for _, source := range sources {
+		if source == "#intent" {
+			matchesIntent = true
+		} else {
+			matchesToolOutput = true
+		}
+
+		// Early exit if both are found
+		if matchesIntent && matchesToolOutput {
+			break
+		}
+	}
+	return matchesIntent, matchesToolOutput
+}
+
+func findMatchingToolOutputField(sources []string, toolOutputMap map[string]any) (string, bool) {
+	for _, source := range sources {
+		if source != "#intent" {
+			if value, exists := toolOutputMap[source]; exists {
+				if strValue, ok := value.(string); ok && strValue != "" {
+					return strValue, true
+				}
+			}
+		}
+	}
+	return "", false
 }
 
 func (a *App) ProcessPostToolUse(rawJSON json.RawMessage) (string, error) {
@@ -432,7 +476,7 @@ func (a *App) ProcessPostToolUse(rawJSON json.RawMessage) (string, error) {
 	}
 
 	// Skip if no content to match against (neither intent nor tool output)
-	if content.intent == "" && content.toolOutput == "" {
+	if content.intent == "" && len(content.toolOutputMap) == 0 {
 		return "", nil
 	}
 
@@ -452,16 +496,6 @@ func (a *App) ProcessPostToolUse(rawJSON json.RawMessage) (string, error) {
 	}
 
 	return "", nil
-}
-
-// containsString checks if slice contains the given string
-func containsString(slice []string, item string) bool {
-	for _, s := range slice {
-		if s == item {
-			return true
-		}
-	}
-	return false
 }
 
 // matchRulePattern checks if a rule's pattern matches the given content

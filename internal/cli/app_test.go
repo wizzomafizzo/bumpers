@@ -3070,7 +3070,7 @@ func TestPostToolUseWithToolOutputMatching(t *testing.T) {
   - match: "error.*exit code"
     send: "Tool execution failed"
     event: "post"
-    sources: ["tool_output"]`
+    sources: ["tool_response"]`
 
 	configPath := createTempConfig(t, configContent)
 	app := NewApp(configPath)
@@ -3101,7 +3101,7 @@ func TestPostToolUseWithMultipleFieldMatching(t *testing.T) {
   - match: "timeout|permission denied"
     send: "Operation issue detected"
     event: "post"
-    sources: ["#intent", "tool_output"]`
+    sources: ["#intent", "tool_response"]`
 
 	configPath := createTempConfig(t, configContent)
 	app := NewApp(configPath)
@@ -3476,4 +3476,36 @@ func TestIntegrationPerformanceAnalysisDetection(t *testing.T) {
 		expectedMessage: "Performance optimization guidance triggered",
 		success:         true,
 	})
+}
+
+// TestPostToolUseStructuredToolResponseFields tests matching against specific fields in structured tool responses
+func TestPostToolUseStructuredToolResponseFields(t *testing.T) {
+	t.Parallel()
+	setupTest(t)
+
+	// Test that rules can match against specific tool output fields by name
+	configContent := `rules:
+  - match: "JWT_SECRET"
+    send: "Configuration file contains sensitive data"
+    event: "post"
+    sources: ["content"]  # Should match the "content" field in tool_response`
+
+	configPath := createTempConfig(t, configContent)
+	app := NewApp(configPath)
+
+	// Test matching against "content" field
+	jsonWithContent := `{
+		"session_id": "test123",
+		"transcript_path": "",
+		"hook_event_name": "PostToolUse", 
+		"tool_name": "Read",
+		"tool_response": {
+			"content": "module.exports = { secret: process.env.JWT_SECRET }",
+			"lines": 42
+		}
+	}`
+
+	result1, err := app.ProcessPostToolUse(json.RawMessage(jsonWithContent))
+	require.NoError(t, err)
+	assert.Equal(t, "Configuration file contains sensitive data", result1)
 }
