@@ -38,82 +38,8 @@ type Rule struct {
 	Match    string   `yaml:"match" mapstructure:"match"`
 	Tool     string   `yaml:"tool,omitempty" mapstructure:"tool"`
 	Send     string   `yaml:"send" mapstructure:"send"`
-	When     []string `yaml:"when,omitempty" mapstructure:"when"`
 	Event    string   `yaml:"event,omitempty" mapstructure:"event"`
-	Fields   []string `yaml:"fields,omitempty" mapstructure:"fields"`
-}
-
-// ExpandWhen applies smart defaults and exclusion logic to the When field
-func (r *Rule) ExpandWhen() []string {
-	if len(r.When) == 0 {
-		return []string{"pre", "input"}
-	}
-
-	expanded, excludes := r.categorizeWhenFlags()
-	r.applySmartDefaults(expanded)
-	r.removeExclusions(expanded, excludes)
-	return r.mapToSlice(expanded)
-}
-
-func (r *Rule) categorizeWhenFlags() (expanded, excludes map[string]bool) {
-	expanded = make(map[string]bool)
-	excludes = make(map[string]bool)
-
-	for _, flag := range r.When {
-		if strings.HasPrefix(flag, "!") {
-			excludes[strings.TrimPrefix(flag, "!")] = true
-		} else {
-			expanded[flag] = true
-		}
-	}
-	return expanded, excludes
-}
-
-func (r *Rule) applySmartDefaults(expanded map[string]bool) {
-	for flag := range expanded {
-		r.applyDefaultForFlag(flag, expanded)
-	}
-}
-
-func (r *Rule) applyDefaultForFlag(flag string, expanded map[string]bool) {
-	switch flag {
-	case "reasoning":
-		expanded["post"] = true
-	case "post":
-		if !hasSourceFlag(r.When) {
-			expanded["output"] = true
-		}
-	case "pre":
-		if !hasSourceFlag(r.When) {
-			expanded["input"] = true
-		}
-	}
-}
-
-func (*Rule) removeExclusions(expanded, excludes map[string]bool) {
-	for exclude := range excludes {
-		delete(expanded, exclude)
-	}
-}
-
-func (*Rule) mapToSlice(expanded map[string]bool) []string {
-	result := make([]string, 0, len(expanded))
-	for flag := range expanded {
-		result = append(result, flag)
-	}
-	return result
-}
-
-// hasSourceFlag checks if the when slice contains any explicit source flags (input, output, reasoning)
-// Exclusions (flags starting with !) don't count as explicit inclusion
-func hasSourceFlag(when []string) bool {
-	sourceFlags := map[string]bool{"input": true, "output": true, "reasoning": true}
-	for _, flag := range when {
-		if !strings.HasPrefix(flag, "!") && sourceFlags[flag] {
-			return true
-		}
-	}
-	return false
+	Sources  []string `yaml:"sources,omitempty" mapstructure:"sources"`
 }
 
 type Command struct {
@@ -185,62 +111,79 @@ func (c *Config) Validate() error {
 
 // Validate performs rule-level validation
 func (r *Rule) Validate() error {
+	if err := r.validateRequiredFields(); err != nil {
+		return err
+	}
+	if err := r.validateRegexPatterns(); err != nil {
+		return err
+	}
+	if err := r.validateResponseMechanism(); err != nil {
+		return err
+	}
+	if err := r.validateGenerateMode(); err != nil {
+		return err
+	}
+	if err := r.ValidateEventSources(); err != nil {
+		return fmt.Errorf("event/sources validation failed: %w", err)
+	}
+	return nil
+}
+
+func (r *Rule) validateRequiredFields() error {
 	if r.Match == "" {
 		return errors.New("match field is required and cannot be empty")
 	}
+	return nil
+}
 
-	// Validate regex pattern
+func (r *Rule) validateRegexPatterns() error {
 	if _, err := regexp.Compile(r.Match); err != nil {
 		return fmt.Errorf("invalid regex pattern '%s': %w", r.Match, err)
 	}
-
-	// Validate tools regex pattern if provided
 	if r.Tool != "" {
 		if _, err := regexp.Compile(r.Tool); err != nil {
 			return fmt.Errorf("invalid tools regex pattern '%s': %w", r.Tool, err)
 		}
 	}
+	return nil
+}
 
-	// Ensure at least one response mechanism is available
-	// Since generate now defaults to "session", we only fail if send is empty AND generate is explicitly set to "off"
+func (r *Rule) validateResponseMechanism() error {
 	generate := r.GetGenerate()
 	if r.Send == "" && generate.Mode == "off" {
 		return errors.New("rule must provide either a message or generate configuration")
 	}
-
-	// Validate generate mode if provided
-	if generate.Mode != "" {
-		validModes := []string{"off", "once", "session", "always"}
-		isValid := false
-		for _, mode := range validModes {
-			if generate.Mode == mode {
-				isValid = true
-				break
-			}
-		}
-		if !isValid {
-			return fmt.Errorf("invalid generate mode '%s': must be one of: off, once, session, always", generate.Mode)
-		}
-	}
-
 	return nil
 }
 
-// ValidateEventFields applies smart defaults to Event and Fields
-func (r *Rule) ValidateEventFields() {
+func (r *Rule) validateGenerateMode() error {
+	generate := r.GetGenerate()
+	if generate.Mode == "" {
+		return nil
+	}
+	validModes := []string{"off", "once", "session", "always"}
+	for _, mode := range validModes {
+		if generate.Mode == mode {
+			return nil
+		}
+	}
+	return fmt.Errorf("invalid generate mode '%s': must be one of: off, once, session, always", generate.Mode)
+}
+
+// ValidateEventSources applies smart defaults to Event
+func (r *Rule) ValidateEventSources() error {
 	// Apply default event if empty
 	if r.Event == "" {
 		r.Event = "pre"
 	}
 
-	// Apply default fields based on event if empty
-	if len(r.Fields) == 0 {
-		if r.Event == "post" {
-			r.Fields = []string{"reasoning"}
-		} else {
-			r.Fields = []string{"command"}
-		}
+	// Validate event value
+	if r.Event != "pre" && r.Event != "post" {
+		return fmt.Errorf("invalid event '%s': must be 'pre' or 'post'", r.Event)
 	}
+
+	// No source validation - any source name is valid
+	return nil
 }
 
 // GetGenerate converts the interface{} Generate field to a Generate struct

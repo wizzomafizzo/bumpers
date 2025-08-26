@@ -1014,112 +1014,6 @@ func testRuleGenerateValidation(t *testing.T, tt struct {
 	}
 }
 
-// TestWhenFieldParsing tests the When field parsing and smart defaults
-func TestWhenFieldParsing(t *testing.T) {
-	t.Parallel()
-
-	testCases := []struct {
-		name         string
-		yamlContent  string
-		expectedWhen []string
-	}{
-		{
-			name: "when field omitted - should default to pre+input",
-			yamlContent: `rules:
-  - match: "^rm -rf"
-    send: "Use safer deletion"`,
-			expectedWhen: []string{"pre", "input"},
-		},
-		{
-			name: "when field with reasoning - should expand to post+reasoning",
-			yamlContent: `rules:
-  - match: "not related to my changes"
-    send: "AI claiming unrelated"
-    when: ["reasoning"]`,
-			expectedWhen: []string{"post", "reasoning"},
-		},
-		{
-			name: "when field with post - should expand to post+output",
-			yamlContent: `rules:
-  - match: "error|failed"
-    send: "Command failed"
-    when: ["post"]`,
-			expectedWhen: []string{"post", "output"},
-		},
-		{
-			name: "when field with exclusion - should exclude reasoning",
-			yamlContent: `rules:
-  - match: "error"
-    send: "Check output"
-    when: ["post", "!reasoning"]`,
-			expectedWhen: []string{"post", "output"},
-		},
-		{
-			name: "when field explicit - should use as-is",
-			yamlContent: `rules:
-  - match: "critical"
-    send: "Critical operation"
-    when: ["pre", "post", "reasoning", "input", "output"]`,
-			expectedWhen: []string{"pre", "post", "reasoning", "input", "output"},
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			rule := loadTestRule(t, tc.yamlContent)
-			expandedWhen := rule.ExpandWhen()
-			validateWhenExpansion(t, expandedWhen, tc.expectedWhen)
-		})
-	}
-}
-
-func loadTestRule(t *testing.T, yamlContent string) Rule {
-	t.Helper()
-	config, err := LoadFromYAML([]byte(yamlContent))
-	if err != nil {
-		t.Fatalf("Failed to load config: %v", err)
-	}
-	if len(config.Rules) != 1 {
-		t.Fatalf("Expected 1 rule, got %d", len(config.Rules))
-	}
-	return config.Rules[0]
-}
-
-func validateWhenExpansion(t *testing.T, actual, expected []string) {
-	t.Helper()
-	if len(actual) != len(expected) {
-		t.Fatalf("Expected When %v, got %v", expected, actual)
-	}
-
-	expectedMap := sliceToMap(expected)
-	actualMap := sliceToMap(actual)
-
-	assertFlagsMatch(t, expectedMap, actualMap, actual)
-}
-
-func sliceToMap(slice []string) map[string]bool {
-	result := make(map[string]bool)
-	for _, item := range slice {
-		result[item] = true
-	}
-	return result
-}
-
-func assertFlagsMatch(t *testing.T, expected, actual map[string]bool, actualSlice []string) {
-	t.Helper()
-	for expectedFlag := range expected {
-		if !actual[expectedFlag] {
-			t.Errorf("Expected flag '%s' not found in expanded When: %v", expectedFlag, actualSlice)
-		}
-	}
-	for actualFlag := range actual {
-		if !expected[actualFlag] {
-			t.Errorf("Unexpected flag '%s' found in expanded When: %v", actualFlag, actualSlice)
-		}
-	}
-}
-
 // Benchmark tests for config parsing performance
 func BenchmarkLoadConfig(b *testing.B) {
 	tempDir := b.TempDir()
@@ -1211,27 +1105,27 @@ func ExampleDefaultConfig() {
 	// Has go test rule: true
 }
 
-func getEventFieldsTestCases() []struct {
-	name           string
-	yamlContent    string
-	expectedEvent  string
-	expectedFields []string
+func getEventSourcesTestCases() []struct {
+	name            string
+	yamlContent     string
+	expectedEvent   string
+	expectedSources []string
 } {
 	return []struct {
-		name           string
-		yamlContent    string
-		expectedEvent  string
-		expectedFields []string
+		name            string
+		yamlContent     string
+		expectedEvent   string
+		expectedSources []string
 	}{
 		{
-			name: "post-tool reasoning matching",
+			name: "post-tool intent matching",
 			yamlContent: `rules:
   - match: "not related to my changes"
     send: "AI claiming unrelated"
     event: "post"
-    fields: ["reasoning"]`,
-			expectedEvent:  "post",
-			expectedFields: []string{"reasoning"},
+    sources: ["#intent"]`,
+			expectedEvent:   "post",
+			expectedSources: []string{"#intent"},
 		},
 		{
 			name: "pre-tool command matching",
@@ -1239,9 +1133,9 @@ func getEventFieldsTestCases() []struct {
   - match: "^rm -rf"
     send: "Dangerous deletion"
     event: "pre"
-    fields: ["command"]`,
-			expectedEvent:  "pre",
-			expectedFields: []string{"command"},
+    sources: ["command"]`,
+			expectedEvent:   "pre",
+			expectedSources: []string{"command"},
 		},
 		{
 			name: "tool output matching",
@@ -1249,9 +1143,9 @@ func getEventFieldsTestCases() []struct {
   - match: "error|failed"
     send: "Command failed"
     event: "post" 
-    fields: ["tool_output"]`,
-			expectedEvent:  "post",
-			expectedFields: []string{"tool_output"},
+    sources: ["tool_output"]`,
+			expectedEvent:   "post",
+			expectedSources: []string{"tool_output"},
 		},
 		{
 			name: "multiple field matching",
@@ -1259,36 +1153,36 @@ func getEventFieldsTestCases() []struct {
   - match: "password|secret"
     send: "Avoid secrets"
     event: "pre"
-    fields: ["command", "content"]`,
-			expectedEvent:  "pre",
-			expectedFields: []string{"command", "content"},
+    sources: ["command", "content"]`,
+			expectedEvent:   "pre",
+			expectedSources: []string{"command", "content"},
 		},
 		{
 			name: "defaults to pre event when omitted",
 			yamlContent: `rules:
   - match: "dangerous"
     send: "Be careful"
-    fields: ["command"]`,
-			expectedEvent:  "pre",
-			expectedFields: []string{"command"},
+    sources: ["command"]`,
+			expectedEvent:   "pre",
+			expectedSources: []string{"command"},
 		},
 		{
-			name: "defaults to reasoning field for post event",
+			name: "no default sources when omitted",
 			yamlContent: `rules:
   - match: "unrelated"
     send: "AI deflection"
     event: "post"`,
-			expectedEvent:  "post",
-			expectedFields: []string{"reasoning"},
+			expectedEvent:   "post",
+			expectedSources: nil,
 		},
 	}
 }
 
-func testEventFieldConfiguration(t *testing.T, tc struct {
-	name           string
-	yamlContent    string
-	expectedEvent  string
-	expectedFields []string
+func runEventSourcesConfigurationTest(t *testing.T, tc struct {
+	name            string
+	yamlContent     string
+	expectedEvent   string
+	expectedSources []string
 },
 ) {
 	config, err := LoadFromYAML([]byte(tc.yamlContent))
@@ -1300,65 +1194,57 @@ func testEventFieldConfiguration(t *testing.T, tc struct {
 	}
 
 	rule := config.Rules[0]
-	rule.ValidateEventFields() // Apply defaults
+	err = rule.ValidateEventSources() // Apply defaults
+	if err != nil {
+		t.Fatalf("ValidateEventSources failed: %v", err)
+	}
 	assert.Equal(t, tc.expectedEvent, rule.Event)
-	assert.Equal(t, tc.expectedFields, rule.Fields)
+	assert.Equal(t, tc.expectedSources, rule.Sources)
 }
 
-// TestEventFieldsConfiguration tests the new Event and Fields configuration syntax
-func TestEventFieldsConfiguration(t *testing.T) {
+// TestEventSourcesConfiguration tests the new Event and Sources configuration syntax
+func TestEventSourcesConfiguration(t *testing.T) {
 	t.Parallel()
 
-	testCases := getEventFieldsTestCases()
+	testCases := getEventSourcesTestCases()
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			testEventFieldConfiguration(t, tc)
+			runEventSourcesConfigurationTest(t, tc)
 		})
 	}
 }
 
-// TestFlagExclusionBehavior tests the !flag exclusion logic that mutation testing revealed
-func TestFlagExclusionBehavior(t *testing.T) {
+// TestIntentSourceNoValidation tests that no validation occurs on source names
+func TestIntentSourceNoValidation(t *testing.T) {
 	t.Parallel()
 
-	rule := Rule{
-		When: []string{"input", "output", "!reasoning"}, // Include input/output but exclude reasoning
+	// Test that all sources are accepted without validation
+	yamlContent := `rules:
+  - match: "test"
+    send: "Test message"
+    event: "pre"
+    sources: ["#intent", "any_arbitrary_field", "command"]`
+
+	config, err := LoadFromYAML([]byte(yamlContent))
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
 	}
 
-	flags := rule.ExpandWhen()
-
-	// Should have input and output but NOT reasoning
-	expected := []string{"input", "output"}
-
-	if len(flags) != len(expected) {
-		t.Errorf("Expected %d flags, got %d: %v", len(expected), len(flags), flags)
+	if len(config.Rules) != 1 {
+		t.Fatalf("Expected 1 rule, got %d", len(config.Rules))
 	}
 
-	// Check specific flags
-	hasInput := false
-	hasOutput := false
-	hasReasoning := false
+	rule := config.Rules[0]
+	if len(rule.Sources) != 3 {
+		t.Fatalf("Expected 3 sources, got %d", len(rule.Sources))
+	}
 
-	for _, flag := range flags {
-		switch flag {
-		case "input":
-			hasInput = true
-		case "output":
-			hasOutput = true
-		case "reasoning":
-			hasReasoning = true
+	expectedSources := []string{"#intent", "any_arbitrary_field", "command"}
+	for i, expected := range expectedSources {
+		if rule.Sources[i] != expected {
+			t.Errorf("Expected source %d to be %q, got %q", i, expected, rule.Sources[i])
 		}
-	}
-
-	if !hasInput {
-		t.Error("Expected 'input' flag to be present")
-	}
-	if !hasOutput {
-		t.Error("Expected 'output' flag to be present")
-	}
-	if hasReasoning {
-		t.Error("Expected 'reasoning' flag to be excluded due to !reasoning")
 	}
 }

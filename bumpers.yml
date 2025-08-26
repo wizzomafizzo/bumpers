@@ -42,3 +42,5 @@ rules:
     send: Bumpers configuration file should not be accessed.
   - match: "cat.*EOF.*>\\s*[^\\s]"
     send: Use Write tool instead of cat heredoc redirection to create files.
+  - match: 'echo.*(>|>>).*\.go'
+    send: Use Write or Update tools instead of editing with cat.

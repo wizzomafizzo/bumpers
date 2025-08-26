@@ -136,6 +136,90 @@ rules:
 
 **Default Behavior:** Rules without a `tools` field only match Bash commands (backward compatibility).
 
+### Hook Event Configuration
+
+Rules can be configured to match different hook events using the `event` and `sources` fields:
+
+#### Event Types
+
+- **`event: "pre"`** (default): Matches PreToolUse hooks - intercepts commands before execution
+- **`event: "post"`**: Matches PostToolUse hooks - analyzes results after tool execution
+
+#### Sources Configuration
+
+The `sources` field specifies which fields to match against:
+
+**Pre-event rules**: Match against tool input field names + `#intent`
+**Post-event rules**: Match against tool output field names + `#intent`
+
+```yaml
+rules:
+  # Match against specific tool input fields
+  - match: "rm -rf"
+    event: "pre"
+    sources: ["command"]
+    send: "Consider using safer alternatives"
+    
+  # Match against multiple fields  
+  - match: "password"
+    event: "pre"
+    sources: ["command", "description"]
+    send: "Avoid hardcoding secrets"
+    
+  # Match against Claude's intent (thinking + explanations)
+  - match: "I need to.*database"
+    event: "pre"
+    sources: ["#intent"]
+    send: "Remember to check database connections first"
+    
+  # Match against all available fields (default behavior)
+  - match: "error_pattern"
+    event: "post"
+    # sources: [] (empty = match all fields)
+    send: "Error handling guidance"
+```
+
+#### Post-Tool-Use Hooks
+
+Post-tool-use hooks analyze Claude's intent and tool outputs:
+
+```yaml
+rules:
+  - match: "error_pattern"
+    event: "post"
+    sources: ["#intent"]  # Match Claude's intent from transcript (thinking + explanations)
+    generate: once
+    send: "Helpful guidance message"
+    prompt: "AI prompt for contextual analysis"
+    
+  - match: "failed"
+    event: "post"
+    sources: ["tool_output"]  # Match tool output/errors
+    send: "Consider alternative approaches"
+```
+
+**Source Field Behavior:**
+
+- **Pre-event rules**: Any source name matches against tool input field names, plus special `#intent` source
+- **Post-event rules**: Any source name matches against tool output field names, plus special `#intent` source  
+- **No validation**: Source names are not validated - any field name can be used
+- **Empty sources**: When sources array is empty, matches against all available fields
+
+**Special Meta Sources:**
+- **`#intent`**: Claude's reasoning from transcript (thinking + explanations) - available for both pre and post events
+
+**Common Tool Input Fields:**
+Based on Claude Code tool implementations, common field names include:
+
+- **`command`** - Shell commands (Bash tool)
+- **`description`** - Human-readable descriptions (most tools)
+- **`file_path`**, **`content`**, **`old_string`**, **`new_string`** - File operations
+- **`pattern`**, **`path`**, **`glob`** - Search operations  
+- **`url`**, **`method`**, **`headers`**, **`body`**, **`query`** - Web operations
+- **`prompt`**, **`subagent_type`** - Task operations
+
+**Note**: MCP servers can define arbitrary field names, so any source name is valid.
+
 ## Key Patterns
 
 - **Value Types**: Prefer values over pointers for performance
