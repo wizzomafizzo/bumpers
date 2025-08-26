@@ -2928,7 +2928,7 @@ func TestPostToolUseWithDifferentTranscript(t *testing.T) {
   - match: "permission denied"
     send: "File permission error detected"
     event: "post"
-    sources: ["reasoning"]`
+    sources: ["intent"]`
 
 	configPath := createTempConfig(t, configContent)
 	app := NewApp(configPath)
@@ -2979,7 +2979,7 @@ func TestPostToolUseRuleNotMatching(t *testing.T) {
   - match: "file not found"
     send: "Check the file path"
     event: "post"
-    sources: ["reasoning"]`
+    sources: ["intent"]`
 
 	configPath := createTempConfig(t, configContent)
 	app := NewApp(configPath)
@@ -3023,7 +3023,7 @@ func TestPostToolUseWithCustomPattern(t *testing.T) {
   - match: "timeout.*occurred"
     send: "Operation timed out - check network connection"
     event: "post"
-    sources: ["reasoning"]`
+    sources: ["intent"]`
 
 	configPath := createTempConfig(t, configContent)
 	app := NewApp(configPath)
@@ -3101,7 +3101,7 @@ func TestPostToolUseWithMultipleFieldMatching(t *testing.T) {
   - match: "timeout|permission denied"
     send: "Operation issue detected"
     event: "post"
-    sources: ["reasoning", "tool_output"]`
+    sources: ["intent", "tool_output"]`
 
 	configPath := createTempConfig(t, configContent)
 	app := NewApp(configPath)
@@ -3144,6 +3144,63 @@ func TestPostToolUseWithMultipleFieldMatching(t *testing.T) {
 	}
 
 	assert.Equal(t, "Operation issue detected", result2)
+}
+
+// TestPostToolUseWithThinkingAndTextBlocks tests extraction of both thinking blocks and text content
+func TestPostToolUseWithThinkingAndTextBlocks(t *testing.T) {
+	t.Parallel()
+	setupTest(t)
+
+	configContent := `rules:
+  - match: "need to analyze.*performance"
+    send: "Performance analysis detected"
+    event: "post"
+    sources: ["intent"]`
+
+	configPath := createTempConfig(t, configContent)
+	app := NewApp(configPath)
+
+	// Create transcript with both thinking blocks and text content
+	tmpDir := t.TempDir()
+	transcriptPath := filepath.Join(tmpDir, "thinking-text-transcript.jsonl")
+	transcriptContent := `{"type":"user","message":{"role":"user","content":"Check system performance"},` +
+		`"uuid":"user1","timestamp":"2024-01-01T10:00:00Z"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"thinking",` +
+		`"thinking":"I need to analyze the system performance metrics to identify bottlenecks."},` +
+		`{"type":"text","text":"I'll check the system performance for you."}]},"uuid":"assistant1",` +
+		`"timestamp":"2024-01-01T10:01:00Z"}
+{"type":"user","message":{"role":"user","content":[{"tool_use_id":"tool1","type":"tool_result",` +
+		`"content":[{"type":"text","text":"CPU: 85%, Memory: 70%, Disk: 40%"}]}]},"uuid":"user2",` +
+		`"timestamp":"2024-01-01T10:02:00Z"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"thinking",` +
+		`"thinking":"The CPU usage is quite high at 85%, which could indicate performance issues."},` +
+		`{"type":"text","text":"The system shows high CPU usage at 85%. ` +
+		`This could be causing performance issues."}]},"uuid":"assistant2","timestamp":"2024-01-01T10:03:00Z"}`
+
+	if err := os.WriteFile(transcriptPath, []byte(transcriptContent), 0o600); err != nil {
+		t.Fatalf("Failed to write transcript file: %v", err)
+	}
+
+	postToolUseInput := fmt.Sprintf(`{
+		"session_id": "test-thinking",
+		"transcript_path": "%s",
+		"cwd": "/test/dir",
+		"hook_event_name": "PostToolUse",
+		"tool_name": "Bash",
+		"tool_input": {"command": "top"},
+		"tool_output": {"success": true}
+	}`, transcriptPath)
+
+	result, err := app.ProcessHook(strings.NewReader(postToolUseInput))
+	if err != nil {
+		t.Fatalf("ProcessHook failed: %v", err)
+	}
+
+	// Should match pattern from thinking block content
+	expectedMessage := "Performance analysis detected"
+	if result != expectedMessage {
+		t.Errorf("Expected %q (thinking block should be extracted), got %q", expectedMessage, result)
+	}
 }
 
 func TestProcessUserPromptWithCommandArguments(t *testing.T) {
@@ -3223,4 +3280,200 @@ func TestProcessUserPromptWithNoArguments(t *testing.T) {
 	if additionalContext != expected {
 		t.Errorf("Expected %q, got %q", expected, additionalContext)
 	}
+}
+
+type preToolUseIntentTestCase struct {
+	testName          string
+	transcriptContent string
+	matchPattern      string
+	command           string
+	desc              string
+	expectedMessage   string
+}
+
+// Helper function to test PreToolUse intent matching with different scenarios
+func testPreToolUseIntentMatching(t *testing.T, tc *preToolUseIntentTestCase) {
+	t.Helper()
+
+	tmpDir := t.TempDir()
+	transcriptPath := filepath.Join(tmpDir, tc.testName+"-transcript.jsonl")
+
+	err := os.WriteFile(transcriptPath, []byte(tc.transcriptContent), 0o600)
+	if err != nil {
+		t.Fatalf("Failed to write transcript file: %v", err)
+	}
+
+	configContent := fmt.Sprintf(`rules:
+  - match: "%s"
+    event: "pre"
+    sources: ["intent"]
+    send: "%s"
+    generate: "off"`, tc.matchPattern, tc.expectedMessage)
+
+	configPath := createTempConfig(t, configContent)
+	app := NewApp(configPath)
+
+	hookInput := fmt.Sprintf(`{
+		"transcript_path": "%s",
+		"tool_name": "Bash",
+		"tool_input": {
+			"command": "%s",
+			"description": "%s"
+		}
+	}`, transcriptPath, tc.command, tc.desc)
+
+	result, err := app.ProcessHook(strings.NewReader(hookInput))
+	if err != nil {
+		t.Fatalf("ProcessHook failed: %v", err)
+	}
+
+	if result != tc.expectedMessage {
+		t.Errorf("Expected %q, got %q", tc.expectedMessage, result)
+	}
+}
+
+func TestPreToolUseIntentSupport(t *testing.T) {
+	t.Parallel()
+	setupTest(t)
+
+	transcriptContent := `{"type":"assistant","message":{"content":[` +
+		`{"type":"thinking","thinking":"I need to run some database tests to verify the connection works"}, ` +
+		`{"type":"text","text":"I'll run the database tests for you"}]}}`
+	testPreToolUseIntentMatching(t, &preToolUseIntentTestCase{
+		testName:          "test",
+		transcriptContent: transcriptContent,
+		matchPattern:      "database.*test",
+		command:           "python test_db.py",
+		desc:              "Run database tests",
+		expectedMessage:   "Consider checking database connection first",
+	})
+}
+
+func TestPreToolUseIntentWithTextOnlyContent(t *testing.T) {
+	t.Parallel()
+	setupTest(t)
+
+	transcriptContent := `{"type":"assistant","message":{"content":[` +
+		`{"type":"text","text":"I need to perform a critical system update to fix vulnerabilities"}]}}`
+	testPreToolUseIntentMatching(t, &preToolUseIntentTestCase{
+		testName:          "text-only",
+		transcriptContent: transcriptContent,
+		matchPattern:      "critical.*system",
+		command:           "sudo apt update",
+		desc:              "System update",
+		expectedMessage:   "System update detected",
+	})
+}
+
+// TestPreToolUseIntentWithMissingTranscript tests graceful handling when transcript doesn't exist
+func TestPreToolUseIntentWithMissingTranscript(t *testing.T) {
+	t.Parallel()
+	setupTest(t)
+
+	configContent := `rules:
+  - match: "anything"
+    event: "pre"
+    sources: ["intent"]
+    send: "This should not match"
+    generate: "off"`
+
+	configPath := createTempConfig(t, configContent)
+	app := NewApp(configPath)
+
+	hookInput := `{
+		"transcript_path": "/non/existent/transcript.jsonl",
+		"tool_name": "Bash",
+		"tool_input": {
+			"command": "echo hello",
+			"description": "Simple echo command"
+		}
+	}`
+
+	result, err := app.ProcessHook(strings.NewReader(hookInput))
+	if err != nil {
+		t.Fatalf("ProcessHook failed: %v", err)
+	}
+
+	// Should return empty when transcript can't be read
+	if result != "" {
+		t.Errorf("Expected empty result when transcript missing, got %q", result)
+	}
+}
+
+type postToolUseIntegrationTestCase struct {
+	sessionID       string
+	transcriptFile  string
+	matchPattern    string
+	command         string
+	expectedMessage string
+	success         bool
+}
+
+// Helper function for PostToolUse integration tests
+func testPostToolUseIntegration(t *testing.T, tc *postToolUseIntegrationTestCase) {
+	t.Helper()
+
+	testdataDir := "../../testdata"
+	transcriptPath := filepath.Join(testdataDir, tc.transcriptFile)
+	absPath, err := filepath.Abs(transcriptPath)
+	if err != nil {
+		t.Fatalf("Failed to get absolute path: %v", err)
+	}
+
+	configContent := fmt.Sprintf(`rules:
+  - match: "%s"
+    event: "post"
+    sources: ["intent"]
+    send: "%s"
+    generate: "off"`, tc.matchPattern, tc.expectedMessage)
+
+	configPath := createTempConfig(t, configContent)
+	app := NewApp(configPath)
+
+	postToolUseInput := fmt.Sprintf(`{
+		"session_id": "%s",
+		"transcript_path": "%s",
+		"cwd": "/test/dir",
+		"hook_event_name": "PostToolUse",
+		"tool_name": "Bash",
+		"tool_input": {"command": "%s"},
+		"tool_output": {"success": %t}
+	}`, tc.sessionID, absPath, tc.command, tc.success)
+
+	result, err := app.ProcessHook(strings.NewReader(postToolUseInput))
+	if err != nil {
+		t.Fatalf("ProcessHook failed: %v", err)
+	}
+
+	if result != tc.expectedMessage {
+		t.Errorf("Expected %q, got %q", tc.expectedMessage, result)
+	}
+}
+
+func TestIntegrationThinkingAndTextExtraction(t *testing.T) {
+	t.Parallel()
+	setupTest(t)
+
+	testPostToolUseIntegration(t, &postToolUseIntegrationTestCase{
+		sessionID:       "integration-test",
+		transcriptFile:  "transcript-thinking-and-text.jsonl",
+		matchPattern:    "critical.*attention",
+		command:         "go test ./...",
+		expectedMessage: "Critical issue requires careful handling",
+		success:         false,
+	})
+}
+
+func TestIntegrationPerformanceAnalysisDetection(t *testing.T) {
+	t.Parallel()
+	setupTest(t)
+
+	testPostToolUseIntegration(t, &postToolUseIntegrationTestCase{
+		sessionID:       "perf-test",
+		transcriptFile:  "transcript-performance-analysis.jsonl",
+		matchPattern:    "immediate.*optimization",
+		command:         "top",
+		expectedMessage: "Performance optimization guidance triggered",
+		success:         true,
+	})
 }

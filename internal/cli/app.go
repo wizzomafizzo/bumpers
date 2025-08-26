@@ -210,7 +210,7 @@ func (*App) filterPreEventRules(rules []config.Rule) []config.Rule {
 	var preRules []config.Rule
 	for i := range rules {
 		rule := &rules[i]
-		rule.ValidateEventSources() // Apply smart defaults
+		_ = rule.ValidateEventSources() // Apply smart defaults
 
 		// Check if rule applies to pre events (default is "pre")
 		if rule.Event == "pre" || rule.Event == "" {
@@ -249,17 +249,58 @@ func (*App) checkSpecificSources(rule *config.Rule, ruleMatcher *matcher.RuleMat
 	event hooks.HookEvent,
 ) (matchedRule *config.Rule, matchedField string) {
 	for _, fieldName := range rule.Sources {
-		if value, exists := event.ToolInput[fieldName]; exists {
-			if strValue, ok := value.(string); ok {
-				foundRule, err := ruleMatcher.Match(strValue, event.ToolName)
-				isMatch := err == nil && foundRule != nil && foundRule.Match == rule.Match
-				if isMatch {
-					return rule, strValue
-				}
-			}
+		if matched, content := checkIntentSource(fieldName, rule, ruleMatcher, event); matched {
+			return rule, content
+		}
+		if matched, content := checkToolInputSource(fieldName, rule, ruleMatcher, event); matched {
+			return rule, content
 		}
 	}
 	return nil, ""
+}
+
+// checkIntentSource handles intent/reasoning source fields
+func checkIntentSource(
+	fieldName string, rule *config.Rule, ruleMatcher *matcher.RuleMatcher, event hooks.HookEvent,
+) (matched bool, content string) {
+	if fieldName != "intent" && fieldName != "reasoning" {
+		return false, ""
+	}
+	if event.TranscriptPath == "" {
+		return false, ""
+	}
+	intentContent, err := transcript.ExtractIntentContent(event.TranscriptPath)
+	if err != nil || strings.TrimSpace(intentContent) == "" {
+		return false, ""
+	}
+	return matchRuleContent(intentContent, rule, ruleMatcher, event.ToolName)
+}
+
+// checkToolInputSource handles regular ToolInput fields
+func checkToolInputSource(
+	fieldName string, rule *config.Rule, ruleMatcher *matcher.RuleMatcher, event hooks.HookEvent,
+) (matched bool, content string) {
+	value, exists := event.ToolInput[fieldName]
+	if !exists {
+		return false, ""
+	}
+	strValue, ok := value.(string)
+	if !ok {
+		return false, ""
+	}
+	return matchRuleContent(strValue, rule, ruleMatcher, event.ToolName)
+}
+
+// matchRuleContent checks if content matches rule pattern
+func matchRuleContent(
+	content string, rule *config.Rule, ruleMatcher *matcher.RuleMatcher, toolName string,
+) (matched bool, matchedContent string) {
+	foundRule, err := ruleMatcher.Match(content, toolName)
+	isMatch := err == nil && foundRule != nil && foundRule.Match == rule.Match
+	if isMatch {
+		return true, content
+	}
+	return false, ""
 }
 
 // checkOriginalBehavior uses original matching behavior for backward compatibility
@@ -299,7 +340,7 @@ func (a *App) processMatchedRule(matchedRule *config.Rule, matchedValue string) 
 
 // ProcessPostToolUse processes post-tool-use hook events
 type postToolContent struct {
-	reasoning  string
+	intent     string
 	toolOutput string
 	toolName   string
 }
@@ -317,17 +358,17 @@ func (*App) extractPostToolContent(rawJSON json.RawMessage) (*postToolContent, e
 
 	content := &postToolContent{toolName: toolName}
 
-	// Read transcript content for reasoning matching using efficient parser
+	// Read transcript content for intent matching using efficient parser
 	if transcriptPath != "" {
 		log.Debug().
 			Str("toolName", toolName).
 			Str("transcriptPath", transcriptPath).
-			Msg("PostToolUse hook triggered, extracting reasoning")
-		reasoning, err := transcript.ExtractReasoningContent(transcriptPath)
+			Msg("PostToolUse hook triggered, extracting intent")
+		intent, err := transcript.ExtractIntentContent(transcriptPath)
 		if err != nil {
-			log.Debug().Err(err).Str("transcriptPath", transcriptPath).Msg("Failed to extract reasoning")
+			log.Debug().Err(err).Str("transcriptPath", transcriptPath).Msg("Failed to extract intent")
 		}
-		content.reasoning = reasoning
+		content.intent = intent
 	}
 
 	// Extract tool output content for tool_output field matching
@@ -341,15 +382,15 @@ func (*App) extractPostToolContent(rawJSON json.RawMessage) (*postToolContent, e
 }
 
 func (*App) determineRuleContentMatch(rule *config.Rule, content *postToolContent) (string, bool) {
-	rule.ValidateEventSources()
+	_ = rule.ValidateEventSources()
 
-	matchesReasoning := false
+	matchesIntent := false
 	matchesToolOutput := false
 
 	// New syntax: event="post" + sources
 	if rule.Event == "post" {
-		if containsString(rule.Sources, "reasoning") {
-			matchesReasoning = true
+		if containsString(rule.Sources, "reasoning") || containsString(rule.Sources, "intent") {
+			matchesIntent = true
 		}
 		if containsString(rule.Sources, "tool_output") {
 			matchesToolOutput = true
@@ -357,14 +398,14 @@ func (*App) determineRuleContentMatch(rule *config.Rule, content *postToolConten
 	}
 
 	// Skip if rule doesn't match any available content
-	if !matchesReasoning && !matchesToolOutput {
+	if !matchesIntent && !matchesToolOutput {
 		return "", false
 	}
 
-	// Choose content to match against (prioritize reasoning for backward compatibility)
+	// Choose content to match against (prioritize intent for backward compatibility)
 	switch {
-	case matchesReasoning && content.reasoning != "":
-		return content.reasoning, true
+	case matchesIntent && content.intent != "":
+		return content.intent, true
 	case matchesToolOutput && content.toolOutput != "":
 		return content.toolOutput, true
 	default:
@@ -386,8 +427,8 @@ func (a *App) ProcessPostToolUse(rawJSON json.RawMessage) (string, error) {
 		return "", err
 	}
 
-	// Skip if no content to match against (neither reasoning nor tool output)
-	if content.reasoning == "" && content.toolOutput == "" {
+	// Skip if no content to match against (neither intent nor tool output)
+	if content.intent == "" && content.toolOutput == "" {
 		return "", nil
 	}
 

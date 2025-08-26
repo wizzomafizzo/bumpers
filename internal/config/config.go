@@ -111,56 +111,135 @@ func (c *Config) Validate() error {
 
 // Validate performs rule-level validation
 func (r *Rule) Validate() error {
+	if err := r.validateRequiredFields(); err != nil {
+		return err
+	}
+	if err := r.validateRegexPatterns(); err != nil {
+		return err
+	}
+	if err := r.validateResponseMechanism(); err != nil {
+		return err
+	}
+	if err := r.validateGenerateMode(); err != nil {
+		return err
+	}
+	if err := r.ValidateEventSources(); err != nil {
+		return fmt.Errorf("event/sources validation failed: %w", err)
+	}
+	return nil
+}
+
+func (r *Rule) validateRequiredFields() error {
 	if r.Match == "" {
 		return errors.New("match field is required and cannot be empty")
 	}
+	return nil
+}
 
-	// Validate regex pattern
+func (r *Rule) validateRegexPatterns() error {
 	if _, err := regexp.Compile(r.Match); err != nil {
 		return fmt.Errorf("invalid regex pattern '%s': %w", r.Match, err)
 	}
-
-	// Validate tools regex pattern if provided
 	if r.Tool != "" {
 		if _, err := regexp.Compile(r.Tool); err != nil {
 			return fmt.Errorf("invalid tools regex pattern '%s': %w", r.Tool, err)
 		}
 	}
+	return nil
+}
 
-	// Ensure at least one response mechanism is available
-	// Since generate now defaults to "session", we only fail if send is empty AND generate is explicitly set to "off"
+func (r *Rule) validateResponseMechanism() error {
 	generate := r.GetGenerate()
 	if r.Send == "" && generate.Mode == "off" {
 		return errors.New("rule must provide either a message or generate configuration")
 	}
-
-	// Validate generate mode if provided
-	if generate.Mode != "" {
-		validModes := []string{"off", "once", "session", "always"}
-		isValid := false
-		for _, mode := range validModes {
-			if generate.Mode == mode {
-				isValid = true
-				break
-			}
-		}
-		if !isValid {
-			return fmt.Errorf("invalid generate mode '%s': must be one of: off, once, session, always", generate.Mode)
-		}
-	}
-
 	return nil
 }
 
-// ValidateEventSources applies smart defaults to Event and Sources
-func (r *Rule) ValidateEventSources() {
+func (r *Rule) validateGenerateMode() error {
+	generate := r.GetGenerate()
+	if generate.Mode == "" {
+		return nil
+	}
+	validModes := []string{"off", "once", "session", "always"}
+	for _, mode := range validModes {
+		if generate.Mode == mode {
+			return nil
+		}
+	}
+	return fmt.Errorf("invalid generate mode '%s': must be one of: off, once, session, always", generate.Mode)
+}
+
+// ValidateEventSources applies smart defaults to Event and Sources and validates source compatibility
+func (r *Rule) ValidateEventSources() error {
 	// Apply default event if empty
 	if r.Event == "" {
 		r.Event = "pre"
 	}
 
+	// Validate event value
+	if r.Event != "pre" && r.Event != "post" {
+		return fmt.Errorf("invalid event '%s': must be 'pre' or 'post'", r.Event)
+	}
+
+	// Validate sources are appropriate for the event type
+	for _, source := range r.Sources {
+		if err := r.validateSourceForEvent(source); err != nil {
+			return err
+		}
+	}
+
 	// No default sources - when empty, match against all available fields
 	// This allows flexibility while still enabling specific targeting when needed
+	return nil
+}
+
+// validateSourceForEvent checks if a source is valid for the current event type
+func (r *Rule) validateSourceForEvent(source string) error {
+	// Sources available for both pre and post events
+	universalSources := []string{"intent", "reasoning"} // reasoning is deprecated alias
+
+	// Sources only available for pre events (tool inputs)
+	preOnlySources := []string{
+		"command", "description", "file_path", "content", "old_string", "new_string",
+		"pattern", "path", "glob", "url", "method", "headers", "body", "query", "prompt", "subagent_type",
+	}
+
+	// Sources only available for post events
+	postOnlySources := []string{"tool_output"}
+
+	// Check if source is valid for the current event
+	switch r.Event {
+	case "pre":
+		// Pre events can use universal sources and pre-only sources
+		if containsString(universalSources, source) || containsString(preOnlySources, source) {
+			return nil
+		}
+		if containsString(postOnlySources, source) {
+			return fmt.Errorf("source '%s' is only available for 'post' events, but rule has event 'pre'", source)
+		}
+	case "post":
+		// Post events can use universal sources and post-only sources
+		if containsString(universalSources, source) || containsString(postOnlySources, source) {
+			return nil
+		}
+		if containsString(preOnlySources, source) {
+			return fmt.Errorf("source '%s' is only available for 'pre' events, but rule has event 'post'", source)
+		}
+	}
+
+	// If we get here, it's an unknown source - that's okay, allows for extensibility
+	return nil
+}
+
+// containsString checks if a string slice contains a specific string
+func containsString(slice []string, item string) bool {
+	for _, s := range slice {
+		if s == item {
+			return true
+		}
+	}
+	return false
 }
 
 // GetGenerate converts the interface{} Generate field to a Generate struct

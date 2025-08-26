@@ -35,8 +35,9 @@ func (h HookType) String() string {
 }
 
 type HookEvent struct {
-	ToolInput map[string]any `json:"tool_input"` //nolint:tagliatelle // API uses snake_case
-	ToolName  string         `json:"tool_name"`  //nolint:tagliatelle // API uses snake_case
+	ToolInput      map[string]any `json:"tool_input"`      //nolint:tagliatelle // API uses snake_case
+	ToolName       string         `json:"tool_name"`       //nolint:tagliatelle // API uses snake_case
+	TranscriptPath string         `json:"transcript_path"` //nolint:tagliatelle // API uses snake_case
 }
 
 func ParseInput(reader io.Reader) (*HookEvent, error) {

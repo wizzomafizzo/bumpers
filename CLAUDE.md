@@ -163,6 +163,12 @@ rules:
     sources: ["command", "description"]
     send: "Avoid hardcoding secrets"
     
+  # Match against Claude's intent (thinking + explanations)
+  - match: "I need to.*database"
+    event: "pre"
+    sources: ["intent"]
+    send: "Remember to check database connections first"
+    
   # Match against all available fields (default behavior)
   - match: "error_pattern"
     event: "post"
@@ -172,13 +178,13 @@ rules:
 
 #### Post-Tool-Use Hooks
 
-Post-tool-use hooks analyze Claude's reasoning and tool outputs:
+Post-tool-use hooks analyze Claude's intent and tool outputs:
 
 ```yaml
 rules:
   - match: "error_pattern"
     event: "post"
-    sources: ["reasoning"]  # Match Claude's reasoning from transcript
+    sources: ["intent"]  # Match Claude's intent from transcript (thinking + explanations)
     generate: once
     send: "Helpful guidance message"
     prompt: "AI prompt for contextual analysis"
@@ -220,7 +226,7 @@ Based on Claude Code tool implementations, these are the most common tool input 
 - **`subagent_type`**: Specialized agent type (Task tool)
 
 **Special Fields:**
-- **`reasoning`**: Claude's internal reasoning (PostToolUse hooks only)
+- **`intent`**: Claude's internal reasoning and explanations (both thinking blocks and text content from transcript) - available for both pre and post hooks
 - **`tool_output`**: Tool execution results/errors (PostToolUse hooks only)
 
 **Configuration Options:**

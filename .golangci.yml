@@ -45,6 +45,9 @@ linters:
     - grouper
     - paralleltest
     - tparallel
+    - containedctx
+    - contextcheck
+    - iface
   settings:
     govet:
       enable:
