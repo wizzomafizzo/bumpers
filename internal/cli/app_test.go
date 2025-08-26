@@ -2877,7 +2877,7 @@ func TestProcessHookRoutesPostToolUse(t *testing.T) {
   - match: "not related to my changes"
     send: "AI claiming unrelated - please verify"
     event: "post"
-    sources: ["reasoning"]`
+    sources: ["#intent"]`
 
 	configPath := createTempConfig(t, configContent)
 	app := NewApp(configPath)
@@ -2928,7 +2928,7 @@ func TestPostToolUseWithDifferentTranscript(t *testing.T) {
   - match: "permission denied"
     send: "File permission error detected"
     event: "post"
-    sources: ["intent"]`
+    sources: ["#intent"]`
 
 	configPath := createTempConfig(t, configContent)
 	app := NewApp(configPath)
@@ -2979,7 +2979,7 @@ func TestPostToolUseRuleNotMatching(t *testing.T) {
   - match: "file not found"
     send: "Check the file path"
     event: "post"
-    sources: ["intent"]`
+    sources: ["#intent"]`
 
 	configPath := createTempConfig(t, configContent)
 	app := NewApp(configPath)
@@ -3023,7 +3023,7 @@ func TestPostToolUseWithCustomPattern(t *testing.T) {
   - match: "timeout.*occurred"
     send: "Operation timed out - check network connection"
     event: "post"
-    sources: ["intent"]`
+    sources: ["#intent"]`
 
 	configPath := createTempConfig(t, configContent)
 	app := NewApp(configPath)
@@ -3101,7 +3101,7 @@ func TestPostToolUseWithMultipleFieldMatching(t *testing.T) {
   - match: "timeout|permission denied"
     send: "Operation issue detected"
     event: "post"
-    sources: ["intent", "tool_output"]`
+    sources: ["#intent", "tool_output"]`
 
 	configPath := createTempConfig(t, configContent)
 	app := NewApp(configPath)
@@ -3155,7 +3155,7 @@ func TestPostToolUseWithThinkingAndTextBlocks(t *testing.T) {
   - match: "need to analyze.*performance"
     send: "Performance analysis detected"
     event: "post"
-    sources: ["intent"]`
+    sources: ["#intent"]`
 
 	configPath := createTempConfig(t, configContent)
 	app := NewApp(configPath)
@@ -3306,7 +3306,7 @@ func testPreToolUseIntentMatching(t *testing.T, tc *preToolUseIntentTestCase) {
 	configContent := fmt.Sprintf(`rules:
   - match: "%s"
     event: "pre"
-    sources: ["intent"]
+    sources: ["#intent"]
     send: "%s"
     generate: "off"`, tc.matchPattern, tc.expectedMessage)
 
@@ -3373,7 +3373,7 @@ func TestPreToolUseIntentWithMissingTranscript(t *testing.T) {
 	configContent := `rules:
   - match: "anything"
     event: "pre"
-    sources: ["intent"]
+    sources: ["#intent"]
     send: "This should not match"
     generate: "off"`
 
@@ -3423,7 +3423,7 @@ func testPostToolUseIntegration(t *testing.T, tc *postToolUseIntegrationTestCase
 	configContent := fmt.Sprintf(`rules:
   - match: "%s"
     event: "post"
-    sources: ["intent"]
+    sources: ["#intent"]
     send: "%s"
     generate: "off"`, tc.matchPattern, tc.expectedMessage)
 

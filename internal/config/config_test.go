@@ -1118,14 +1118,14 @@ func getEventSourcesTestCases() []struct {
 		expectedSources []string
 	}{
 		{
-			name: "post-tool reasoning matching",
+			name: "post-tool intent matching",
 			yamlContent: `rules:
   - match: "not related to my changes"
     send: "AI claiming unrelated"
     event: "post"
-    sources: ["reasoning"]`,
+    sources: ["#intent"]`,
 			expectedEvent:   "post",
-			expectedSources: []string{"reasoning"},
+			expectedSources: []string{"#intent"},
 		},
 		{
 			name: "pre-tool command matching",
@@ -1216,102 +1216,35 @@ func TestEventSourcesConfiguration(t *testing.T) {
 	}
 }
 
-// TestIntentSourceValidation tests validation of "intent" sources
-func TestIntentSourceValidation(t *testing.T) {
+// TestIntentSourceNoValidation tests that no validation occurs on source names
+func TestIntentSourceNoValidation(t *testing.T) {
 	t.Parallel()
 
-	tests := getIntentSourceValidationTestCases()
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			runIntentSourceValidationTest(t, tt)
-		})
-	}
-}
-
-type intentSourceValidationTestCase struct {
-	name        string
-	yamlContent string
-	errorText   string
-	expectError bool
-}
-
-func getIntentSourceValidationTestCases() []intentSourceValidationTestCase {
-	return []intentSourceValidationTestCase{
-		{
-			name: "intent source valid for pre event",
-			yamlContent: `rules:
-  - match: "dangerous.*pattern"
-    send: "Be careful with this"
-    event: "pre"
-    sources: ["intent"]`,
-			expectError: false,
-		},
-		{
-			name: "intent source valid for post event",
-			yamlContent: `rules:
-  - match: "error.*detected"
-    send: "Error handling guidance"
-    event: "post"
-    sources: ["intent"]`,
-			expectError: false,
-		},
-		{
-			name: "reasoning source still valid (backward compatibility)",
-			yamlContent: `rules:
-  - match: "unrelated.*changes"
-    send: "AI deflection detected"
-    event: "post"
-    sources: ["reasoning"]`,
-			expectError: false,
-		},
-		{
-			name: "tool_output source invalid for pre event",
-			yamlContent: `rules:
-  - match: "failed"
-    send: "Command failed"
-    event: "pre"
-    sources: ["tool_output"]`,
-			expectError: true,
-			errorText:   "source 'tool_output' is only available for 'post' events",
-		},
-		{
-			name: "command source invalid for post event",
-			yamlContent: `rules:
-  - match: "rm -rf"
-    send: "Dangerous command"
-    event: "post"
-    sources: ["command"]`,
-			expectError: true,
-			errorText:   "source 'command' is only available for 'pre' events",
-		},
-		{
-			name: "unknown source allowed (extensibility)",
-			yamlContent: `rules:
+	// Test that all sources are accepted without validation
+	yamlContent := `rules:
   - match: "test"
     send: "Test message"
     event: "pre"
-    sources: ["unknown_source"]`,
-			expectError: false,
-		},
-	}
-}
+    sources: ["#intent", "any_arbitrary_field", "command"]`
 
-func runIntentSourceValidationTest(t *testing.T, tt intentSourceValidationTestCase) {
-	config, err := LoadFromYAML([]byte(tt.yamlContent))
-	if tt.expectError {
-		if err == nil {
-			t.Errorf("Expected error for %s, got none", tt.name)
-		} else if !strings.Contains(err.Error(), tt.errorText) {
-			t.Errorf("Expected error to contain '%s', got '%s'", tt.errorText, err.Error())
-		}
-		return
-	}
-
+	config, err := LoadFromYAML([]byte(yamlContent))
 	if err != nil {
-		t.Errorf("Expected no error for %s, got %v", tt.name, err)
-	} else if len(config.Rules) != 1 {
-		t.Errorf("Expected 1 rule, got %d", len(config.Rules))
+		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	if len(config.Rules) != 1 {
+		t.Fatalf("Expected 1 rule, got %d", len(config.Rules))
+	}
+
+	rule := config.Rules[0]
+	if len(rule.Sources) != 3 {
+		t.Fatalf("Expected 3 sources, got %d", len(rule.Sources))
+	}
+
+	expectedSources := []string{"#intent", "any_arbitrary_field", "command"}
+	for i, expected := range expectedSources {
+		if rule.Sources[i] != expected {
+			t.Errorf("Expected source %d to be %q, got %q", i, expected, rule.Sources[i])
+		}
 	}
 }

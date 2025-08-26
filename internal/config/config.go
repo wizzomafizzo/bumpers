@@ -170,7 +170,7 @@ func (r *Rule) validateGenerateMode() error {
 	return fmt.Errorf("invalid generate mode '%s': must be one of: off, once, session, always", generate.Mode)
 }
 
-// ValidateEventSources applies smart defaults to Event and Sources and validates source compatibility
+// ValidateEventSources applies smart defaults to Event
 func (r *Rule) ValidateEventSources() error {
 	// Apply default event if empty
 	if r.Event == "" {
@@ -182,64 +182,8 @@ func (r *Rule) ValidateEventSources() error {
 		return fmt.Errorf("invalid event '%s': must be 'pre' or 'post'", r.Event)
 	}
 
-	// Validate sources are appropriate for the event type
-	for _, source := range r.Sources {
-		if err := r.validateSourceForEvent(source); err != nil {
-			return err
-		}
-	}
-
-	// No default sources - when empty, match against all available fields
-	// This allows flexibility while still enabling specific targeting when needed
+	// No source validation - any source name is valid
 	return nil
-}
-
-// validateSourceForEvent checks if a source is valid for the current event type
-func (r *Rule) validateSourceForEvent(source string) error {
-	// Sources available for both pre and post events
-	universalSources := []string{"intent", "reasoning"} // reasoning is deprecated alias
-
-	// Sources only available for pre events (tool inputs)
-	preOnlySources := []string{
-		"command", "description", "file_path", "content", "old_string", "new_string",
-		"pattern", "path", "glob", "url", "method", "headers", "body", "query", "prompt", "subagent_type",
-	}
-
-	// Sources only available for post events
-	postOnlySources := []string{"tool_output"}
-
-	// Check if source is valid for the current event
-	switch r.Event {
-	case "pre":
-		// Pre events can use universal sources and pre-only sources
-		if containsString(universalSources, source) || containsString(preOnlySources, source) {
-			return nil
-		}
-		if containsString(postOnlySources, source) {
-			return fmt.Errorf("source '%s' is only available for 'post' events, but rule has event 'pre'", source)
-		}
-	case "post":
-		// Post events can use universal sources and post-only sources
-		if containsString(universalSources, source) || containsString(postOnlySources, source) {
-			return nil
-		}
-		if containsString(preOnlySources, source) {
-			return fmt.Errorf("source '%s' is only available for 'pre' events, but rule has event 'post'", source)
-		}
-	}
-
-	// If we get here, it's an unknown source - that's okay, allows for extensibility
-	return nil
-}
-
-// containsString checks if a string slice contains a specific string
-func containsString(slice []string, item string) bool {
-	for _, s := range slice {
-		if s == item {
-			return true
-		}
-	}
-	return false
 }
 
 // GetGenerate converts the interface{} Generate field to a Generate struct

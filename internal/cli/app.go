@@ -259,11 +259,11 @@ func (*App) checkSpecificSources(rule *config.Rule, ruleMatcher *matcher.RuleMat
 	return nil, ""
 }
 
-// checkIntentSource handles intent/reasoning source fields
+// checkIntentSource handles #intent source field
 func checkIntentSource(
 	fieldName string, rule *config.Rule, ruleMatcher *matcher.RuleMatcher, event hooks.HookEvent,
 ) (matched bool, content string) {
-	if fieldName != "intent" && fieldName != "reasoning" {
+	if fieldName != "#intent" {
 		return false, ""
 	}
 	if event.TranscriptPath == "" {
@@ -389,11 +389,15 @@ func (*App) determineRuleContentMatch(rule *config.Rule, content *postToolConten
 
 	// New syntax: event="post" + sources
 	if rule.Event == "post" {
-		if containsString(rule.Sources, "reasoning") || containsString(rule.Sources, "intent") {
+		if containsString(rule.Sources, "#intent") {
 			matchesIntent = true
 		}
-		if containsString(rule.Sources, "tool_output") {
-			matchesToolOutput = true
+		// All other sources are treated as tool output field names
+		for _, source := range rule.Sources {
+			if source != "#intent" {
+				matchesToolOutput = true
+				break
+			}
 		}
 	}
 

@@ -147,7 +147,10 @@ Rules can be configured to match different hook events using the `event` and `so
 
 #### Sources Configuration
 
-The `sources` field specifies which tool input fields to match against:
+The `sources` field specifies which fields to match against:
+
+**Pre-event rules**: Match against tool input field names + `#intent`
+**Post-event rules**: Match against tool output field names + `#intent`
 
 ```yaml
 rules:
@@ -166,7 +169,7 @@ rules:
   # Match against Claude's intent (thinking + explanations)
   - match: "I need to.*database"
     event: "pre"
-    sources: ["intent"]
+    sources: ["#intent"]
     send: "Remember to check database connections first"
     
   # Match against all available fields (default behavior)
@@ -184,7 +187,7 @@ Post-tool-use hooks analyze Claude's intent and tool outputs:
 rules:
   - match: "error_pattern"
     event: "post"
-    sources: ["intent"]  # Match Claude's intent from transcript (thinking + explanations)
+    sources: ["#intent"]  # Match Claude's intent from transcript (thinking + explanations)
     generate: once
     send: "Helpful guidance message"
     prompt: "AI prompt for contextual analysis"
@@ -195,46 +198,27 @@ rules:
     send: "Consider alternative approaches"
 ```
 
-**Common Sources:**
+**Source Field Behavior:**
 
-Based on Claude Code tool implementations, these are the most common tool input field names:
+- **Pre-event rules**: Any source name matches against tool input field names, plus special `#intent` source
+- **Post-event rules**: Any source name matches against tool output field names, plus special `#intent` source  
+- **No validation**: Source names are not validated - any field name can be used
+- **Empty sources**: When sources array is empty, matches against all available fields
 
-**Universal Fields (most tools):**
-- **`description`**: Human-readable description of what the tool will do
-- **`command`**: Shell command to execute (Bash tool)
+**Special Meta Sources:**
+- **`#intent`**: Claude's reasoning from transcript (thinking + explanations) - available for both pre and post events
 
-**File Operations:**
-- **`file_path`**: Target file path (Read, Write, Edit, MultiEdit)
-- **`content`**: File content to write (Write tool)
-- **`old_string`**: Text to replace (Edit, MultiEdit)
-- **`new_string`**: Replacement text (Edit, MultiEdit)
+**Common Tool Input Fields:**
+Based on Claude Code tool implementations, common field names include:
 
-**Search Operations:**
-- **`pattern`**: Search pattern/regex (Grep tool)
-- **`path`**: Search directory or file path (Grep, Glob tools)
-- **`glob`**: File pattern matching (Glob tool)
+- **`command`** - Shell commands (Bash tool)
+- **`description`** - Human-readable descriptions (most tools)
+- **`file_path`**, **`content`**, **`old_string`**, **`new_string`** - File operations
+- **`pattern`**, **`path`**, **`glob`** - Search operations  
+- **`url`**, **`method`**, **`headers`**, **`body`**, **`query`** - Web operations
+- **`prompt`**, **`subagent_type`** - Task operations
 
-**Web Operations:**
-- **`url`**: Target URL (WebFetch, WebSearch)
-- **`method`**: HTTP method (WebFetch)
-- **`headers`**: HTTP headers (WebFetch)
-- **`body`**: Request body (WebFetch)
-- **`query`**: Search query (WebSearch)
-
-**Task Operations:**
-- **`prompt`**: AI task description (Task tool)
-- **`subagent_type`**: Specialized agent type (Task tool)
-
-**Special Fields:**
-- **`intent`**: Claude's internal reasoning and explanations (both thinking blocks and text content from transcript) - available for both pre and post hooks
-- **`tool_output`**: Tool execution results/errors (PostToolUse hooks only)
-
-**Configuration Options:**
-- **`event`**: Hook timing - "pre" (default) or "post"
-- **`sources`**: Tool input fields to match (empty = all fields)
-- **Pattern Matching**: Matches against specified source fields using regex
-- **Contextual AI**: AI responses use original context for enhanced guidance
-- **Efficient Processing**: Only processes relevant hook types and fields
+**Note**: MCP servers can define arbitrary field names, so any source name is valid.
 
 ## Key Patterns
 
