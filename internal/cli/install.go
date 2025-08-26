@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/wizzomafizzo/bumpers/internal/claude/settings"
 	"github.com/wizzomafizzo/bumpers/internal/config"
-	"github.com/wizzomafizzo/bumpers/internal/constants"
+	"github.com/wizzomafizzo/bumpers/internal/infrastructure/constants"
+	"github.com/wizzomafizzo/bumpers/internal/platform/claude/settings"
 )
 
 // Initialize sets up bumpers configuration and installs Claude hooks.

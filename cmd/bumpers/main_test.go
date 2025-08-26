@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/wizzomafizzo/bumpers/internal/testutil"
+	"github.com/wizzomafizzo/bumpers/internal/testing"
 )
 
 func TestRun_Success(t *testing.T) {

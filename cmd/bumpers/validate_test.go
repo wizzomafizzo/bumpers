@@ -3,7 +3,7 @@ package main
 import (
 	"testing"
 
-	"github.com/wizzomafizzo/bumpers/internal/testutil"
+	"github.com/wizzomafizzo/bumpers/internal/testing"
 )
 
 func TestCreateValidateCommand(t *testing.T) {

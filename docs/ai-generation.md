@@ -87,8 +87,7 @@ rules:
 
 ### API Requirements
 - **Claude API key**: Set `ANTHROPIC_API_KEY` environment variable
-- **Model**: Uses Claude 3.5 Sonnet by default
-- **Rate limiting**: Built-in protection against API abuse
+- **Model**: Uses Claude Sonnet model
 - **Fallback**: On AI failure, returns template message
 
 ### Context Provided to AI
@@ -115,22 +114,12 @@ Cache entries are keyed by:
 - **Template content**: Changes to base message invalidate cache
 - **Custom prompt**: Changes to prompt invalidate cache
 
-### Cache Locations
-```
-~/.local/share/bumpers/
-├── cache/           # Permanent cache (mode: once)
-│   ├── rule_[hash].txt
-│   └── command_[hash].txt
-└── sessions/        # Session cache (mode: session)  
-    └── [session_id]/
-        ├── rule_[hash].txt
-        └── command_[hash].txt
-```
+### Cache Storage
+Cache entries are stored in a BBolt database with project-specific buckets. The exact storage location follows XDG Base Directory specifications.
 
 ### Cache Management
-- **Automatic cleanup**: Session caches removed on session end
-- **Manual cleanup**: Delete cache directories to force regeneration
-- **Size limits**: Old permanent cache entries may be rotated
+- **Session expiry**: Session caches expire after 24 hours
+- **Permanent caching**: "once" mode entries never expire
 
 ## Performance Considerations
 
@@ -154,11 +143,10 @@ generate: "always"
 generate: "off"
 ```
 
-### Rate Limiting Protection
-Built-in safeguards prevent API abuse:
-- **Request spacing**: Minimum time between API calls
-- **Session limits**: Maximum AI generations per session
-- **Error backoff**: Temporary disable on repeated API failures
+### Performance Notes
+- Template processing is always fast (~1ms)
+- AI generation depends on API latency (1-3 seconds)
+- Cache lookups are nearly instant
 
 ## AI Generation Examples
 

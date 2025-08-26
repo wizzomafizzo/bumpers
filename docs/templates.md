@@ -145,10 +145,11 @@ rules:
 ```yaml
 session:
   - add: |
-      Project commands available:
-      {{readFile "package.json" | fromJson | .scripts | keys | join ", "}}
+      Project justfile:
+      {{readFile "justfile"}}
       
-      Recent changes: {{readFile "CHANGELOG.md" | truncate 200}}
+      README content:
+      {{readFile "README.md"}}
 ```
 
 ### Multi-Line Templates
@@ -224,10 +225,11 @@ rules:
 commands:
   - name: "help"
     send: |
-      Project: {{if testPath "package.json"}}{{readFile "package.json" | fromJson | .name}}{{else}}{{readFile "go.mod" | head 1}}{{end}}
+      {{if testPath "package.json"}}Node.js project
+      {{else if testPath "go.mod"}}Go project{{end}}
       
-      {{if testPath "justfile"}}Build commands:
-      {{readFile "justfile" | grep "^[a-z]" | head 10}}{{end}}
+      {{if testPath "justfile"}}Available just commands:
+      {{readFile "justfile"}}{{end}}
 ```
 
 ## Template Debugging

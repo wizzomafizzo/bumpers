@@ -7,8 +7,8 @@ import (
 
 	"github.com/rs/zerolog/log"
 	"github.com/wizzomafizzo/bumpers/internal/config"
-	"github.com/wizzomafizzo/bumpers/internal/constants"
-	"github.com/wizzomafizzo/bumpers/internal/template"
+	"github.com/wizzomafizzo/bumpers/internal/core/messaging/template"
+	"github.com/wizzomafizzo/bumpers/internal/infrastructure/constants"
 )
 
 type SessionStartEvent struct {

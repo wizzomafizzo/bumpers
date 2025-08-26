@@ -11,15 +11,15 @@ import (
 	"strings"
 
 	"github.com/rs/zerolog/log"
-	"github.com/wizzomafizzo/bumpers/internal/ai"
 	"github.com/wizzomafizzo/bumpers/internal/config"
-	"github.com/wizzomafizzo/bumpers/internal/filesystem"
-	"github.com/wizzomafizzo/bumpers/internal/hooks"
-	"github.com/wizzomafizzo/bumpers/internal/matcher"
-	"github.com/wizzomafizzo/bumpers/internal/project"
-	"github.com/wizzomafizzo/bumpers/internal/storage"
-	"github.com/wizzomafizzo/bumpers/internal/template"
-	"github.com/wizzomafizzo/bumpers/internal/transcript"
+	"github.com/wizzomafizzo/bumpers/internal/core/engine/hooks"
+	"github.com/wizzomafizzo/bumpers/internal/core/engine/matcher"
+	"github.com/wizzomafizzo/bumpers/internal/core/messaging/template"
+	"github.com/wizzomafizzo/bumpers/internal/infrastructure/project"
+	"github.com/wizzomafizzo/bumpers/internal/platform/claude/api"
+	"github.com/wizzomafizzo/bumpers/internal/platform/claude/transcript"
+	"github.com/wizzomafizzo/bumpers/internal/platform/filesystem"
+	"github.com/wizzomafizzo/bumpers/internal/platform/storage"
 )
 
 func NewApp(configPath string) *App {
