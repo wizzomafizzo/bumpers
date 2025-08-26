@@ -1983,6 +1983,59 @@ func TestProcessHookWithTemplate(t *testing.T) {
 	}
 }
 
+func TestProcessHookWithTemplatePattern(t *testing.T) {
+	t.Parallel()
+	setupTest(t)
+
+	// Setup a temporary project directory with config
+	projectDir := t.TempDir()
+	configContent := fmt.Sprintf(`rules:
+  - match: "^%s/bumpers\\.yml$"
+    tool: "Read|Edit|Grep"
+    send: "Bumpers configuration file should not be accessed."
+    generate: "off"`, "{{.ProjectRoot}}")
+
+	configPath := filepath.Join(projectDir, "bumpers.yml")
+	err := os.WriteFile(configPath, []byte(configContent), 0o600)
+	require.NoError(t, err)
+
+	// Use NewAppWithWorkDir to explicitly set the project directory
+	app := NewAppWithWorkDir(configPath, projectDir)
+	app.projectRoot = projectDir // Explicitly set project root for template processing
+
+	// Test that template pattern matches project-specific file
+	hookInput := fmt.Sprintf(`{
+		"tool_input": {
+			"file_path": "%s/bumpers.yml"
+		},
+		"tool_name": "Read"
+	}`, projectDir)
+
+	response, err := app.ProcessHook(strings.NewReader(hookInput))
+	require.NoError(t, err, "Expected no error for main config file")
+
+	expectedMessage := "Bumpers configuration file should not be accessed."
+	assert.Equal(t, expectedMessage, response, "Template pattern should match project-specific path")
+
+	// Test that template pattern doesn't match test files in project
+	// Create testdata directory
+	testdataDir := filepath.Join(projectDir, "testdata")
+	err = os.MkdirAll(testdataDir, 0o750)
+	require.NoError(t, err)
+
+	hookInputTest := fmt.Sprintf(`{
+		"tool_input": {
+			"file_path": "%s/testdata/bumpers.yml"
+		},
+		"tool_name": "Read"
+	}`, projectDir)
+
+	response2, err2 := app.ProcessHook(strings.NewReader(hookInputTest))
+	// This should NOT match the rule, so we expect no error and empty response (command allowed)
+	require.NoError(t, err2, "Expected no error for non-matching file")
+	assert.Empty(t, response2, "Template pattern should not match test files, so command should be allowed")
+}
+
 func TestProcessHookWithTodayVariable(t *testing.T) {
 	t.Parallel()
 	setupTest(t)

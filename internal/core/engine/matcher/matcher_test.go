@@ -506,3 +506,50 @@ func ExampleNewRuleMatcher() {
 	// Rule matched: Use 'just test' for better TDD integration
 	// No rule match: true
 }
+
+func TestRuleMatcherWithTemplatePattern(t *testing.T) {
+	testutil.InitTestLogger(t)
+	t.Parallel()
+
+	rule := config.Rule{
+		Match: "^{{.ProjectRoot}}/bumpers\\.yml$",
+		Tool:  "Read|Edit|Grep",
+		Send:  "Bumpers configuration file should not be accessed.",
+	}
+
+	matcher, err := NewRuleMatcher([]config.Rule{rule})
+	if err != nil {
+		t.Fatalf("Failed to create matcher: %v", err)
+	}
+
+	// Create template context with project root
+	context := map[string]any{
+		"ProjectRoot": "/home/user/project",
+	}
+
+	// Should match the templated path
+	match, err := matcher.MatchWithContext("/home/user/project/bumpers.yml", "Read", context)
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	if match == nil {
+		t.Fatal("Expected match, got nil")
+	}
+
+	if match.Send != "Bumpers configuration file should not be accessed." {
+		t.Errorf("Expected correct message, got %s", match.Send)
+	}
+
+	// Should not match different paths
+	_, err = matcher.MatchWithContext("/home/user/project/testdata/bumpers.yml", "Read", context)
+	if !errors.Is(err, ErrNoRuleMatch) {
+		t.Errorf("Expected no match for test file, got %v", err)
+	}
+
+	// Should not match without context (template processing should fail gracefully)
+	_, err = matcher.MatchWithContext("/home/user/project/bumpers.yml", "Read", nil)
+	if !errors.Is(err, ErrNoRuleMatch) {
+		t.Errorf("Expected no match without context, got %v", err)
+	}
+}

@@ -5,6 +5,7 @@ import (
 	"regexp"
 
 	"github.com/wizzomafizzo/bumpers/internal/config"
+	"github.com/wizzomafizzo/bumpers/internal/core/messaging/template"
 )
 
 var (
@@ -37,32 +38,50 @@ type RuleMatcher struct {
 }
 
 func (m *RuleMatcher) Match(command, toolName string) (*config.Rule, error) {
+	return m.MatchWithContext(command, toolName, nil)
+}
+
+func (m *RuleMatcher) MatchWithContext(command, toolName string, context map[string]any) (*config.Rule, error) {
 	for i := range m.rules {
-		// Filter rules by tool first
-		toolPattern := m.rules[i].Tool
-		if toolPattern == "" {
-			toolPattern = "^Bash$" // Default to Bash only when empty
-		}
-
-		// Compile tools pattern with case-insensitive flag
-		toolRe, err := regexp.Compile("(?i)" + toolPattern)
-		if err != nil {
-			continue // Skip rules with invalid tool patterns
-		}
-
-		// Skip rule if tool doesn't match
-		if !toolRe.MatchString(toolName) {
-			continue
-		}
-
-		// Now check if command matches
-		cmdRe, err := regexp.Compile(m.rules[i].GetMatch().Pattern)
-		if err != nil {
-			continue
-		}
-		if cmdRe.MatchString(command) {
+		if m.matchesRule(command, toolName, context, &m.rules[i]) {
 			return &m.rules[i], nil
 		}
 	}
 	return nil, ErrNoRuleMatch
+}
+
+// matchesRule checks if a single rule matches the given command and tool
+func (*RuleMatcher) matchesRule(command, toolName string, context map[string]any, rule *config.Rule) bool {
+	// Filter rules by tool first
+	toolPattern := rule.Tool
+	if toolPattern == "" {
+		toolPattern = "^Bash$" // Default to Bash only when empty
+	}
+
+	// Compile tools pattern with case-insensitive flag
+	toolRe, err := regexp.Compile("(?i)" + toolPattern)
+	if err != nil {
+		return false // Skip rules with invalid tool patterns
+	}
+
+	// Skip rule if tool doesn't match
+	if !toolRe.MatchString(toolName) {
+		return false
+	}
+
+	// Now check if command matches
+	pattern := rule.GetMatch().Pattern
+
+	// Process template if context provided
+	if context != nil {
+		if processedPattern, templateErr := template.Execute(pattern, context); templateErr == nil {
+			pattern = processedPattern
+		}
+	}
+
+	cmdRe, err := regexp.Compile(pattern)
+	if err != nil {
+		return false
+	}
+	return cmdRe.MatchString(command)
 }

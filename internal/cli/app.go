@@ -126,14 +126,20 @@ func (a *App) loadConfigAndMatcher() (*config.Config, *matcher.RuleMatcher, erro
 	return &partialCfg.Config, ruleMatcher, nil
 }
 
-func (*App) findMatchingRule(ruleMatcher *matcher.RuleMatcher, event hooks.HookEvent) (*config.Rule, string, error) {
+func (a *App) findMatchingRule(ruleMatcher *matcher.RuleMatcher, event hooks.HookEvent) (*config.Rule, string, error) {
 	for key, value := range event.ToolInput {
 		strValue, ok := value.(string)
 		if !ok {
 			continue
 		}
 
-		rule, err := ruleMatcher.Match(strValue, event.ToolName)
+		// Create template context with project information
+		context := make(map[string]any)
+		if a.projectRoot != "" {
+			context["ProjectRoot"] = a.projectRoot
+		}
+
+		rule, err := ruleMatcher.MatchWithContext(strValue, event.ToolName, context)
 		if err != nil {
 			if errors.Is(err, matcher.ErrNoRuleMatch) {
 				continue // Try next field
@@ -253,15 +259,15 @@ func (a *App) checkRuleSources(rule *config.Rule, ruleMatcher *matcher.RuleMatch
 }
 
 // checkSpecificSources checks only specified source fields
-func (*App) checkSpecificSources(rule *config.Rule, ruleMatcher *matcher.RuleMatcher,
+func (a *App) checkSpecificSources(rule *config.Rule, ruleMatcher *matcher.RuleMatcher,
 	event hooks.HookEvent,
 ) (matchedRule *config.Rule, matchedField string) {
 	match := rule.GetMatch()
 	for _, fieldName := range match.Sources {
-		if matched, content := checkIntentSource(fieldName, rule, ruleMatcher, event); matched {
+		if matched, content := a.checkIntentSource(fieldName, rule, ruleMatcher, event); matched {
 			return rule, content
 		}
-		if matched, content := checkToolInputSource(fieldName, rule, ruleMatcher, event); matched {
+		if matched, content := a.checkToolInputSource(fieldName, rule, ruleMatcher, event); matched {
 			return rule, content
 		}
 	}
@@ -269,7 +275,7 @@ func (*App) checkSpecificSources(rule *config.Rule, ruleMatcher *matcher.RuleMat
 }
 
 // checkIntentSource handles #intent source field
-func checkIntentSource(
+func (a *App) checkIntentSource(
 	fieldName string, rule *config.Rule, ruleMatcher *matcher.RuleMatcher, event hooks.HookEvent,
 ) (matched bool, content string) {
 	if fieldName != "#intent" {
@@ -282,11 +288,11 @@ func checkIntentSource(
 	if err != nil || strings.TrimSpace(intentContent) == "" {
 		return false, ""
 	}
-	return matchRuleContent(intentContent, rule, ruleMatcher, event.ToolName)
+	return a.matchRuleContent(intentContent, rule, ruleMatcher, event.ToolName)
 }
 
 // checkToolInputSource handles regular ToolInput fields
-func checkToolInputSource(
+func (a *App) checkToolInputSource(
 	fieldName string, rule *config.Rule, ruleMatcher *matcher.RuleMatcher, event hooks.HookEvent,
 ) (matched bool, content string) {
 	value, exists := event.ToolInput[fieldName]
@@ -297,14 +303,20 @@ func checkToolInputSource(
 	if !ok {
 		return false, ""
 	}
-	return matchRuleContent(strValue, rule, ruleMatcher, event.ToolName)
+	return a.matchRuleContent(strValue, rule, ruleMatcher, event.ToolName)
 }
 
 // matchRuleContent checks if content matches rule pattern
-func matchRuleContent(
+func (a *App) matchRuleContent(
 	content string, rule *config.Rule, ruleMatcher *matcher.RuleMatcher, toolName string,
 ) (matched bool, matchedContent string) {
-	foundRule, err := ruleMatcher.Match(content, toolName)
+	// Create template context with project information
+	context := make(map[string]any)
+	if a.projectRoot != "" {
+		context["ProjectRoot"] = a.projectRoot
+	}
+
+	foundRule, err := ruleMatcher.MatchWithContext(content, toolName, context)
 	// Compare using pattern strings instead of interface{} values to avoid panic
 	isMatch := err == nil && foundRule != nil && foundRule.GetMatch().Pattern == rule.GetMatch().Pattern
 	if isMatch {
@@ -542,7 +554,13 @@ func (a *App) TestCommand(command string) (string, error) {
 		return "", err
 	}
 
-	rule, err := ruleMatcher.Match(command, "Bash")
+	// Create template context with project information
+	context := make(map[string]any)
+	if a.projectRoot != "" {
+		context["ProjectRoot"] = a.projectRoot
+	}
+
+	rule, err := ruleMatcher.MatchWithContext(command, "Bash", context)
 	if err != nil {
 		if errors.Is(err, matcher.ErrNoRuleMatch) {
 			// No rule matched, command is allowed

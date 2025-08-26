@@ -156,4 +156,36 @@ session:
       {{else if testPath "Cargo.toml"}}Rust project{{end}}
 ```
 
+### Template Patterns
+
+Dynamic pattern matching using project context:
+
+```yaml
+rules:
+  # Block main config but allow test configs
+  - match: "^{{.ProjectRoot}}/bumpers\\.yml$"
+    tool: "Read|Edit|Grep"  
+    send: "Main configuration should not be accessed directly"
+
+  # Project-specific file patterns
+  - match: "{{.ProjectRoot}}/(test|spec).*\\.yml$"
+    tool: "Read|Edit"
+    send: "Test configurations can be modified freely"
+    
+  # Mixed template variables and regex quantifiers
+  - match: "^{{.ProjectRoot}}/[a-z]{2,4}/config\\.json$"
+    tool: "Write"
+    send: "Language-specific configs: {{.Command}}"
+
+  # Environment-aware patterns  
+  - match: "{{.ProjectRoot}}/prod"
+    send: "Production files require extra care ({{.Today}})"
+```
+
+**Use Cases:**
+- **Project-specific blocking**: Target files by full path
+- **Test file exceptions**: Allow test configs while blocking main ones  
+- **Environment awareness**: Different rules for prod vs dev files
+- **Flexible matching**: Combine templates with regex for powerful patterns
+
 This configuration reference reflects the actual Bumpers implementation and avoids unsupported features.
