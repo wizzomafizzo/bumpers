@@ -11,19 +11,25 @@ func DefaultConfig() *Config {
 	return &Config{
 		Rules: []Rule{
 			{
-				Match: "^go test",
+				Match: map[string]any{
+					"pattern": "^go test",
+				},
 				Send: `Use "just test" instead for TDD integration:
 - just test                        # Run all tests
 - just test PKG=./internal/claude  # Test only a specific package
 See justfile for more information.`,
 			},
 			{
-				Match: "^(gci|go vet|goimports|gofumpt|go fmt)",
-				Send:  `Use "just lint fix" instead to resolve lint/formatting issues.`,
+				Match: map[string]any{
+					"pattern": "^(gci|go vet|goimports|gofumpt|go fmt)",
+				},
+				Send: `Use "just lint fix" instead to resolve lint/formatting issues.`,
 			},
 			{
-				Match: "^cd /tmp",
-				Send:  `Create a "tmp" directory in the project root instead.`,
+				Match: map[string]any{
+					"pattern": "^cd /tmp",
+				},
+				Send: `Create a "tmp" directory in the project root instead.`,
 			},
 		},
 		Commands: []Command{

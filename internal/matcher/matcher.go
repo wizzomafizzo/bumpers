@@ -15,7 +15,7 @@ var (
 func NewRuleMatcher(rules []config.Rule) (*RuleMatcher, error) {
 	// Validate all patterns can be compiled as regex
 	for i := range rules {
-		if err := validatePattern(rules[i].Match); err != nil {
+		if err := validatePattern(rules[i].GetMatch().Pattern); err != nil {
 			return nil, err
 		}
 	}
@@ -56,7 +56,7 @@ func (m *RuleMatcher) Match(command, toolName string) (*config.Rule, error) {
 		}
 
 		// Now check if command matches
-		cmdRe, err := regexp.Compile(m.rules[i].Match)
+		cmdRe, err := regexp.Compile(m.rules[i].GetMatch().Pattern)
 		if err != nil {
 			continue
 		}

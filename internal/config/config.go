@@ -3,10 +3,10 @@ package config
 import (
 	"errors"
 	"fmt"
+	"os"
 	"regexp"
-	"strings"
 
-	"github.com/spf13/viper"
+	"gopkg.in/yaml.v3"
 )
 
 type Config struct {
@@ -33,13 +33,18 @@ type Generate struct {
 	Prompt string `yaml:"prompt" mapstructure:"prompt"`
 }
 
+// Match represents the match configuration for a rule
+type Match struct {
+	Pattern string   `yaml:"pattern" mapstructure:"pattern"`
+	Event   string   `yaml:"event,omitempty" mapstructure:"event"`
+	Sources []string `yaml:"sources,omitempty" mapstructure:"sources"`
+}
+
 type Rule struct {
-	Generate any      `yaml:"generate,omitempty" mapstructure:"generate"`
-	Match    string   `yaml:"match" mapstructure:"match"`
-	Tool     string   `yaml:"tool,omitempty" mapstructure:"tool"`
-	Send     string   `yaml:"send" mapstructure:"send"`
-	Event    string   `yaml:"event,omitempty" mapstructure:"event"`
-	Sources  []string `yaml:"sources,omitempty" mapstructure:"sources"`
+	Generate any    `yaml:"generate,omitempty" mapstructure:"generate"`
+	Match    any    `yaml:"match" mapstructure:"match"`
+	Tool     string `yaml:"tool,omitempty" mapstructure:"tool"`
+	Send     string `yaml:"send" mapstructure:"send"`
 }
 
 type Command struct {
@@ -54,15 +59,13 @@ type Session struct {
 }
 
 func Load(path string) (*Config, error) {
-	viperInstance := viper.New()
-	viperInstance.SetConfigFile(path)
-
-	if err := viperInstance.ReadInConfig(); err != nil {
+	data, err := os.ReadFile(path) //nolint:gosec // Path comes from validated user config
+	if err != nil {
 		return nil, fmt.Errorf("failed to read config: %w", err)
 	}
 
 	var config Config
-	if err := viperInstance.Unmarshal(&config); err != nil {
+	if err := yaml.Unmarshal(data, &config); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
 	}
 
@@ -75,15 +78,8 @@ func Load(path string) (*Config, error) {
 
 // LoadFromYAML loads config from YAML bytes - helper for tests
 func LoadFromYAML(data []byte) (*Config, error) {
-	viperInstance := viper.New()
-	viperInstance.SetConfigType("yaml")
-
-	if err := viperInstance.ReadConfig(strings.NewReader(string(data))); err != nil {
-		return nil, fmt.Errorf("failed to read config: %w", err)
-	}
-
 	var config Config
-	if err := viperInstance.Unmarshal(&config); err != nil {
+	if err := yaml.Unmarshal(data, &config); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
 	}
 
@@ -123,22 +119,27 @@ func (r *Rule) Validate() error {
 	if err := r.validateGenerateMode(); err != nil {
 		return err
 	}
-	if err := r.ValidateEventSources(); err != nil {
-		return fmt.Errorf("event/sources validation failed: %w", err)
+	if err := r.validateEventValue(); err != nil {
+		return fmt.Errorf("event validation failed: %w", err)
 	}
 	return nil
 }
 
 func (r *Rule) validateRequiredFields() error {
-	if r.Match == "" {
+	if r.Match == nil {
+		return errors.New("match field is required and cannot be empty")
+	}
+	match := r.GetMatch()
+	if match.Pattern == "" {
 		return errors.New("match field is required and cannot be empty")
 	}
 	return nil
 }
 
 func (r *Rule) validateRegexPatterns() error {
-	if _, err := regexp.Compile(r.Match); err != nil {
-		return fmt.Errorf("invalid regex pattern '%s': %w", r.Match, err)
+	match := r.GetMatch()
+	if _, err := regexp.Compile(match.Pattern); err != nil {
+		return fmt.Errorf("invalid regex pattern '%s': %w", match.Pattern, err)
 	}
 	if r.Tool != "" {
 		if _, err := regexp.Compile(r.Tool); err != nil {
@@ -170,16 +171,13 @@ func (r *Rule) validateGenerateMode() error {
 	return fmt.Errorf("invalid generate mode '%s': must be one of: off, once, session, always", generate.Mode)
 }
 
-// ValidateEventSources applies smart defaults to Event
-func (r *Rule) ValidateEventSources() error {
-	// Apply default event if empty
-	if r.Event == "" {
-		r.Event = "pre"
-	}
+// validateEventValue validates the event field in the match configuration
+func (r *Rule) validateEventValue() error {
+	match := r.GetMatch()
 
-	// Validate event value
-	if r.Event != "pre" && r.Event != "post" {
-		return fmt.Errorf("invalid event '%s': must be 'pre' or 'post'", r.Event)
+	// Validate event value (should be pre or post)
+	if match.Event != "pre" && match.Event != "post" {
+		return fmt.Errorf("invalid event '%s': must be 'pre' or 'post'", match.Event)
 	}
 
 	// No source validation - any source name is valid
@@ -195,17 +193,51 @@ func (r *Rule) GetGenerate() Generate {
 	return parseGenerateField(r.Generate, "session")
 }
 
-// LoadPartial loads config from YAML bytes with partial parsing support
-func LoadPartial(data []byte) (*PartialConfig, error) {
-	viperInstance := viper.New()
-	viperInstance.SetConfigType("yaml")
-
-	if err := viperInstance.ReadConfig(strings.NewReader(string(data))); err != nil {
-		return nil, fmt.Errorf("failed to read config: %w", err)
+// GetMatch converts the interface{} Match field to a Match struct
+func (r *Rule) GetMatch() Match {
+	if r.Match == nil {
+		return Match{Pattern: "", Event: "pre", Sources: []string{}}
 	}
 
+	// Handle string form: match: "pattern"
+	if patternStr, ok := r.Match.(string); ok {
+		return Match{
+			Pattern: patternStr,
+			Event:   "pre",      // Default event
+			Sources: []string{}, // Default sources (matches all fields)
+		}
+	}
+
+	// Handle struct form: match: { pattern: "...", event: "...", sources: [...] }
+	if matchMap, ok := r.Match.(map[string]any); ok {
+		match := Match{
+			Event:   "pre",      // Default event
+			Sources: []string{}, // Default sources
+		}
+
+		if pattern, ok := matchMap["pattern"].(string); ok {
+			match.Pattern = pattern
+		}
+
+		if event, ok := matchMap["event"].(string); ok {
+			match.Event = event
+		}
+
+		if sources, ok := matchMap["sources"].([]any); ok {
+			match.Sources = convertSourcesSlice(sources)
+		}
+
+		return match
+	}
+
+	// Invalid match field - return empty Match that will fail validation
+	return Match{Pattern: "", Event: "pre", Sources: []string{}}
+}
+
+// LoadPartial loads config from YAML bytes with partial parsing support
+func LoadPartial(data []byte) (*PartialConfig, error) {
 	var config Config
-	if err := viperInstance.Unmarshal(&config); err != nil {
+	if err := yaml.Unmarshal(data, &config); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
 	}
 
@@ -281,4 +313,15 @@ func (c *Command) GetGenerate() Generate {
 // GetGenerate converts the interface{} Generate field to a Generate struct for Session
 func (s *Session) GetGenerate() Generate {
 	return parseGenerateField(s.Generate, "off")
+}
+
+// convertSourcesSlice converts []any sources to []string
+func convertSourcesSlice(sources []any) []string {
+	result := make([]string, len(sources))
+	for i, source := range sources {
+		if sourceStr, ok := source.(string); ok {
+			result[i] = sourceStr
+		}
+	}
+	return result
 }
