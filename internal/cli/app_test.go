@@ -678,8 +678,17 @@ func TestInstallCreatesBothHooks(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Use the new constructor with working directory
-	app := NewAppWithWorkDir(configPath, tempDir)
+	// Create memory filesystem for proper test isolation
+	fs := filesystem.NewMemoryFileSystem()
+
+	// Write the bumpers binary to the memory filesystem as well
+	err = fs.WriteFile(bumpersPath, []byte("#!/bin/bash\necho test"), 0o750)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Use filesystem-injected constructor to avoid real file system writes
+	app := NewAppWithFileSystem(configPath, tempDir, fs)
 
 	err = app.Initialize()
 	if err != nil {
@@ -689,7 +698,7 @@ func TestInstallCreatesBothHooks(t *testing.T) {
 	// Check that both PreToolUse and UserPromptSubmit hooks were added
 	claudeDir := filepath.Join(tempDir, ".claude")
 	localSettingsPath := filepath.Join(claudeDir, "settings.local.json")
-	content, err := os.ReadFile(localSettingsPath) //nolint:gosec // test file path
+	content, err := fs.ReadFile(localSettingsPath) // Use filesystem interface
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -699,6 +708,11 @@ func TestInstallCreatesBothHooks(t *testing.T) {
 	// Check for PreToolUse hook (empty matcher is omitted in JSON)
 	if !strings.Contains(contentStr, `"PreToolUse"`) {
 		t.Error("Expected PreToolUse hook to be added to settings.local.json")
+	}
+
+	// Check for PostToolUse hook (empty matcher is omitted in JSON)
+	if !strings.Contains(contentStr, `"PostToolUse"`) {
+		t.Error("Expected PostToolUse hook to be added to settings.local.json")
 	}
 
 	// Check for UserPromptSubmit hook with empty matcher (omitted from JSON)
@@ -715,10 +729,11 @@ func TestInstallCreatesBothHooks(t *testing.T) {
 		t.Error("Expected SessionStart hook to have startup|clear matcher in settings.local.json")
 	}
 
-	// Check that all three hooks contain bumpers command
+	// Check that all four hooks contain bumpers command
 	bashHookCount := strings.Count(contentStr, "bumpers")
-	if bashHookCount < 3 {
-		t.Errorf("Expected at least 3 bumpers hooks (PreToolUse, UserPromptSubmit, SessionStart), found %d",
+	if bashHookCount < 4 {
+		t.Errorf("Expected at least 4 bumpers hooks "+
+			"(PreToolUse, PostToolUse, UserPromptSubmit, SessionStart), found %d",
 			bashHookCount)
 	}
 }
