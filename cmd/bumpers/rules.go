@@ -11,6 +11,8 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/wizzomafizzo/bumpers/internal/config"
 	"github.com/wizzomafizzo/bumpers/internal/patterns"
+	"github.com/wizzomafizzo/bumpers/internal/platform/claude"
+	ai "github.com/wizzomafizzo/bumpers/internal/platform/claude/api"
 	"github.com/wizzomafizzo/bumpers/internal/prompt"
 )
 
@@ -56,12 +58,35 @@ func createRulesCommand() *cobra.Command {
 
 // createRulesGenerateCommand creates the pattern generation subcommand
 func createRulesGenerateCommand() *cobra.Command {
+	launcher := claude.NewLauncher(nil)
+	return createRulesGenerateCommandWithLauncher(launcher)
+}
+
+// createRulesGenerateCommandWithLauncher creates the pattern generation subcommand with a custom launcher
+func createRulesGenerateCommandWithLauncher(launcher ai.MessageGenerator) *cobra.Command {
 	return &cobra.Command{
 		Use:   "generate",
-		Short: "Generate regex patterns from commands",
+		Short: "Generate regex patterns from commands using Claude AI",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			command := strings.Join(args, " ")
-			pattern := patterns.GeneratePattern(command)
+			if len(args) == 0 {
+				return errors.New("please provide a command or description to generate a regex pattern for")
+			}
+
+			input := strings.Join(args, " ")
+
+			// Try Claude generation first
+			if launcher != nil {
+				regexPrompt := ai.BuildRegexGenerationPrompt(input)
+				if pattern, err := launcher.GenerateMessage(regexPrompt); err == nil {
+					// Clean up the pattern in case Claude added extra text
+					cleanPattern := strings.TrimSpace(pattern)
+					_, _ = fmt.Fprintln(cmd.OutOrStdout(), cleanPattern)
+					return nil
+				}
+			}
+
+			// Fall back to simple pattern generation
+			pattern := patterns.GeneratePattern(input)
 			_, _ = fmt.Fprintln(cmd.OutOrStdout(), pattern)
 			return nil
 		},

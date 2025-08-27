@@ -43,39 +43,35 @@ func TestCreateRuleCommand(t *testing.T) {
 
 func TestRulePatternCommand(t *testing.T) {
 	t.Parallel()
-	cmd := createRulesGenerateCommand()
 
-	// Set up output capture
-	var buf bytes.Buffer
-	cmd.SetOut(&buf)
-	cmd.SetErr(&buf)
-
-	// Test with a simple command - this should generate a pattern and print it
-	cmd.SetArgs([]string{"go test"})
-
-	err := cmd.Execute()
-	if err != nil {
-		t.Fatalf("Expected pattern command to execute successfully, got: %v", err)
-	}
-
-	output := buf.String()
-	expected := "^go\\s+test$"
-	if output != expected+"\n" { // Commands usually add newline
-		t.Errorf("Expected pattern output '%s\\n', got '%s'", expected, output)
-	}
+	testPatternGeneration(t, "go test", "^go\\s+test$")
 }
 
 func TestRulePatternCommandWithDifferentInput(t *testing.T) {
 	t.Parallel()
-	cmd := createRulesGenerateCommand()
+
+	testPatternGeneration(t, "npm install", "^npm\\s+install$")
+}
+
+// testPatternGeneration is a helper function to test pattern generation with fallback
+func testPatternGeneration(t *testing.T, input, expectedPattern string) {
+	t.Helper()
+
+	// Mock Claude launcher that fails to test fallback behavior
+	mockLauncher := &mockClaudeGenerator{
+		shouldFail: true,
+		err:        errors.New("claude not available"),
+	}
+
+	cmd := createRulesGenerateCommandWithLauncher(mockLauncher)
 
 	// Set up output capture
 	var buf bytes.Buffer
 	cmd.SetOut(&buf)
 	cmd.SetErr(&buf)
 
-	// Test with a different command to ensure it actually uses patterns.GeneratePattern
-	cmd.SetArgs([]string{"npm install"})
+	// Test with command - should fall back to simple pattern generation
+	cmd.SetArgs([]string{input})
 
 	err := cmd.Execute()
 	if err != nil {
@@ -83,9 +79,79 @@ func TestRulePatternCommandWithDifferentInput(t *testing.T) {
 	}
 
 	output := buf.String()
-	expected := "^npm\\s+install$"
-	if output != expected+"\n" {
-		t.Errorf("Expected pattern output '%s\\n', got '%s'", expected, output)
+	if output != expectedPattern+"\n" { // Commands usually add newline
+		t.Errorf("Expected pattern output '%s\\n', got '%s'", expectedPattern, output)
+	}
+}
+
+func TestRulePatternCommandWithClaudeGeneration(t *testing.T) {
+	t.Parallel()
+
+	// Mock Claude launcher for testing
+	mockLauncher := &mockClaudeGenerator{
+		response: "^rm\\s+-rf\\s+/$",
+	}
+
+	cmd := createRulesGenerateCommandWithLauncher(mockLauncher)
+
+	// Set up output capture
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+
+	// Test with a command that should use Claude generation
+	cmd.SetArgs([]string{"rm -rf /"})
+
+	err := cmd.Execute()
+	if err != nil {
+		t.Fatalf("Expected pattern command with Claude to execute successfully, got: %v", err)
+	}
+
+	output := strings.TrimSpace(buf.String())
+	expected := "^rm\\s+-rf\\s+/$"
+	if output != expected {
+		t.Errorf("Expected pattern output '%s', got '%s'", expected, output)
+	}
+}
+
+// mockClaudeGenerator implements the MessageGenerator interface for testing
+type mockClaudeGenerator struct {
+	err        error
+	response   string
+	shouldFail bool
+}
+
+func (m *mockClaudeGenerator) GenerateMessage(_ string) (string, error) {
+	if m.shouldFail {
+		return "", m.err
+	}
+	return m.response, nil
+}
+
+func TestRulePatternCommandRequiresArguments(t *testing.T) {
+	t.Parallel()
+
+	mockLauncher := &mockClaudeGenerator{
+		response: "^test$",
+	}
+
+	cmd := createRulesGenerateCommandWithLauncher(mockLauncher)
+
+	// Set up output capture
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+
+	// Test with no arguments - should return an error
+	cmd.SetArgs([]string{})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("Expected error when no arguments provided")
+	}
+
+	if !strings.Contains(err.Error(), "please provide a command or description") {
+		t.Errorf("Expected error message about providing command, got: %v", err)
 	}
 }
 
