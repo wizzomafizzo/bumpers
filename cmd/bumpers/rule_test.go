@@ -181,8 +181,12 @@ func TestRuleAddCommandInteractiveFunctionality(t *testing.T) {
 
 func TestRunInteractiveRuleAddCallsPrompt(t *testing.T) {
 	t.Parallel()
+	// Create temporary directory for test config
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "bumpers.yml")
+
 	// This test will fail until runInteractiveRuleAdd calls prompt.AITextInput
-	err := runInteractiveRuleAdd()
+	err := runInteractiveRuleAddWithPrompterAndConfigPath(&MockPrompter{}, configPath)
 
 	// We expect this to fail because prompt functions will return EOF in test environment
 	// But the error should indicate that prompt.AITextInput was called
@@ -214,6 +218,10 @@ func (*MockPrompter) Close() error {
 // TestRunInteractiveRuleAddCallsQuickSelect tests that the full flow calls QuickSelect
 func TestRunInteractiveRuleAddCallsQuickSelect(t *testing.T) {
 	t.Parallel()
+	// Create temporary directory for test config
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "bumpers.yml")
+
 	// Test with mock prompter to verify flow progression
 	mockPrompter := &MockPrompter{
 		answers: []string{
@@ -223,7 +231,7 @@ func TestRunInteractiveRuleAddCallsQuickSelect(t *testing.T) {
 		},
 	}
 
-	err := runInteractiveRuleAddWithPrompter(mockPrompter)
+	err := runInteractiveRuleAddWithPrompterAndConfigPath(mockPrompter, configPath)
 
 	// We expect this to fail, but the error should indicate we reached further in the process
 	if err == nil {
@@ -240,6 +248,10 @@ func TestRunInteractiveRuleAddCallsQuickSelect(t *testing.T) {
 // TestRunInteractiveRuleAddCompleteFlow tests that all 5 steps complete successfully
 func TestRunInteractiveRuleAddCompleteFlow(t *testing.T) {
 	t.Parallel()
+	// Create temporary directory for test config
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "bumpers.yml")
+
 	// Test with mock prompter for full 5-step flow
 	mockPrompter := &MockPrompter{
 		answers: []string{
@@ -250,7 +262,7 @@ func TestRunInteractiveRuleAddCompleteFlow(t *testing.T) {
 		},
 	}
 
-	err := runInteractiveRuleAddWithPrompter(mockPrompter)
+	err := runInteractiveRuleAddWithPrompterAndConfigPath(mockPrompter, configPath)
 	// This should succeed when all steps are implemented
 	if err != nil {
 		t.Errorf("Expected complete flow to succeed, got: %v", err)
@@ -260,6 +272,10 @@ func TestRunInteractiveRuleAddCompleteFlow(t *testing.T) {
 // TestRunInteractiveRuleAddCreatesCorrectRule tests that the flow creates the expected rule
 func TestRunInteractiveRuleAddCreatesCorrectRule(t *testing.T) {
 	t.Parallel()
+	// Create temporary directory for test config
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "bumpers.yml")
+
 	// This test will require the function to actually build and display the rule
 	// rather than just printing a placeholder message
 	mockPrompter := &MockPrompter{
@@ -272,7 +288,7 @@ func TestRunInteractiveRuleAddCreatesCorrectRule(t *testing.T) {
 	}
 
 	// The function should create a rule and complete successfully
-	err := runInteractiveRuleAddWithPrompter(mockPrompter)
+	err := runInteractiveRuleAddWithPrompterAndConfigPath(mockPrompter, configPath)
 	if err != nil {
 		t.Errorf("Expected flow to succeed, got: %v", err)
 	}
