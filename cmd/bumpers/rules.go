@@ -14,30 +14,65 @@ import (
 	"github.com/wizzomafizzo/bumpers/internal/prompt"
 )
 
-// createRuleCommand creates the rule management command with subcommands
-func createRuleCommand() *cobra.Command {
+// createRulesCommand creates the rules management command with subcommands
+func createRulesCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "rule",
+		Use:   "rules",
 		Short: "Manage bumpers rules",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			configPath := "bumpers.yml"
+
+			// Check if config file exists
+			if _, err := os.Stat(configPath); os.IsNotExist(err) {
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), "No rules found - bumpers.yml does not exist")
+				return nil
+			}
+
+			// Load config
+			cfg, err := config.Load(configPath)
+			if err != nil {
+				return fmt.Errorf("failed to load config: %w", err)
+			}
+
+			// Display rules with indices
+			if len(cfg.Rules) == 0 {
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), "No rules found in bumpers.yml")
+				return nil
+			}
+
+			for i, rule := range cfg.Rules {
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "[%d] Pattern: %s\n", i, rule.GetMatch().Pattern)
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    Message: %s\n", rule.Send)
+				if rule.Tool != "" {
+					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    Tools: %s\n", rule.Tool)
+				}
+				generate := rule.GetGenerate()
+				if generate.Mode != "off" {
+					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    Generate: %s\n", generate.Mode)
+				}
+				_, _ = fmt.Fprintln(cmd.OutOrStdout())
+			}
+
+			return nil
+		},
 	}
 
 	// Add subcommands
 	cmd.AddCommand(
-		createRulePatternCommand(),
-		createRuleTestCommand(),
-		createRuleAddCommand(),
-		createRuleListCommand(),
-		createRuleDeleteCommand(),
-		createRuleEditCommand(),
+		createRulesGenerateCommand(),
+		createRulesTestCommand(),
+		createRulesAddCommand(),
+		createRulesRemoveCommand(),
+		createRulesEditCommand(),
 	)
 
 	return cmd
 }
 
-// createRulePatternCommand creates the pattern generation subcommand
-func createRulePatternCommand() *cobra.Command {
+// createRulesGenerateCommand creates the pattern generation subcommand
+func createRulesGenerateCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:   "pattern",
+		Use:   "generate",
 		Short: "Generate regex patterns from commands",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			command := strings.Join(args, " ")
@@ -48,8 +83,8 @@ func createRulePatternCommand() *cobra.Command {
 	}
 }
 
-// createRuleTestCommand creates the pattern testing subcommand
-func createRuleTestCommand() *cobra.Command {
+// createRulesTestCommand creates the pattern testing subcommand
+func createRulesTestCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "test",
 		Short: "Test if patterns match commands",
@@ -76,8 +111,8 @@ func createRuleTestCommand() *cobra.Command {
 	}
 }
 
-// createRuleAddCommand creates the rule addition subcommand
-func createRuleAddCommand() *cobra.Command {
+// createRulesAddCommand creates the rule addition subcommand
+func createRulesAddCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "add",
 		Short: "Add new rules",
@@ -310,55 +345,11 @@ func saveRuleToConfigPath(rule config.Rule, configPath string) error {
 	return nil
 }
 
-// createRuleListCommand creates the rule list subcommand
-func createRuleListCommand() *cobra.Command {
+// createRulesRemoveCommand creates the rule remove subcommand
+func createRulesRemoveCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:   "list",
-		Short: "List all rules",
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			configPath := "bumpers.yml"
-
-			// Check if config file exists
-			if _, err := os.Stat(configPath); os.IsNotExist(err) {
-				_, _ = fmt.Fprintln(cmd.OutOrStdout(), "No rules found - bumpers.yml does not exist")
-				return nil
-			}
-
-			// Load config
-			cfg, err := config.Load(configPath)
-			if err != nil {
-				return fmt.Errorf("failed to load config: %w", err)
-			}
-
-			// Display rules with indices
-			if len(cfg.Rules) == 0 {
-				_, _ = fmt.Fprintln(cmd.OutOrStdout(), "No rules found in bumpers.yml")
-				return nil
-			}
-
-			for i, rule := range cfg.Rules {
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "[%d] Pattern: %s\n", i, rule.GetMatch().Pattern)
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    Message: %s\n", rule.Send)
-				if rule.Tool != "" {
-					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    Tools: %s\n", rule.Tool)
-				}
-				generate := rule.GetGenerate()
-				if generate.Mode != "off" {
-					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    Generate: %s\n", generate.Mode)
-				}
-				_, _ = fmt.Fprintln(cmd.OutOrStdout())
-			}
-
-			return nil
-		},
-	}
-}
-
-// createRuleDeleteCommand creates the rule delete subcommand
-func createRuleDeleteCommand() *cobra.Command {
-	return &cobra.Command{
-		Use:   "delete",
-		Short: "Delete rule by index",
+		Use:   "remove",
+		Short: "Remove rule by index",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			configPath := "bumpers.yml"
@@ -470,8 +461,8 @@ func runInteractiveRuleEditWithPrompterAndConfigPath(prompter prompt.Prompter, i
 	return nil
 }
 
-// createRuleEditCommand creates the rule edit subcommand
-func createRuleEditCommand() *cobra.Command {
+// createRulesEditCommand creates the rule edit subcommand
+func createRulesEditCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "edit",
 		Short: "Edit rule by index",

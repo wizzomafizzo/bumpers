@@ -25,7 +25,7 @@ func createNewRootCommand() *cobra.Command {
 	rootCmd.AddCommand(
 		createHookCommand(),
 		createInstallCommand(),
-		createRuleCommand(),
+		createRulesCommand(),
 		createStatusCommand(),
 		createValidateCommand(),
 	)

@@ -13,10 +13,10 @@ import (
 
 func TestCreateRuleCommand(t *testing.T) {
 	t.Parallel()
-	cmd := createRuleCommand()
+	cmd := createRulesCommand()
 
-	if cmd.Use != "rule" {
-		t.Errorf("Expected Use to be 'rule', got %s", cmd.Use)
+	if cmd.Use != "rules" {
+		t.Errorf("Expected Use to be 'rules', got %s", cmd.Use)
 	}
 
 	if cmd.Short == "" {
@@ -26,22 +26,22 @@ func TestCreateRuleCommand(t *testing.T) {
 	// Check that subcommands exist
 	subCommands := cmd.Commands()
 	if len(subCommands) == 0 {
-		t.Error("Expected rule command to have subcommands")
+		t.Error("Expected rules command to have subcommands")
 	}
 
-	// Check that pattern subcommand exists
-	patternCmd, _, err := cmd.Find([]string{"pattern"})
+	// Check that generate subcommand exists
+	generateCmd, _, err := cmd.Find([]string{"generate"})
 	if err != nil {
-		t.Fatalf("Expected pattern command to exist, got error: %v", err)
+		t.Fatalf("Expected generate command to exist, got error: %v", err)
 	}
-	if patternCmd.Use != "pattern" {
-		t.Errorf("Expected pattern command use 'pattern', got '%s'", patternCmd.Use)
+	if generateCmd.Use != "generate" {
+		t.Errorf("Expected generate command use 'generate', got '%s'", generateCmd.Use)
 	}
 }
 
 func TestRulePatternCommand(t *testing.T) {
 	t.Parallel()
-	cmd := createRulePatternCommand()
+	cmd := createRulesGenerateCommand()
 
 	// Set up output capture
 	var buf bytes.Buffer
@@ -65,7 +65,7 @@ func TestRulePatternCommand(t *testing.T) {
 
 func TestRulePatternCommandWithDifferentInput(t *testing.T) {
 	t.Parallel()
-	cmd := createRulePatternCommand()
+	cmd := createRulesGenerateCommand()
 
 	// Set up output capture
 	var buf bytes.Buffer
@@ -89,7 +89,7 @@ func TestRulePatternCommandWithDifferentInput(t *testing.T) {
 
 func TestRuleTestCommand(t *testing.T) {
 	t.Parallel()
-	cmd := createRuleTestCommand()
+	cmd := createRulesTestCommand()
 
 	// Set up output capture
 	var buf bytes.Buffer
@@ -112,7 +112,7 @@ func TestRuleTestCommand(t *testing.T) {
 
 func TestRuleTestCommandNoMatch(t *testing.T) {
 	t.Parallel()
-	cmd := createRuleTestCommand()
+	cmd := createRulesTestCommand()
 
 	// Set up output capture
 	var buf bytes.Buffer
@@ -135,7 +135,7 @@ func TestRuleTestCommandNoMatch(t *testing.T) {
 
 func TestRuleAddCommandExists(t *testing.T) {
 	t.Parallel()
-	cmd := createRuleCommand()
+	cmd := createRulesCommand()
 
 	// Check that add subcommand exists
 	addCmd, _, err := cmd.Find([]string{"add"})
@@ -149,7 +149,7 @@ func TestRuleAddCommandExists(t *testing.T) {
 
 func TestRuleAddCommandInteractiveFlag(t *testing.T) {
 	t.Parallel()
-	cmd := createRuleAddCommand()
+	cmd := createRulesAddCommand()
 
 	// Check that interactive flag exists
 	interactiveFlag := cmd.Flags().Lookup("interactive")
@@ -160,7 +160,7 @@ func TestRuleAddCommandInteractiveFlag(t *testing.T) {
 
 func TestRuleAddCommandInteractiveFunctionality(t *testing.T) {
 	t.Parallel()
-	cmd := createRuleAddCommand()
+	cmd := createRulesAddCommand()
 
 	// Set up output capture
 	var buf bytes.Buffer
@@ -462,6 +462,45 @@ func TestBuildRuleFromInputsAllGenerateModes(t *testing.T) {
 	}
 }
 
+// TestRulesCommandListsRules tests that the main rules command lists rules by default
+func TestRulesCommandListsRules(t *testing.T) {
+	t.Parallel()
+
+	// Create temporary directory and config file
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "bumpers.yml")
+
+	// Create test config
+	cfg := &config.Config{
+		Rules: []config.Rule{
+			{
+				Match: "go test.*",
+				Send:  "Use just test instead",
+				Tool:  "^Bash$",
+			},
+		},
+	}
+
+	err := cfg.Save(configPath)
+	if err != nil {
+		t.Fatalf("Failed to save test config: %v", err)
+	}
+
+	// Test the list functionality directly using the helper function
+	// since the command hardcodes "bumpers.yml" path and we want to avoid chdir for parallel testing
+	output, err := listRulesFromConfigPath(configPath)
+	if err != nil {
+		t.Fatalf("Expected list functionality to work, got: %v", err)
+	}
+
+	if !strings.Contains(output, "[0]") {
+		t.Error("Expected output to show rule index [0]")
+	}
+	if !strings.Contains(output, "go test.*") {
+		t.Error("Expected output to show rule pattern")
+	}
+}
+
 // TestRuleListCommand tests listing all rules with indices
 func TestRuleListCommand(t *testing.T) {
 	t.Parallel()
@@ -642,7 +681,7 @@ func TestRuleEditCommand(t *testing.T) {
 // TestRuleEditCommandExists tests that the edit subcommand is available
 func TestRuleEditCommandExists(t *testing.T) {
 	t.Parallel()
-	cmd := createRuleCommand()
+	cmd := createRulesCommand()
 
 	found := false
 	for _, subCmd := range cmd.Commands() {
@@ -660,7 +699,7 @@ func TestRuleEditCommandExists(t *testing.T) {
 // TestRuleAddCommandFlags tests that non-interactive flags are available
 func TestRuleAddCommandFlags(t *testing.T) {
 	t.Parallel()
-	cmd := createRuleAddCommand()
+	cmd := createRulesAddCommand()
 
 	flags := []string{"pattern", "message", "tools", "generate"}
 	for _, flag := range flags {
