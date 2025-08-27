@@ -325,3 +325,43 @@ func convertSourcesSlice(sources []any) []string {
 	}
 	return result
 }
+
+// Save writes config to file with proper YAML formatting
+func (c *Config) Save(path string) error {
+	data, err := yaml.Marshal(c)
+	if err != nil {
+		return fmt.Errorf("failed to marshal config: %w", err)
+	}
+
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		return fmt.Errorf("failed to write config: %w", err)
+	}
+
+	return nil
+}
+
+// AddRule appends a rule to the config
+func (c *Config) AddRule(rule Rule) {
+	c.Rules = append(c.Rules, rule)
+}
+
+// DeleteRule removes a rule at the specified index
+func (c *Config) DeleteRule(index int) error {
+	if index < 0 || index >= len(c.Rules) {
+		return fmt.Errorf("invalid index %d: must be between 0 and %d", index, len(c.Rules)-1)
+	}
+
+	// Remove rule at index by slicing around it
+	c.Rules = append(c.Rules[:index], c.Rules[index+1:]...)
+	return nil
+}
+
+// UpdateRule replaces a rule at the specified index
+func (c *Config) UpdateRule(index int, rule Rule) error {
+	if index < 0 || index >= len(c.Rules) {
+		return fmt.Errorf("invalid index %d: must be between 0 and %d", index, len(c.Rules)-1)
+	}
+
+	c.Rules[index] = rule
+	return nil
+}

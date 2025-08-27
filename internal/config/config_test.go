@@ -1428,3 +1428,164 @@ func testMatchFieldCase(t *testing.T, yamlContent, expectedPattern, expectedEven
 	assert.Equal(t, expectedEvent, matchResult.Event)
 	assert.Equal(t, expectedSources, matchResult.Sources)
 }
+
+// TestSaveConfig tests saving configuration to file
+func TestSaveConfig(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	configFile := filepath.Join(tempDir, "save-test.yaml")
+
+	// Create a basic config
+	config := &Config{
+		Rules: []Rule{
+			{
+				Match: "go test.*",
+				Send:  "Use just test instead",
+			},
+		},
+	}
+
+	// Save the config
+	err := config.Save(configFile)
+	require.NoError(t, err, "Save should not error")
+
+	// Verify file exists and has content
+	data, err := os.ReadFile(configFile) // #nosec G304 -- configFile is a test file path
+	require.NoError(t, err, "Should be able to read saved file")
+	require.NotEmpty(t, data, "Saved file should not be empty")
+
+	// Verify the saved content is valid YAML that loads back correctly
+	loadedConfig, err := Load(configFile)
+	require.NoError(t, err, "Should be able to load saved config")
+	require.Len(t, loadedConfig.Rules, 1, "Should have 1 rule")
+
+	rule := loadedConfig.Rules[0]
+	assert.Equal(t, "go test.*", rule.GetMatch().Pattern)
+	assert.Equal(t, "Use just test instead", rule.Send)
+}
+
+// TestAddRule tests adding rules to existing configuration
+func TestAddRule(t *testing.T) {
+	t.Parallel()
+
+	config := &Config{
+		Rules: []Rule{
+			{
+				Match: "existing.*",
+				Send:  "Existing rule",
+			},
+		},
+	}
+
+	// Add a new rule
+	newRule := Rule{
+		Match: "new.*",
+		Send:  "New rule",
+		Tool:  "^Bash$",
+	}
+	config.AddRule(newRule)
+
+	// Verify the rule was added
+	require.Len(t, config.Rules, 2, "Should have 2 rules after adding")
+
+	// Check the new rule
+	addedRule := config.Rules[1]
+	assert.Equal(t, "new.*", addedRule.GetMatch().Pattern)
+	assert.Equal(t, "New rule", addedRule.Send)
+	assert.Equal(t, "^Bash$", addedRule.Tool)
+
+	// Check the existing rule is still there
+	existingRule := config.Rules[0]
+	assert.Equal(t, "existing.*", existingRule.GetMatch().Pattern)
+	assert.Equal(t, "Existing rule", existingRule.Send)
+}
+
+// TestDeleteRule tests removing rules from configuration by index
+func TestDeleteRule(t *testing.T) {
+	t.Parallel()
+
+	config := &Config{
+		Rules: []Rule{
+			{
+				Match: "rule1.*",
+				Send:  "Rule 1",
+			},
+			{
+				Match: "rule2.*",
+				Send:  "Rule 2",
+			},
+			{
+				Match: "rule3.*",
+				Send:  "Rule 3",
+			},
+		},
+	}
+
+	// Test deleting middle rule
+	err := config.DeleteRule(1)
+	require.NoError(t, err, "Should be able to delete valid rule")
+	require.Len(t, config.Rules, 2, "Should have 2 rules after deletion")
+
+	// Verify correct rule was deleted
+	assert.Equal(t, "rule1.*", config.Rules[0].GetMatch().Pattern)
+	assert.Equal(t, "rule3.*", config.Rules[1].GetMatch().Pattern)
+
+	// Test deleting invalid index (negative)
+	err = config.DeleteRule(-1)
+	require.Error(t, err, "Should error on negative index")
+
+	// Test deleting invalid index (too large)
+	err = config.DeleteRule(10)
+	require.Error(t, err, "Should error on index too large")
+
+	// Test deleting from empty config
+	emptyConfig := &Config{Rules: []Rule{}}
+	err = emptyConfig.DeleteRule(0)
+	require.Error(t, err, "Should error when deleting from empty config")
+}
+
+// TestUpdateRule tests updating rules at specific indices
+func TestUpdateRule(t *testing.T) {
+	t.Parallel()
+
+	config := &Config{
+		Rules: []Rule{
+			{
+				Match: "original.*",
+				Send:  "Original rule",
+			},
+			{
+				Match: "another.*",
+				Send:  "Another rule",
+			},
+		},
+	}
+
+	// Test updating first rule
+	updatedRule := Rule{
+		Match: "updated.*",
+		Send:  "Updated rule",
+		Tool:  "^Bash$",
+	}
+
+	err := config.UpdateRule(0, updatedRule)
+	require.NoError(t, err, "Should be able to update valid rule")
+	require.Len(t, config.Rules, 2, "Should still have 2 rules after update")
+
+	// Verify rule was updated
+	assert.Equal(t, "updated.*", config.Rules[0].GetMatch().Pattern)
+	assert.Equal(t, "Updated rule", config.Rules[0].Send)
+	assert.Equal(t, "^Bash$", config.Rules[0].Tool)
+
+	// Verify other rule unchanged
+	assert.Equal(t, "another.*", config.Rules[1].GetMatch().Pattern)
+
+	// Test updating invalid index (negative)
+	err = config.UpdateRule(-1, updatedRule)
+	require.Error(t, err, "Should error on negative index")
+
+	// Test updating invalid index (too large)
+	err = config.UpdateRule(10, updatedRule)
+	require.Error(t, err, "Should error on index too large")
+}
