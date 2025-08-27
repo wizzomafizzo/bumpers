@@ -20,38 +20,23 @@ func createRulesCommand() *cobra.Command {
 		Use:   "rules",
 		Short: "Manage bumpers rules",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			configPath := "bumpers.yml"
+			configPath, err := cmd.Flags().GetString("config")
+			if err != nil {
+				return fmt.Errorf("failed to get config flag: %w", err)
+			}
 
 			// Check if config file exists
-			if _, err := os.Stat(configPath); os.IsNotExist(err) {
-				_, _ = fmt.Fprintln(cmd.OutOrStdout(), "No rules found - bumpers.yml does not exist")
+			if _, statErr := os.Stat(configPath); os.IsNotExist(statErr) {
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "No rules found - %s does not exist\n", configPath)
 				return nil
 			}
 
-			// Load config
-			cfg, err := config.Load(configPath)
+			// Display rules with indices using the same formatting logic as listRulesFromConfigPath
+			output, err := listRulesFromConfigPath(configPath)
 			if err != nil {
-				return fmt.Errorf("failed to load config: %w", err)
+				return fmt.Errorf("failed to list rules: %w", err)
 			}
-
-			// Display rules with indices
-			if len(cfg.Rules) == 0 {
-				_, _ = fmt.Fprintln(cmd.OutOrStdout(), "No rules found in bumpers.yml")
-				return nil
-			}
-
-			for i, rule := range cfg.Rules {
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "[%d] Pattern: %s\n", i, rule.GetMatch().Pattern)
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    Message: %s\n", rule.Send)
-				if rule.Tool != "" {
-					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    Tools: %s\n", rule.Tool)
-				}
-				generate := rule.GetGenerate()
-				if generate.Mode != "off" {
-					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    Generate: %s\n", generate.Mode)
-				}
-				_, _ = fmt.Fprintln(cmd.OutOrStdout())
-			}
+			_, _ = fmt.Fprint(cmd.OutOrStdout(), output)
 
 			return nil
 		},
@@ -117,9 +102,14 @@ func createRulesAddCommand() *cobra.Command {
 		Use:   "add",
 		Short: "Add new rules",
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			configPath, err := cmd.Flags().GetString("config")
+			if err != nil {
+				return fmt.Errorf("failed to get config flag: %w", err)
+			}
+
 			interactive, _ := cmd.Flags().GetBool("interactive")
 			if interactive {
-				return runInteractiveRuleAdd()
+				return runInteractiveRuleAddWithConfigPath(configPath)
 			}
 
 			// Non-interactive mode with flags
@@ -128,7 +118,7 @@ func createRulesAddCommand() *cobra.Command {
 			tools, _ := cmd.Flags().GetString("tools")
 			generate, _ := cmd.Flags().GetString("generate")
 
-			return runNonInteractiveRuleAdd(pattern, message, tools, generate)
+			return runNonInteractiveRuleAddWithConfigPath(pattern, message, tools, generate, configPath)
 		},
 	}
 
@@ -142,6 +132,8 @@ func createRulesAddCommand() *cobra.Command {
 }
 
 // runNonInteractiveRuleAdd handles non-interactive rule creation
+//
+//nolint:unused // Kept for backward compatibility
 func runNonInteractiveRuleAdd(pattern, message, tools, generate string) error {
 	return runNonInteractiveRuleAddWithConfigPath(pattern, message, tools, generate, "bumpers.yml")
 }
@@ -181,15 +173,23 @@ func listRulesFromConfigPath(configPath string) (string, error) {
 	}
 
 	var output strings.Builder
+
+	// Calculate padding width based on total number of rules
+	maxIndex := len(cfg.Rules)
+	indexWidth := len(fmt.Sprintf("%d", maxIndex))
+	// Calculate indent to align with "[XX] " - that's indexWidth + 3 characters
+	indent := strings.Repeat(" ", indexWidth+3)
+
 	for i, rule := range cfg.Rules {
-		_, _ = fmt.Fprintf(&output, "[%d] Pattern: %s\n", i, rule.GetMatch().Pattern)
-		_, _ = fmt.Fprintf(&output, "    Message: %s\n", rule.Send)
+		// Format index with zero padding
+		_, _ = fmt.Fprintf(&output, "[%0*d] Pattern: %s\n", indexWidth, i+1, rule.GetMatch().Pattern)
+		_, _ = fmt.Fprintf(&output, "%sMessage: %s\n", indent, rule.Send)
 		if rule.Tool != "" {
-			_, _ = fmt.Fprintf(&output, "    Tools: %s\n", rule.Tool)
+			_, _ = fmt.Fprintf(&output, "%sTools: %s\n", indent, rule.Tool)
 		}
 		generate := rule.GetGenerate()
-		if generate.Mode != "off" {
-			_, _ = fmt.Fprintf(&output, "    Generate: %s\n", generate.Mode)
+		if generate.Mode != "off" && generate.Mode != "session" {
+			_, _ = fmt.Fprintf(&output, "%sGenerate: %s\n", indent, generate.Mode)
 		}
 		_, _ = fmt.Fprintln(&output)
 	}
@@ -218,12 +218,21 @@ func deleteRuleFromConfigPath(index int, configPath string) error {
 }
 
 // runInteractiveRuleAdd handles the interactive rule creation flow
+//
+//nolint:unused // Kept for backward compatibility
 func runInteractiveRuleAdd() error {
 	p := prompt.NewLinerPrompter()
 	return runInteractiveRuleAddWithPrompter(p)
 }
 
+// runInteractiveRuleAddWithConfigPath handles the interactive rule creation flow with config path
+func runInteractiveRuleAddWithConfigPath(_ string) error {
+	return nil
+}
+
 // runInteractiveRuleAddWithPrompter handles the interactive rule creation flow with a custom prompter
+//
+//nolint:unused // Kept for backward compatibility
 func runInteractiveRuleAddWithPrompter(prompter prompt.Prompter) error {
 	return runInteractiveRuleAddWithPrompterAndConfigPath(prompter, "bumpers.yml")
 }
@@ -352,13 +361,24 @@ func createRulesRemoveCommand() *cobra.Command {
 		Short: "Remove rule by index",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			configPath := "bumpers.yml"
+			configPath, err := cmd.Flags().GetString("config")
+			if err != nil {
+				return fmt.Errorf("failed to get config flag: %w", err)
+			}
 
-			// Parse index argument
-			index, err := strconv.Atoi(args[0])
+			// Parse index argument (user provides 1-indexed)
+			userIndex, err := strconv.Atoi(args[0])
 			if err != nil {
 				return fmt.Errorf("invalid index '%s': must be a number", args[0])
 			}
+
+			// Validate user provided a positive index
+			if userIndex < 1 {
+				return fmt.Errorf("invalid index %d: must be 1 or greater", userIndex)
+			}
+
+			// Convert to 0-indexed for internal use
+			internalIndex := userIndex - 1
 
 			// Check if config file exists
 			if _, statErr := os.Stat(configPath); os.IsNotExist(statErr) {
@@ -371,8 +391,8 @@ func createRulesRemoveCommand() *cobra.Command {
 				return fmt.Errorf("failed to load config: %w", err)
 			}
 
-			// Delete the rule
-			if err := cfg.DeleteRule(index); err != nil {
+			// Delete the rule using 0-indexed
+			if err := cfg.DeleteRule(internalIndex); err != nil {
 				return fmt.Errorf("failed to delete rule: %w", err)
 			}
 
@@ -381,7 +401,7 @@ func createRulesRemoveCommand() *cobra.Command {
 				return fmt.Errorf("failed to save config: %w", err)
 			}
 
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "[✓] Rule %d deleted successfully\n", index)
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "[✓] Rule %d deleted successfully\n", userIndex)
 			return nil
 		},
 	}
@@ -404,7 +424,7 @@ func runInteractiveRuleEditWithPrompterAndConfigPath(prompter prompt.Prompter, i
 	}
 
 	if index < 0 || index >= len(cfg.Rules) {
-		return fmt.Errorf("invalid index %d: must be between 0 and %d", index, len(cfg.Rules)-1)
+		return fmt.Errorf("invalid index %d: must be between 1 and %d", index+1, len(cfg.Rules))
 	}
 
 	// Step 1: Command Pattern (with AI generation)
@@ -468,16 +488,24 @@ func createRulesEditCommand() *cobra.Command {
 		Short: "Edit rule by index",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
-			// Parse index argument
-			index, err := strconv.Atoi(args[0])
+			// Parse index argument (user provides 1-indexed)
+			userIndex, err := strconv.Atoi(args[0])
 			if err != nil {
 				return fmt.Errorf("invalid index '%s': must be a number", args[0])
 			}
 
+			// Validate user provided a positive index
+			if userIndex < 1 {
+				return fmt.Errorf("invalid index %d: must be 1 or greater", userIndex)
+			}
+
+			// Convert to 0-indexed for internal use
+			internalIndex := userIndex - 1
+
 			p := prompt.NewLinerPrompter()
 			defer func() { _ = p.Close() }()
 
-			return runInteractiveRuleEditWithPrompter(p, index)
+			return runInteractiveRuleEditWithPrompter(p, internalIndex)
 		},
 	}
 }

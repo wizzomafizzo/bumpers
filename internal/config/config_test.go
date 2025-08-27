@@ -1534,10 +1534,12 @@ func TestDeleteRule(t *testing.T) {
 	// Test deleting invalid index (negative)
 	err = config.DeleteRule(-1)
 	require.Error(t, err, "Should error on negative index")
+	require.Contains(t, err.Error(), "must be between 1 and", "Error should show 1-indexed ranges")
 
 	// Test deleting invalid index (too large)
 	err = config.DeleteRule(10)
 	require.Error(t, err, "Should error on index too large")
+	require.Contains(t, err.Error(), "must be between 1 and", "Error should show 1-indexed ranges")
 
 	// Test deleting from empty config
 	emptyConfig := &Config{Rules: []Rule{}}
@@ -1584,8 +1586,10 @@ func TestUpdateRule(t *testing.T) {
 	// Test updating invalid index (negative)
 	err = config.UpdateRule(-1, updatedRule)
 	require.Error(t, err, "Should error on negative index")
+	require.Contains(t, err.Error(), "must be between 1 and", "Error should show 1-indexed ranges")
 
 	// Test updating invalid index (too large)
 	err = config.UpdateRule(10, updatedRule)
 	require.Error(t, err, "Should error on index too large")
+	require.Contains(t, err.Error(), "must be between 1 and", "Error should show 1-indexed ranges")
 }

@@ -348,7 +348,7 @@ func (c *Config) AddRule(rule Rule) {
 // DeleteRule removes a rule at the specified index
 func (c *Config) DeleteRule(index int) error {
 	if index < 0 || index >= len(c.Rules) {
-		return fmt.Errorf("invalid index %d: must be between 0 and %d", index, len(c.Rules)-1)
+		return fmt.Errorf("invalid index %d: must be between 1 and %d", index+1, len(c.Rules))
 	}
 
 	// Remove rule at index by slicing around it
@@ -359,7 +359,7 @@ func (c *Config) DeleteRule(index int) error {
 // UpdateRule replaces a rule at the specified index
 func (c *Config) UpdateRule(index int, rule Rule) error {
 	if index < 0 || index >= len(c.Rules) {
-		return fmt.Errorf("invalid index %d: must be between 0 and %d", index, len(c.Rules)-1)
+		return fmt.Errorf("invalid index %d: must be between 1 and %d", index+1, len(c.Rules))
 	}
 
 	c.Rules[index] = rule

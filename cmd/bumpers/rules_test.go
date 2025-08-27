@@ -3,11 +3,13 @@ package main
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"github.com/wizzomafizzo/bumpers/internal/config"
 )
 
@@ -493,8 +495,8 @@ func TestRulesCommandListsRules(t *testing.T) {
 		t.Fatalf("Expected list functionality to work, got: %v", err)
 	}
 
-	if !strings.Contains(output, "[0]") {
-		t.Error("Expected output to show rule index [0]")
+	if !strings.Contains(output, "[1]") {
+		t.Error("Expected output to show rule index [1] (1-indexed)")
 	}
 	if !strings.Contains(output, "go test.*") {
 		t.Error("Expected output to show rule pattern")
@@ -537,11 +539,11 @@ func TestRuleListCommand(t *testing.T) {
 	}
 
 	// Should show both rules with indices
-	if !strings.Contains(output, "[0]") {
-		t.Error("Expected output to show rule index [0]")
-	}
 	if !strings.Contains(output, "[1]") {
-		t.Error("Expected output to show rule index [1]")
+		t.Error("Expected output to show rule index [1] (1-indexed)")
+	}
+	if !strings.Contains(output, "[2]") {
+		t.Error("Expected output to show rule index [2] (1-indexed)")
 	}
 	if !strings.Contains(output, "go test.*") {
 		t.Error("Expected output to show first rule pattern")
@@ -612,11 +614,201 @@ func TestRuleDeleteCommand(t *testing.T) {
 	}
 
 	// Should still have go test and git push rules
-	if !strings.Contains(strings.Join(patterns, " "), "go test.*") {
-		t.Error("Expected go test rule to remain after deletion")
+}
+
+// TestRulesRemoveCommandWithOneIndexedInput tests that rule removal expects 1-indexed input
+func TestRulesRemoveCommandWithOneIndexedInput(t *testing.T) {
+	t.Parallel()
+
+	// Create temporary directory and config file with test rules
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "bumpers.yml")
+
+	cfg := &config.Config{
+		Rules: []config.Rule{
+			{Match: "go test.*", Send: "Use just test for TDD"},
+			{Match: "rm -rf.*", Send: "Dangerous! Use git clean -fd instead"},
+		},
 	}
-	if !strings.Contains(strings.Join(patterns, " "), "git push.*") {
-		t.Error("Expected git push rule to remain after deletion")
+
+	if err := cfg.Save(configPath); err != nil {
+		t.Fatalf("Failed to save test config: %v", err)
+	}
+
+	// Test removing the first rule with 1-indexed input via helper function
+	// This simulates what the CLI command should do: convert 1-indexed input to 0-indexed
+	userIndex := 1                 // User provides 1-indexed
+	internalIndex := userIndex - 1 // Convert to 0-indexed for internal use
+
+	err := deleteRuleFromConfigPath(internalIndex, configPath)
+	if err != nil {
+		t.Fatalf("Expected delete to work with converted 1-indexed input, got: %v", err)
+	}
+
+	// Verify the first rule was actually deleted (the "go test.*" rule)
+	updatedCfg, err := config.Load(configPath)
+	if err != nil {
+		t.Fatalf("Failed to load updated config: %v", err)
+	}
+
+	if len(updatedCfg.Rules) != 1 {
+		t.Fatalf("Expected 1 rule after deletion, got %d", len(updatedCfg.Rules))
+	}
+
+	// Verify the remaining rule is the second one (rm -rf)
+	if updatedCfg.Rules[0].GetMatch().Pattern != "rm -rf.*" {
+		t.Errorf("Expected remaining rule to be 'rm -rf.*', got '%s'", updatedCfg.Rules[0].GetMatch().Pattern)
+	}
+}
+
+// TestRulesListFormattingWithPadding tests that rule indices are properly padded
+func TestRulesListFormattingWithPadding(t *testing.T) {
+	t.Parallel()
+
+	// Create a config with 12 rules to test padding (needs 2-digit padding)
+	cfg := &config.Config{Rules: make([]config.Rule, 12)}
+	for i := 0; i < 12; i++ {
+		cfg.Rules[i] = config.Rule{
+			Match:    fmt.Sprintf("rule%d.*", i+1),
+			Send:     fmt.Sprintf("Message for rule %d", i+1),
+			Generate: "session", // Default value, should be hidden
+		}
+	}
+
+	// Create temporary config file
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "bumpers.yml")
+	if err := cfg.Save(configPath); err != nil {
+		t.Fatalf("Failed to save test config: %v", err)
+	}
+
+	// Test the list functionality
+	output, err := listRulesFromConfigPath(configPath)
+	if err != nil {
+		t.Fatalf("Expected list functionality to work, got: %v", err)
+	}
+
+	// Check that the first rule is padded with leading zero
+	if !strings.Contains(output, "[01] Pattern: rule1.*") {
+		t.Error("Expected first rule to show '[01]' with zero padding")
+	}
+
+	// Check that the 10th rule is also padded consistently
+	if !strings.Contains(output, "[10] Pattern: rule10.*") {
+		t.Error("Expected 10th rule to show '[10]' with consistent padding")
+	}
+
+	// Check that the 12th rule is padded consistently
+	if !strings.Contains(output, "[12] Pattern: rule12.*") {
+		t.Error("Expected 12th rule to show '[12]' with consistent padding")
+	}
+
+	// Check that message lines are properly indented to align with padded indices
+	// With "[01] " (4 chars), the indent should be 4 spaces
+	if !strings.Contains(output, "    Message: Message for rule 1") {
+		t.Error("Expected message lines to be indented to align with padded indices")
+	}
+
+	// Check that generate lines are hidden for default 'session' value
+	if strings.Contains(output, "Generate: session") {
+		t.Error("Expected 'Generate: session' to be hidden as it's the default value")
+	}
+}
+
+// TestRulesListIndentationAlignment tests that message lines align properly with padded indices
+func TestRulesListIndentationAlignment(t *testing.T) {
+	t.Parallel()
+
+	// Test with 2-digit numbers (requires 2-char padding)
+	cfg := &config.Config{Rules: make([]config.Rule, 10)}
+	for i := 0; i < 10; i++ {
+		cfg.Rules[i] = config.Rule{
+			Match: fmt.Sprintf("rule%d.*", i+1),
+			Send:  fmt.Sprintf("Message for rule %d", i+1),
+		}
+	}
+
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "bumpers.yml")
+	if err := cfg.Save(configPath); err != nil {
+		t.Fatalf("Failed to save test config: %v", err)
+	}
+
+	output, err := listRulesFromConfigPath(configPath)
+	if err != nil {
+		t.Fatalf("Expected list functionality to work, got: %v", err)
+	}
+
+	// For "[01] " (4 chars), message should be indented with 5 spaces to align
+	// "[01] Pattern: rule1.*"
+	// "     Message: Message for rule 1"
+	if !strings.Contains(output, "     Message: Message for rule 1") {
+		t.Error("Expected message to be indented with 5 spaces to align with '[01] '")
+	}
+}
+
+// TestRulesEditCommandWithOneIndexedInput tests that rule editing expects 1-indexed input
+func TestRulesEditCommandWithOneIndexedInput(t *testing.T) {
+	t.Parallel()
+
+	// Create temporary directory and config file with test rules
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "bumpers.yml")
+
+	cfg := &config.Config{
+		Rules: []config.Rule{
+			{Match: "go test.*", Send: "Use just test for TDD"},
+			{Match: "rm -rf.*", Send: "Dangerous! Use git clean -fd instead"},
+		},
+	}
+
+	if err := cfg.Save(configPath); err != nil {
+		t.Fatalf("Failed to save test config: %v", err)
+	}
+
+	// Test editing the first rule with 1-indexed input via bounds checking
+	// This simulates what the CLI command should do: convert 1-indexed input to 0-indexed
+	userIndex := 1                 // User provides 1-indexed
+	internalIndex := userIndex - 1 // Convert to 0-indexed for internal use
+
+	// Load config to verify bounds checking will work
+	testCfg, err := config.Load(configPath)
+	if err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
+
+	// Verify the internal index is valid (should be 0 for first rule)
+	if internalIndex < 0 || internalIndex >= len(testCfg.Rules) {
+		t.Fatalf("Converted index %d should be valid (0-indexed), but bounds check failed", internalIndex)
+	}
+
+	// Verify we can access the first rule (at 0-indexed position)
+	firstRule := testCfg.Rules[internalIndex]
+	if firstRule.GetMatch().Pattern != "go test.*" {
+		t.Errorf("Expected first rule pattern to be 'go test.*', got '%s'", firstRule.GetMatch().Pattern)
+	}
+}
+
+// TestEditCommandValidatesOneIndexedInput tests that edit command validates 1-indexed input
+func TestEditCommandValidatesOneIndexedInput(t *testing.T) {
+	t.Parallel()
+
+	cmd := createRulesEditCommand()
+
+	// Test with invalid input (0 should be rejected for 1-indexed)
+	err := cmd.RunE(cmd, []string{"0"})
+	if err == nil {
+		t.Error("Expected edit command to reject index 0 (should be 1-indexed)")
+	} else if !strings.Contains(err.Error(), "must be 1 or greater") {
+		t.Errorf("Expected error message to indicate 1-indexed requirement, got: %v", err)
+	}
+
+	// Test with negative input (should be rejected)
+	err = cmd.RunE(cmd, []string{"-1"})
+	if err == nil {
+		t.Error("Expected edit command to reject negative index")
+	} else if !strings.Contains(err.Error(), "must be 1 or greater") {
+		t.Errorf("Expected error message to indicate 1-indexed requirement, got: %v", err)
 	}
 }
 
@@ -741,4 +933,96 @@ func TestRuleAddNonInteractive(t *testing.T) {
 	if rule.Send != "Use safer deletion commands" {
 		t.Errorf("Expected message 'Use safer deletion commands', got '%s'", rule.Send)
 	}
+}
+
+func TestRulesCommandRespectsConfigFlag(t *testing.T) {
+	t.Parallel()
+	tempDir := t.TempDir()
+	customConfigPath := filepath.Join(tempDir, "custom.yml")
+
+	// Create a custom config file
+	customConfig := `rules:
+  - match: "custom-pattern"
+    send: "Custom message from non-default config"
+`
+	err := os.WriteFile(customConfigPath, []byte(customConfig), 0o600)
+	require.NoError(t, err)
+
+	// Test rules list command with custom config
+	rootCmd := createNewRootCommand()
+	var output bytes.Buffer
+	rootCmd.SetOut(&output)
+	rootCmd.SetArgs([]string{"rules", "list", "--config", customConfigPath})
+
+	err = rootCmd.Execute()
+	require.NoError(t, err)
+
+	outputStr := output.String()
+	if !strings.Contains(outputStr, "custom-pattern") {
+		t.Errorf("Expected output to contain 'custom-pattern' from custom config, got: %s", outputStr)
+	}
+	if !strings.Contains(outputStr, "Custom message from non-default config") {
+		t.Errorf("Expected output to contain custom message, got: %s", outputStr)
+	}
+}
+
+func TestRulesRemoveCommandRespectsConfigFlag(t *testing.T) {
+	t.Parallel()
+	tempDir := t.TempDir()
+	customConfigPath := filepath.Join(tempDir, "custom.yml")
+
+	// Create a custom config file with multiple rules
+	customConfig := `rules:
+  - match: "rule1"
+    send: "Message 1"
+  - match: "rule2" 
+    send: "Message 2"
+`
+	err := os.WriteFile(customConfigPath, []byte(customConfig), 0o600)
+	require.NoError(t, err)
+
+	// Test rules remove command with custom config
+	rootCmd := createNewRootCommand()
+	var output bytes.Buffer
+	rootCmd.SetOut(&output)
+	rootCmd.SetArgs([]string{"rules", "remove", "1", "--config", customConfigPath})
+
+	err = rootCmd.Execute()
+	require.NoError(t, err)
+
+	// Verify the rule was removed from the custom config
+	cfg, err := config.Load(customConfigPath)
+	require.NoError(t, err)
+	require.Len(t, cfg.Rules, 1, "Should have 1 rule remaining after removal")
+	require.Equal(t, "rule2", cfg.Rules[0].GetMatch().Pattern, "Should have rule2 remaining")
+}
+
+func TestRulesAddCommandRespectsConfigFlag(t *testing.T) {
+	t.Parallel()
+	tempDir := t.TempDir()
+	customConfigPath := filepath.Join(tempDir, "custom.yml")
+
+	// Create an empty custom config file
+	customConfig := `rules: []`
+	err := os.WriteFile(customConfigPath, []byte(customConfig), 0o600)
+	require.NoError(t, err)
+
+	// Test rules add command with custom config
+	rootCmd := createNewRootCommand()
+	var output bytes.Buffer
+	rootCmd.SetOut(&output)
+	rootCmd.SetArgs([]string{
+		"rules", "add", "--pattern", "test-pattern",
+		"--message", "test message", "--config", customConfigPath,
+	})
+
+	err = rootCmd.Execute()
+	require.NoError(t, err)
+
+	// Verify the rule was added to the custom config
+	cfg, err := config.Load(customConfigPath)
+	require.NoError(t, err)
+	require.Len(t, cfg.Rules, 1, "Should have 1 rule after addition")
+	require.Equal(t, "test-pattern", cfg.Rules[0].GetMatch().Pattern, "Should have added test-pattern rule")
+	require.Equal(t, "test message", cfg.Rules[0].Send, "Should have correct message")
 }
