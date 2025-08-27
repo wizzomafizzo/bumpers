@@ -86,6 +86,15 @@ func TestNewRootCommandHasAllSubcommands(t *testing.T) {
 		t.Errorf("Expected status command use 'status', got '%s'", statusCmd.Use)
 	}
 
+	// Should have rules command
+	rulesCmd, _, err := cmd.Find([]string{"rules"})
+	if err != nil {
+		t.Fatalf("Expected rules command to exist, got error: %v", err)
+	}
+	if rulesCmd.Use != "rules" {
+		t.Errorf("Expected rules command use 'rules', got '%s'", rulesCmd.Use)
+	}
+
 	// Should have validate command
 	validateCmd, _, err := cmd.Find([]string{"validate"})
 	if err != nil {

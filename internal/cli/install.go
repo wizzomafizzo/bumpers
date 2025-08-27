@@ -215,6 +215,12 @@ func (a *App) installClaudeHooks() error {
 		return fmt.Errorf("failed to add bumpers PreToolUse hook to Claude settings: %w", err)
 	}
 
+	// Add PostToolUse hook (preserves existing hooks with same matcher)
+	err = claudeSettings.AddOrAppendHook(settings.PostToolUseEvent, "", hookCmd)
+	if err != nil {
+		return fmt.Errorf("failed to add bumpers PostToolUse hook to Claude settings: %w", err)
+	}
+
 	// Add UserPromptSubmit hook (preserves existing hooks with same matcher)
 	err = claudeSettings.AddOrAppendHook(settings.UserPromptSubmitEvent, "", hookCmd)
 	if err != nil {
