@@ -12,7 +12,7 @@ import (
 
 func TestEnsureLogDir_Success(t *testing.T) {
 	t.Parallel()
-	testutil.InitTestLogger(t)
+	_, _ = testutil.NewTestContext(t) // Context-aware logging available
 
 	tempDir := t.TempDir()
 	logDir := filepath.Join(tempDir, "logs")
@@ -29,7 +29,7 @@ func TestEnsureLogDir_Success(t *testing.T) {
 
 func TestCreateLumberjackLogger_Configuration(t *testing.T) {
 	t.Parallel()
-	testutil.InitTestLogger(t)
+	_, _ = testutil.NewTestContext(t) // Context-aware logging available
 
 	logFile := "/tmp/test.log"
 

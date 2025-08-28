@@ -11,7 +11,7 @@ import (
 // setupTest initializes test logger to prevent race conditions
 func setupTest(t *testing.T) {
 	t.Helper()
-	testutil.InitTestLogger(t)
+	_, _ = testutil.NewTestContext(t) // Context-aware logging available
 }
 
 func TestGeneratorGenerateMessage(t *testing.T) {

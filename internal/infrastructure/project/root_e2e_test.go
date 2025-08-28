@@ -120,7 +120,7 @@ func setupTestProjectWithMarker(t *testing.T, markerName, markerContent string) 
 
 //nolint:paralleltest // changes working directory via setupTestProjectWithMarker
 func TestFindRoot_WithGoMod(t *testing.T) {
-	testutil.InitTestLogger(t)
+	_, _ = testutil.NewTestContext(t) // Context-aware logging available
 	projectDir, cleanup := setupTestProjectWithMarker(t, "go.mod", "module example.com/myproject\n")
 	defer cleanup()
 
@@ -146,7 +146,7 @@ func TestFindRoot_WithGoMod(t *testing.T) {
 
 //nolint:paralleltest // changes working directory via setupTestProjectWithMarker
 func TestFindRoot_WithPackageJSON(t *testing.T) {
-	testutil.InitTestLogger(t)
+	_, _ = testutil.NewTestContext(t) // Context-aware logging available
 	projectDir, cleanup := setupTestProjectWithMarker(t, "package.json", `{"name": "my-project", "version": "1.0.0"}`)
 	defer cleanup()
 

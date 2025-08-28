@@ -1,11 +1,12 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
 
-	"github.com/rs/zerolog/log"
+	"github.com/rs/zerolog"
 	"github.com/wizzomafizzo/bumpers/internal/config"
 	"github.com/wizzomafizzo/bumpers/internal/core/messaging/template"
 	"github.com/wizzomafizzo/bumpers/internal/infrastructure/constants"
@@ -31,15 +32,17 @@ type ValidationResult struct {
 	Continue   bool   `json:"continue,omitempty"`
 }
 
-func (a *App) ProcessUserPrompt(rawJSON json.RawMessage) (string, error) {
+func (a *App) ProcessUserPrompt(ctx context.Context, rawJSON json.RawMessage) (string, error) {
+	logger := zerolog.Ctx(ctx)
+
 	// Parse the UserPromptSubmit JSON
 	var event UserPromptEvent
 	if err := json.Unmarshal(rawJSON, &event); err != nil {
-		log.Error().Err(err).Msg("Failed to parse UserPromptSubmit event")
+		logger.Error().Err(err).Msg("Failed to parse UserPromptSubmit event")
 		return "", fmt.Errorf("failed to parse UserPromptSubmit event: %w", err)
 	}
 
-	log.Debug().Str("prompt", event.Prompt).Msg("processing UserPromptSubmit with prompt")
+	logger.Debug().Str("prompt", event.Prompt).Msg("processing UserPromptSubmit with prompt")
 
 	// Check if prompt starts with command prefix
 	if !strings.HasPrefix(event.Prompt, constants.CommandPrefix) {
@@ -48,11 +51,11 @@ func (a *App) ProcessUserPrompt(rawJSON json.RawMessage) (string, error) {
 
 	// Extract command string and parse arguments
 	commandStr := strings.TrimPrefix(event.Prompt, constants.CommandPrefix)
-	log.Debug().Str("commandStr", commandStr).Msg("extracted command string")
+	logger.Debug().Str("commandStr", commandStr).Msg("extracted command string")
 
 	// Parse command name and arguments
 	commandName, args, argv := ParseCommandArgs(commandStr)
-	log.Debug().
+	logger.Debug().
 		Str("commandName", commandName).
 		Str("args", args).
 		Int("argc", len(argv)-1).
@@ -61,7 +64,7 @@ func (a *App) ProcessUserPrompt(rawJSON json.RawMessage) (string, error) {
 	// Load config to get commands
 	cfg, err := config.Load(a.configPath)
 	if err != nil {
-		log.Error().Err(err).Str("configPath", a.configPath).Msg("Failed to load config")
+		logger.Error().Err(err).Str("configPath", a.configPath).Msg("Failed to load config")
 		return "", fmt.Errorf("failed to load config: %w", err)
 	}
 
@@ -77,7 +80,7 @@ func (a *App) ProcessUserPrompt(rawJSON json.RawMessage) (string, error) {
 		commandMessage = cmd.Send
 		foundCommand = true
 		matchedCommand = &cmd
-		log.Debug().Str("commandName", commandName).Str("message", commandMessage).Msg("found valid command")
+		logger.Debug().Str("commandName", commandName).Str("message", commandMessage).Msg("found valid command")
 		break
 	}
 
@@ -88,7 +91,7 @@ func (a *App) ProcessUserPrompt(rawJSON json.RawMessage) (string, error) {
 	// Process template with command context including shared variables and arguments
 	processedMessage, err := template.ExecuteCommandTemplateWithArgs(commandMessage, commandName, args, argv)
 	if err != nil {
-		log.Error().Err(err).Str("commandName", commandName).Msg("Failed to process command template")
+		logger.Error().Err(err).Str("commandName", commandName).Msg("Failed to process command template")
 		return "", fmt.Errorf("failed to process command template: %w", err)
 	}
 
@@ -96,7 +99,7 @@ func (a *App) ProcessUserPrompt(rawJSON json.RawMessage) (string, error) {
 	finalMessage, err := a.processAIGenerationGeneric(matchedCommand, processedMessage, commandStr)
 	if err != nil {
 		// Log error but don't fail the hook - fallback to original message
-		log.Error().Err(err).Msg("AI generation failed, using original message")
+		logger.Error().Err(err).Msg("AI generation failed, using original message")
 		finalMessage = processedMessage
 	}
 
@@ -114,10 +117,10 @@ func (a *App) ProcessUserPrompt(rawJSON json.RawMessage) (string, error) {
 	// Convert to JSON
 	responseJSON, err := json.Marshal(responseWrapper)
 	if err != nil {
-		log.Error().Err(err).Msg("Failed to marshal response")
+		logger.Error().Err(err).Msg("Failed to marshal response")
 		return "", fmt.Errorf("failed to marshal response: %w", err)
 	}
 
-	log.Info().Str("response", string(responseJSON)).Msg("Returning ValidationResult response")
+	logger.Info().Str("response", string(responseJSON)).Msg("Returning ValidationResult response")
 	return string(responseJSON), nil
 }

@@ -9,7 +9,7 @@ import (
 )
 
 func TestCreateRootCommand(t *testing.T) {
-	testutil.InitTestLogger(t)
+	_, _ = testutil.NewTestContext(t) // Context-aware logging available if needed
 	t.Parallel()
 
 	cmd := createNewRootCommand()
@@ -33,7 +33,7 @@ func TestCreateRootCommand(t *testing.T) {
 }
 
 func TestNewRootCommandShowsHelp(t *testing.T) {
-	testutil.InitTestLogger(t)
+	_, _ = testutil.NewTestContext(t) // Context-aware logging available if needed
 	t.Parallel()
 
 	cmd := createNewRootCommand()
@@ -54,7 +54,7 @@ func TestNewRootCommandShowsHelp(t *testing.T) {
 }
 
 func TestNewRootCommandHasAllSubcommands(t *testing.T) {
-	testutil.InitTestLogger(t)
+	_, _ = testutil.NewTestContext(t) // Context-aware logging available if needed
 	t.Parallel()
 
 	cmd := createNewRootCommand()
@@ -106,7 +106,7 @@ func TestNewRootCommandHasAllSubcommands(t *testing.T) {
 }
 
 func TestNewRootCommandHasConfigFlag(t *testing.T) {
-	testutil.InitTestLogger(t)
+	_, _ = testutil.NewTestContext(t) // Context-aware logging available if needed
 	t.Parallel()
 
 	cmd := createNewRootCommand()
@@ -123,7 +123,7 @@ func TestNewRootCommandHasConfigFlag(t *testing.T) {
 }
 
 func TestCreateAppFromCommand(t *testing.T) {
-	testutil.InitTestLogger(t)
+	_, _ = testutil.NewTestContext(t) // Context-aware logging available if needed
 	t.Parallel()
 
 	cmd := createNewRootCommand()

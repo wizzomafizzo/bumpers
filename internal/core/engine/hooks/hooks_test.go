@@ -8,7 +8,7 @@ import (
 )
 
 func TestParseInput(t *testing.T) {
-	testutil.InitTestLogger(t)
+	_, _ = testutil.NewTestContext(t) // Context-aware logging available
 	t.Parallel()
 
 	jsonInput := `{
@@ -29,7 +29,7 @@ func TestParseInput(t *testing.T) {
 }
 
 func TestDetectHookType(t *testing.T) {
-	testutil.InitTestLogger(t)
+	_, _ = testutil.NewTestContext(t) // Context-aware logging available
 	t.Parallel()
 
 	tests := []struct {
@@ -110,7 +110,7 @@ func TestDetectHookType(t *testing.T) {
 }
 
 func TestParseInputWithToolName(t *testing.T) {
-	testutil.InitTestLogger(t)
+	_, _ = testutil.NewTestContext(t) // Context-aware logging available
 	t.Parallel()
 
 	jsonInput := `{

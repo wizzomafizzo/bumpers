@@ -7,7 +7,7 @@ import (
 )
 
 func TestCreateInstallCommand(t *testing.T) {
-	testutil.InitTestLogger(t)
+	_, _ = testutil.NewTestContext(t) // Context-aware logging available if needed
 	t.Parallel()
 
 	cmd := createInstallCommand()

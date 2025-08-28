@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,13 +11,14 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/wizzomafizzo/bumpers/internal/config"
 	"github.com/wizzomafizzo/bumpers/internal/core/engine/hooks"
 	"github.com/wizzomafizzo/bumpers/internal/core/engine/matcher"
 	"github.com/wizzomafizzo/bumpers/internal/core/messaging/template"
 	"github.com/wizzomafizzo/bumpers/internal/infrastructure/project"
-	"github.com/wizzomafizzo/bumpers/internal/platform/claude/api"
+	ai "github.com/wizzomafizzo/bumpers/internal/platform/claude/api"
 	"github.com/wizzomafizzo/bumpers/internal/platform/claude/transcript"
 	"github.com/wizzomafizzo/bumpers/internal/platform/filesystem"
 	"github.com/wizzomafizzo/bumpers/internal/platform/storage"
@@ -134,12 +136,12 @@ func (a *App) findMatchingRule(ruleMatcher *matcher.RuleMatcher, event hooks.Hoo
 		}
 
 		// Create template context with project information
-		context := make(map[string]any)
+		templateContext := make(map[string]any)
 		if a.projectRoot != "" {
-			context["ProjectRoot"] = a.projectRoot
+			templateContext["ProjectRoot"] = a.projectRoot
 		}
 
-		rule, err := ruleMatcher.MatchWithContext(strValue, event.ToolName, context)
+		rule, err := ruleMatcher.MatchWithContext(strValue, event.ToolName, templateContext)
 		if err != nil {
 			if errors.Is(err, matcher.ErrNoRuleMatch) {
 				continue // Try next field
@@ -155,34 +157,40 @@ func (a *App) findMatchingRule(ruleMatcher *matcher.RuleMatcher, event hooks.Hoo
 	return nil, "", nil
 }
 
-func (a *App) ProcessHook(input io.Reader) (string, error) {
+func (a *App) ProcessHook(ctx context.Context, input io.Reader) (string, error) {
+	return a.processHookWithContext(ctx, input)
+}
+
+func (a *App) processHookWithContext(ctx context.Context, input io.Reader) (string, error) {
+	logger := zerolog.Ctx(ctx)
+
 	if os.Getenv("BUMPERS_SKIP") == "1" {
-		log.Debug().Msg("BUMPERS_SKIP is set, skipping hook processing")
+		logger.Debug().Msg("BUMPERS_SKIP is set, skipping hook processing")
 		return "", nil
 	}
 
-	log.Debug().Msg("processing hook input")
+	logger.Debug().Msg("processing hook input")
 
 	// Detect hook type and get raw JSON
 	hookType, rawJSON, err := hooks.DetectHookType(input)
 	if err != nil {
-		log.Error().Err(err).Msg("Failed to detect hook type")
+		logger.Error().Err(err).Msg("Failed to detect hook type")
 		return "", fmt.Errorf("failed to detect hook type: %w", err)
 	}
-	log.Debug().RawJSON("hook", rawJSON).Str("type", hookType.String()).Msg("received hook")
+	logger.Debug().RawJSON("hook", rawJSON).Str("type", hookType.String()).Msg("received hook")
 
 	// Route to appropriate handler based on hook type
 	if hookType == hooks.UserPromptSubmitHook {
-		log.Debug().Msg("processing UserPromptSubmit hook")
-		return a.ProcessUserPrompt(rawJSON)
+		logger.Debug().Msg("processing UserPromptSubmit hook")
+		return a.ProcessUserPrompt(ctx, rawJSON)
 	}
 	if hookType == hooks.SessionStartHook {
-		log.Debug().Msg("processing SessionStart hook")
-		return a.ProcessSessionStart(rawJSON)
+		logger.Debug().Msg("processing SessionStart hook")
+		return a.ProcessSessionStart(ctx, rawJSON)
 	}
 	if hookType == hooks.PostToolUseHook {
-		log.Debug().Msg("processing PostToolUse hook")
-		return a.ProcessPostToolUse(rawJSON)
+		logger.Debug().Msg("processing PostToolUse hook")
+		return a.ProcessPostToolUse(ctx, rawJSON)
 	}
 	// Handle PreToolUse and other hooks
 	return a.processPreToolUse(rawJSON)
@@ -311,12 +319,12 @@ func (a *App) matchRuleContent(
 	content string, rule *config.Rule, ruleMatcher *matcher.RuleMatcher, toolName string,
 ) (matched bool, matchedContent string) {
 	// Create template context with project information
-	context := make(map[string]any)
+	templateContext := make(map[string]any)
 	if a.projectRoot != "" {
-		context["ProjectRoot"] = a.projectRoot
+		templateContext["ProjectRoot"] = a.projectRoot
 	}
 
-	foundRule, err := ruleMatcher.MatchWithContext(content, toolName, context)
+	foundRule, err := ruleMatcher.MatchWithContext(content, toolName, templateContext)
 	// Compare using pattern strings instead of interface{} values to avoid panic
 	isMatch := err == nil && foundRule != nil && foundRule.GetMatch().Pattern == rule.GetMatch().Pattern
 	if isMatch {
@@ -367,7 +375,9 @@ type postToolContent struct {
 	toolName      string
 }
 
-func (*App) extractPostToolContent(rawJSON json.RawMessage) (*postToolContent, error) {
+func (*App) extractPostToolContent(ctx context.Context, rawJSON json.RawMessage) (*postToolContent, error) {
+	logger := zerolog.Ctx(ctx)
+
 	// Parse the JSON to get transcript path and tool info
 	var event map[string]any
 	if err := json.Unmarshal(rawJSON, &event); err != nil {
@@ -384,14 +394,23 @@ func (*App) extractPostToolContent(rawJSON json.RawMessage) (*postToolContent, e
 	}
 
 	// Read transcript content for intent matching using efficient parser
-	if transcriptPath != "" {
-		log.Debug().
+	if transcriptPath != "" { //nolint:nestif // intent extraction logic complexity is acceptable
+		logger.Debug().
 			Str("toolName", toolName).
 			Str("transcriptPath", transcriptPath).
 			Msg("PostToolUse hook triggered, extracting intent")
 		intent, err := transcript.ExtractIntentContent(transcriptPath)
 		if err != nil {
-			log.Debug().Err(err).Str("transcriptPath", transcriptPath).Msg("Failed to extract intent")
+			logger.Debug().Err(err).Str("transcriptPath", transcriptPath).Msg("Failed to extract intent")
+		} else {
+			intentPreview := intent
+			if len(intent) > 100 {
+				intentPreview = intent[:100] + "..."
+			}
+			logger.Debug().
+				Str("extractedIntentLength", fmt.Sprintf("%d", len(intent))).
+				Str("intentPreview", intentPreview).
+				Msg("Intent content extracted successfully")
 		}
 		content.intent = intent
 	}
@@ -484,8 +503,9 @@ func findMatchingToolOutputField(sources []string, toolOutputMap map[string]any)
 	return "", false
 }
 
-func (a *App) ProcessPostToolUse(rawJSON json.RawMessage) (string, error) {
-	log.Debug().Msg("ProcessPostToolUse called")
+func (a *App) ProcessPostToolUse(ctx context.Context, rawJSON json.RawMessage) (string, error) {
+	logger := zerolog.Ctx(ctx)
+	logger.Debug().Msg("processing PostToolUse hook")
 
 	// Load config for rule matching
 	cfg, _, err := a.loadConfigAndMatcher()
@@ -493,13 +513,20 @@ func (a *App) ProcessPostToolUse(rawJSON json.RawMessage) (string, error) {
 		return "", err
 	}
 
-	content, err := a.extractPostToolContent(rawJSON)
+	content, err := a.extractPostToolContent(ctx, rawJSON)
 	if err != nil {
 		return "", err
 	}
 
+	logger.Debug().
+		Str("intentContentLength", fmt.Sprintf("%d", len(content.intent))).
+		Int("toolOutputFieldCount", len(content.toolOutputMap)).
+		Str("toolName", content.toolName).
+		Msg("PostToolUse content extracted for rule matching")
+
 	// Skip if no content to match against (neither intent nor tool output)
 	if content.intent == "" && len(content.toolOutputMap) == 0 {
+		logger.Debug().Msg("No content to match against - skipping PostToolUse processing")
 		return "", nil
 	}
 
@@ -555,12 +582,12 @@ func (a *App) TestCommand(command string) (string, error) {
 	}
 
 	// Create template context with project information
-	context := make(map[string]any)
+	templateContext := make(map[string]any)
 	if a.projectRoot != "" {
-		context["ProjectRoot"] = a.projectRoot
+		templateContext["ProjectRoot"] = a.projectRoot
 	}
 
-	rule, err := ruleMatcher.MatchWithContext(command, "Bash", context)
+	rule, err := ruleMatcher.MatchWithContext(command, "Bash", templateContext)
 	if err != nil {
 		if errors.Is(err, matcher.ErrNoRuleMatch) {
 			// No rule matched, command is allowed

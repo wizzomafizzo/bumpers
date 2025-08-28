@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -18,13 +19,129 @@ import (
 	"github.com/wizzomafizzo/bumpers/internal/platform/claude/api"
 	"github.com/wizzomafizzo/bumpers/internal/platform/filesystem"
 	"github.com/wizzomafizzo/bumpers/internal/platform/storage"
-	"github.com/wizzomafizzo/bumpers/internal/testing"
+	testutil "github.com/wizzomafizzo/bumpers/internal/testing"
 )
 
-// setupTest initializes test logger to prevent race conditions
-func setupTest(t *testing.T) {
+// setupTestWithContext creates a context with logger for race-safe testing
+func setupTestWithContext(t *testing.T) (ctx context.Context, getLogOutput func() string) {
 	t.Helper()
-	testutil.InitTestLogger(t)
+	return testutil.NewTestContext(t)
+}
+
+// TestProcessHookWithContext tests that ProcessHook can accept context for race-safe logging
+func TestProcessHookWithContext(t *testing.T) {
+	t.Parallel()
+	ctx, getLogs := setupTestWithContext(t)
+
+	// Create a temporary config
+	configContent := `
+rules: []
+`
+	configPath := createTempConfig(t, configContent)
+
+	// Create app
+	app := NewApp(configPath)
+
+	// Create a simple hook input - UserPromptSubmit with no matching rules
+	input := `{"hook_event":"user_prompt_submit","intent":"echo hello"}`
+	reader := strings.NewReader(input)
+
+	// This should not fail and should accept context
+	result, err := app.ProcessHook(ctx, reader)
+
+	// Should not return an error
+	require.NoError(t, err)
+	assert.Empty(t, result) // No rules to match
+
+	// Should be able to capture logs without race conditions
+	logOutput := getLogs()
+	assert.Contains(t, logOutput, "processing hook input")
+}
+
+// TestProcessUserPromptWithContext tests that ProcessUserPrompt can accept context for race-safe logging
+func TestProcessUserPromptWithContext(t *testing.T) {
+	t.Parallel()
+	ctx, getLogs := setupTestWithContext(t)
+
+	// Create a temporary config with commands
+	configContent := `
+commands:
+  - name: "test"
+    send: "Test command executed"
+`
+	configFile := createTempConfig(t, configContent)
+	app := NewApp(configFile)
+
+	// Create UserPromptSubmit event with command
+	promptJSON := `{"prompt": "$test"}`
+
+	// Test that ProcessUserPrompt works with context - this will fail until we add context parameter
+	result, err := app.ProcessUserPrompt(ctx, json.RawMessage(promptJSON))
+	require.NoError(t, err)
+	assert.Contains(t, result, "Test command executed")
+
+	// Verify that logs were captured without race conditions
+	logs := getLogs()
+	assert.Contains(t, logs, "processing UserPromptSubmit with prompt")
+}
+
+// TestProcessSessionStartWithContext tests that ProcessSessionStart can accept context for race-safe logging
+func TestProcessSessionStartWithContext(t *testing.T) {
+	t.Parallel()
+	ctx, getLogs := setupTestWithContext(t)
+
+	// Create a temporary config with session notes
+	configContent := `
+session:
+  - add: "Session started with test context"
+`
+	configFile := createTempConfig(t, configContent)
+	app := NewApp(configFile)
+
+	// Create SessionStart event
+	sessionJSON := `{"session_id": "test123", "hook_event_name": "SessionStart", "source": "startup"}`
+
+	// Test that ProcessSessionStart works with context - this will fail until we add context parameter
+	result, err := app.ProcessSessionStart(ctx, json.RawMessage(sessionJSON))
+	require.NoError(t, err)
+	assert.Contains(t, result, "Session started with test context")
+
+	// Verify that logs were captured without race conditions
+	logs := getLogs()
+	assert.Contains(t, logs, "processing SessionStart hook")
+}
+
+// TestProcessPostToolUseWithContext tests that ProcessPostToolUse can accept context for race-safe logging
+func TestProcessPostToolUseWithContext(t *testing.T) {
+	t.Parallel()
+	ctx, getLogs := setupTestWithContext(t)
+
+	// Create a temporary config with post-tool rules
+	configContent := `
+rules:
+  - match:
+      pattern: "test content"
+      event: "post"
+    send: "Post tool use message"
+`
+	configFile := createTempConfig(t, configContent)
+	app := NewApp(configFile)
+
+	// Create PostToolUse event
+	postToolJSON := `{
+		"tool_name": "TestTool",
+		"tool_response": "test content",
+		"transcript_path": ""
+	}`
+
+	// Test that ProcessPostToolUse works with context - this will fail until we add context parameter
+	result, err := app.ProcessPostToolUse(ctx, json.RawMessage(postToolJSON))
+	require.NoError(t, err)
+	assert.Contains(t, result, "Post tool use message")
+
+	// Verify that logs were captured without race conditions
+	logs := getLogs()
+	assert.Contains(t, logs, "processing PostToolUse hook")
 }
 
 // createTempConfig creates a temporary config file for testing
@@ -39,8 +156,19 @@ func createTempConfig(t *testing.T, content string) string {
 	return configPath
 }
 
+// createTempTranscript creates a temporary transcript file for testing
+func createTempTranscript(t *testing.T, content string) string {
+	t.Helper()
+	tempDir := t.TempDir()
+	transcriptPath := filepath.Join(tempDir, "test-transcript.jsonl")
+	err := os.WriteFile(transcriptPath, []byte(content), 0o600)
+	if err != nil {
+		t.Fatalf("Failed to create temp transcript: %v", err)
+	}
+	return transcriptPath
+}
+
 func TestNewAppWithWorkDir(t *testing.T) {
-	setupTest(t)
 	t.Parallel()
 
 	configPath := "/path/to/config.yml"
@@ -53,7 +181,6 @@ func TestNewAppWithWorkDir(t *testing.T) {
 }
 
 func TestCustomConfigPathLoading(t *testing.T) {
-	setupTest(t)
 	t.Parallel()
 
 	// Create a custom config with a specific rule
@@ -79,7 +206,6 @@ func TestCustomConfigPathLoading(t *testing.T) {
 
 // TestAppWithMemoryFileSystem tests App initialization with in-memory filesystem for parallel testing
 func TestAppWithMemoryFileSystem(t *testing.T) {
-	setupTest(t)
 	t.Parallel()
 
 	// Setup in-memory filesystem with test config
@@ -119,7 +245,6 @@ func TestAppWithMemoryFileSystem(t *testing.T) {
 
 // TestAppInitializeWithMemoryFileSystem tests that Initialize works with injected filesystem
 func TestAppInitializeWithMemoryFileSystem(t *testing.T) {
-	setupTest(t)
 	t.Parallel()
 
 	// Setup in-memory filesystem with test config
@@ -162,7 +287,6 @@ func TestAppInitializeWithMemoryFileSystem(t *testing.T) {
 }
 
 func TestInstallClaudeHooksWithWorkDir(t *testing.T) {
-	setupTest(t)
 	t.Parallel()
 
 	tempDir := t.TempDir()
@@ -199,7 +323,7 @@ func TestInstallClaudeHooksWithWorkDir(t *testing.T) {
 
 func TestProcessHook(t *testing.T) {
 	t.Parallel()
-	setupTest(t)
+	ctx, _ := setupTestWithContext(t)
 
 	configContent := `rules:
   - match: "go test"
@@ -220,7 +344,7 @@ func TestProcessHook(t *testing.T) {
 		"tool_name": "Bash"
 	}`
 
-	response, err := app.ProcessHook(strings.NewReader(hookInput))
+	response, err := app.ProcessHook(ctx, strings.NewReader(hookInput))
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -237,7 +361,7 @@ func TestProcessHook(t *testing.T) {
 
 func TestProcessHookAllowed(t *testing.T) {
 	t.Parallel()
-	setupTest(t)
+	ctx, _ := setupTestWithContext(t)
 
 	configContent := `rules:
   - match: "go test"
@@ -253,7 +377,7 @@ func TestProcessHookAllowed(t *testing.T) {
 		}
 	}`
 
-	response, err := app.ProcessHook(strings.NewReader(hookInput))
+	response, err := app.ProcessHook(ctx, strings.NewReader(hookInput))
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -266,7 +390,7 @@ func TestProcessHookAllowed(t *testing.T) {
 
 func TestProcessHookDangerousCommand(t *testing.T) {
 	t.Parallel()
-	setupTest(t)
+	ctx, _ := setupTestWithContext(t)
 
 	configContent := `rules:
   - match: "rm -rf /*"
@@ -294,7 +418,7 @@ func TestProcessHookDangerousCommand(t *testing.T) {
 		"tool_name": "Bash"
 	}`
 
-	response, err := app.ProcessHook(strings.NewReader(hookInput))
+	response, err := app.ProcessHook(ctx, strings.NewReader(hookInput))
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -307,7 +431,7 @@ func TestProcessHookDangerousCommand(t *testing.T) {
 
 func TestProcessHookPatternMatching(t *testing.T) {
 	t.Parallel()
-	setupTest(t)
+	ctx, _ := setupTestWithContext(t)
 
 	configContent := `rules:
   - match: "go test"
@@ -328,7 +452,7 @@ func TestProcessHookPatternMatching(t *testing.T) {
 		"tool_name": "Bash"
 	}`
 
-	response, err := app.ProcessHook(strings.NewReader(hookInput))
+	response, err := app.ProcessHook(ctx, strings.NewReader(hookInput))
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -345,7 +469,7 @@ func TestProcessHookPatternMatching(t *testing.T) {
 
 func TestConfigurationIsUsed(t *testing.T) {
 	t.Parallel()
-	setupTest(t)
+	ctx, _ := setupTestWithContext(t)
 
 	// This test ensures we're actually using the config file by checking for
 	// a specific message from the config rather than hardcoded responses
@@ -365,7 +489,7 @@ func TestConfigurationIsUsed(t *testing.T) {
 		"tool_name": "Bash"
 	}`
 
-	response, err := app.ProcessHook(strings.NewReader(hookInput))
+	response, err := app.ProcessHook(ctx, strings.NewReader(hookInput))
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -377,7 +501,6 @@ func TestConfigurationIsUsed(t *testing.T) {
 }
 
 func TestTestCommand(t *testing.T) {
-	setupTest(t)
 	t.Parallel()
 
 	configContent := `rules:
@@ -399,7 +522,6 @@ func TestTestCommand(t *testing.T) {
 }
 
 func TestInitialize(t *testing.T) {
-	setupTest(t)
 	t.Parallel()
 	tempDir := t.TempDir()
 	configPath := filepath.Join(tempDir, "bumpers.yml")
@@ -432,7 +554,6 @@ func TestInitialize(t *testing.T) {
 }
 
 func TestStatus(t *testing.T) {
-	setupTest(t)
 	t.Parallel()
 
 	configContent := `rules:
@@ -454,7 +575,6 @@ func TestStatus(t *testing.T) {
 }
 
 func TestStatusEnhanced(t *testing.T) {
-	setupTest(t)
 	t.Parallel()
 
 	tempDir := t.TempDir()
@@ -495,7 +615,6 @@ func TestStatusEnhanced(t *testing.T) {
 
 func TestInstallUsesProjectClaudeDirectory(t *testing.T) {
 	t.Parallel()
-	setupTest(t)
 	tempDir := t.TempDir()
 	configPath := filepath.Join(tempDir, "bumpers.yml")
 
@@ -528,7 +647,6 @@ func TestInstallUsesProjectClaudeDirectory(t *testing.T) {
 }
 
 func TestInitializeInstallsClaudeHooksInProjectDirectory(t *testing.T) {
-	setupTest(t)
 	t.Parallel()
 	// Test resets shared logger state
 	tempDir := t.TempDir()
@@ -585,7 +703,7 @@ func TestInitializeInstallsClaudeHooksInProjectDirectory(t *testing.T) {
 }
 
 func TestProcessHookLogsErrors(t *testing.T) {
-	setupTest(t)
+	ctx, _ := setupTestWithContext(t)
 	t.Parallel()
 	tempDir := t.TempDir()
 
@@ -603,7 +721,7 @@ func TestProcessHookLogsErrors(t *testing.T) {
 	}`
 
 	// This should trigger an error (logging is a side effect we can't easily test with global logger)
-	result, err := app.ProcessHook(strings.NewReader(hookInput))
+	result, err := app.ProcessHook(ctx, strings.NewReader(hookInput))
 	if err == nil {
 		t.Fatalf("Expected ProcessHook to return error for non-existent config, got result: %s", result)
 	}
@@ -615,7 +733,6 @@ func TestProcessHookLogsErrors(t *testing.T) {
 }
 
 func TestInstallActuallyAddsHook(t *testing.T) {
-	setupTest(t)
 	t.Parallel()
 	tempDir := t.TempDir()
 	configPath := filepath.Join(tempDir, "bumpers.yml")
@@ -660,7 +777,6 @@ func TestInstallActuallyAddsHook(t *testing.T) {
 }
 
 func TestInstallCreatesBothHooks(t *testing.T) {
-	setupTest(t)
 	t.Parallel()
 	tempDir := t.TempDir()
 	configPath := filepath.Join(tempDir, "bumpers.yml")
@@ -739,7 +855,6 @@ func TestInstallCreatesBothHooks(t *testing.T) {
 }
 
 func TestProcessHookSimplifiedSchemaAlwaysDenies(t *testing.T) {
-	setupTest(t)
 	t.Parallel()
 
 	// Setup test config with simplified schema (no name or action fields)
@@ -764,7 +879,7 @@ func TestProcessHookSimplifiedSchemaAlwaysDenies(t *testing.T) {
 		},
 		"tool_name": "Bash"
 	}`
-	result1, err := app.ProcessHook(strings.NewReader(hookInput1))
+	result1, err := app.ProcessHook(context.Background(), strings.NewReader(hookInput1))
 	if err != nil {
 		t.Fatalf("ProcessHook failed: %v", err)
 	}
@@ -780,7 +895,7 @@ func TestProcessHookSimplifiedSchemaAlwaysDenies(t *testing.T) {
 		},
 		"tool_name": "Bash"
 	}`
-	result2, err := app.ProcessHook(strings.NewReader(hookInput2))
+	result2, err := app.ProcessHook(context.Background(), strings.NewReader(hookInput2))
 	if err != nil {
 		t.Fatalf("ProcessHook failed: %v", err)
 	}
@@ -795,7 +910,7 @@ func TestProcessHookSimplifiedSchemaAlwaysDenies(t *testing.T) {
 			"description": "Build project"
 		}
 	}`
-	result3, err := app.ProcessHook(strings.NewReader(hookInput3))
+	result3, err := app.ProcessHook(context.Background(), strings.NewReader(hookInput3))
 	if err != nil {
 		t.Fatalf("ProcessHook failed: %v", err)
 	}
@@ -805,7 +920,6 @@ func TestProcessHookSimplifiedSchemaAlwaysDenies(t *testing.T) {
 }
 
 func TestCommandWithoutBlockedPrefix(t *testing.T) {
-	setupTest(t)
 	t.Parallel()
 
 	// Test that TestCommand doesn't add "Command blocked:" prefix
@@ -862,7 +976,6 @@ func validateProductionEnvironment(t *testing.T, err error, prodLikeDir string) 
 }
 
 func TestInstallHandlesMissingBumpersBinary(t *testing.T) {
-	setupTest(t)
 	t.Parallel()
 	// Use a directory name that won't trigger test environment detection
 	tempDir := t.TempDir()
@@ -898,9 +1011,7 @@ func TestInstallHandlesMissingBumpersBinary(t *testing.T) {
 }
 
 func TestHookInstallationDoesNotIncludeTimeout(t *testing.T) {
-	setupTest(t)
 	t.Parallel()
-	setupTest(t)
 	tempDir := t.TempDir()
 	configPath := filepath.Join(tempDir, "bumpers.yml")
 
@@ -950,7 +1061,6 @@ func TestHookInstallationDoesNotIncludeTimeout(t *testing.T) {
 }
 
 func TestInitializeInitializesLogger(t *testing.T) {
-	setupTest(t)
 	t.Parallel()
 	tempDir := t.TempDir()
 	configPath := filepath.Join(tempDir, "bumpers.yml")
@@ -978,7 +1088,6 @@ func TestInitializeInitializesLogger(t *testing.T) {
 }
 
 func TestValidateConfig(t *testing.T) {
-	setupTest(t)
 	t.Parallel()
 
 	configContent := `rules:
@@ -1003,7 +1112,6 @@ func TestValidateConfig(t *testing.T) {
 }
 
 func TestInstallUsesPathConstants(t *testing.T) {
-	setupTest(t)
 	t.Parallel()
 	tempDir := t.TempDir()
 
@@ -1126,7 +1234,6 @@ rules:
 }
 
 func TestNewApp_ProjectRootDetection(t *testing.T) {
-	setupTest(t)
 	t.Parallel()
 
 	projectDir, subDir, cleanup := setupProjectStructure(t, "bumpers.yml")
@@ -1155,7 +1262,6 @@ func TestNewApp_ProjectRootDetection(t *testing.T) {
 }
 
 func TestInstall_UsesProjectRoot(t *testing.T) {
-	setupTest(t)
 	t.Parallel()
 
 	projectDir, subDir, cleanup := setupProjectStructure(t, "bumpers.yml")
@@ -1245,9 +1351,7 @@ func testNewAppAutoFindsConfigFile(t *testing.T, configFileName string) {
 }
 
 func TestNewApp_AutoFindsConfigFile(t *testing.T) {
-	setupTest(t)
 	t.Parallel()
-	setupTest(t)
 	testNewAppAutoFindsConfigFile(t, "bumpers.yaml")
 }
 
@@ -1258,7 +1362,6 @@ func TestNewApp_AutoFindsTomlConfigFile(t *testing.T) {
 
 func TestNewApp_AutoFindsJsonConfigFile(t *testing.T) {
 	t.Parallel()
-	setupTest(t)
 	testNewAppAutoFindsConfigFile(t, "bumpers.json")
 }
 
@@ -1362,7 +1465,6 @@ func createAppWithPrecedenceConfig(projectDir, subDir string) *App {
 
 func TestProcessHookRoutesUserPromptSubmit(t *testing.T) {
 	t.Parallel()
-	setupTest(t)
 
 	configContent := `rules:
   - match: "go test"
@@ -1384,7 +1486,7 @@ commands:
 		"prompt": "$help"
 	}`
 
-	result, err := app.ProcessHook(strings.NewReader(userPromptInput))
+	result, err := app.ProcessHook(context.Background(), strings.NewReader(userPromptInput))
 	if err != nil {
 		t.Fatalf("ProcessHook failed for UserPromptSubmit: %v", err)
 	}
@@ -1460,7 +1562,7 @@ commands:
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			result, err := app.ProcessUserPrompt(json.RawMessage(tt.input))
+			result, err := app.ProcessUserPrompt(context.Background(), json.RawMessage(tt.input))
 
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ProcessUserPrompt() error = %v, wantErr %v", err, tt.wantErr)
@@ -1490,7 +1592,7 @@ commands:
 
 	// Test that named command prompts work
 	promptJSON := `{"prompt": "$test"}`
-	result, err := app.ProcessUserPrompt(json.RawMessage(promptJSON))
+	result, err := app.ProcessUserPrompt(context.Background(), json.RawMessage(promptJSON))
 	if err != nil {
 		t.Fatalf("ProcessUserPrompt failed: %v", err)
 	}
@@ -1519,7 +1621,7 @@ func TestProcessUserPromptWithCommandGeneration(t *testing.T) {
 	app.SetMockLauncher(mockLauncher)
 
 	promptJSON := `{"prompt": "$help"}`
-	result, err := app.ProcessUserPrompt(json.RawMessage(promptJSON))
+	result, err := app.ProcessUserPrompt(context.Background(), json.RawMessage(promptJSON))
 	if err != nil {
 		t.Fatalf("ProcessUserPrompt failed: %v", err)
 	}
@@ -1551,7 +1653,7 @@ commands:
 
 	// Test that % prefix no longer works
 	oldPrefixJSON := `{"prompt": "%test"}`
-	result, err := app.ProcessUserPrompt(json.RawMessage(oldPrefixJSON))
+	result, err := app.ProcessUserPrompt(context.Background(), json.RawMessage(oldPrefixJSON))
 	if err != nil {
 		t.Fatalf("ProcessUserPrompt failed for old prefix: %v", err)
 	}
@@ -1562,7 +1664,7 @@ commands:
 
 	// Test new behavior with $ prefix
 	newPrefixJSON := `{"prompt": "$test"}`
-	result, err = app.ProcessUserPrompt(json.RawMessage(newPrefixJSON))
+	result, err = app.ProcessUserPrompt(context.Background(), json.RawMessage(newPrefixJSON))
 	if err != nil {
 		t.Fatalf("ProcessUserPrompt failed for new prefix: %v", err)
 	}
@@ -1576,7 +1678,7 @@ commands:
 
 func TestProcessUserPromptWithTemplate(t *testing.T) {
 	t.Parallel()
-	setupTest(t)
+	ctx, _ := setupTestWithContext(t)
 
 	configContent := `commands:
   - name: "hello"
@@ -1587,7 +1689,7 @@ func TestProcessUserPromptWithTemplate(t *testing.T) {
 	app := NewApp(configPath)
 
 	promptJSON := `{"prompt": "$hello"}`
-	result, err := app.ProcessUserPrompt(json.RawMessage(promptJSON))
+	result, err := app.ProcessUserPrompt(ctx, json.RawMessage(promptJSON))
 	if err != nil {
 		t.Fatalf("ProcessUserPrompt failed: %v", err)
 	}
@@ -1600,7 +1702,6 @@ func TestProcessUserPromptWithTemplate(t *testing.T) {
 }
 
 func TestInstallWithPathCommand(t *testing.T) { //nolint:paralleltest // modifies global os.Args
-	setupTest(t)
 	// Don't run in parallel as we modify global os.Args
 
 	// Save original args
@@ -1733,7 +1834,7 @@ func TestProcessHookWorks(t *testing.T) {
 		"tool_name": "Bash"
 	}`
 
-	_, err := app.ProcessHook(strings.NewReader(hookInput))
+	_, err := app.ProcessHook(context.Background(), strings.NewReader(hookInput))
 	if err != nil {
 		t.Fatalf("ProcessHook failed: %v", err)
 	}
@@ -1756,7 +1857,7 @@ func TestProcessHookPreToolUseMatchesCommand(t *testing.T) {
 		"tool_name": "Bash"
 	}`
 
-	response, err := app.ProcessHook(strings.NewReader(hookInput))
+	response, err := app.ProcessHook(context.Background(), strings.NewReader(hookInput))
 	require.NoError(t, err)
 	assert.NotEmpty(t, response, "Should deny command with message")
 	assert.Contains(t, response, "Use file explorer instead")
@@ -1782,7 +1883,7 @@ func TestProcessHookPreToolUseRespectsEventField(t *testing.T) {
 		"tool_name": "Bash"
 	}`
 
-	response, err := app.ProcessHook(strings.NewReader(hookInput))
+	response, err := app.ProcessHook(context.Background(), strings.NewReader(hookInput))
 	require.NoError(t, err)
 	assert.Empty(t, response, "Rule with event=post should not match PreToolUse hooks")
 }
@@ -1807,14 +1908,13 @@ func TestProcessHookPreToolUseSourcesFiltering(t *testing.T) {
 		"tool_name": "Bash"
 	}`
 
-	response, err := app.ProcessHook(strings.NewReader(hookInput))
+	response, err := app.ProcessHook(context.Background(), strings.NewReader(hookInput))
 	require.NoError(t, err)
 	assert.Empty(t, response, "Rule with sources=[command] should not match description field")
 }
 
 func TestProcessHookRoutesSessionStart(t *testing.T) {
 	t.Parallel()
-	setupTest(t)
 
 	configContent := `rules:
   - match: "go test"
@@ -1836,7 +1936,7 @@ session:
 		"source": "startup"
 	}`
 
-	result, err := app.ProcessHook(strings.NewReader(sessionStartInput))
+	result, err := app.ProcessHook(context.Background(), strings.NewReader(sessionStartInput))
 	if err != nil {
 		t.Fatalf("ProcessHook failed for SessionStart: %v", err)
 	}
@@ -1850,7 +1950,6 @@ session:
 
 func TestProcessSessionStartWithDifferentNotes(t *testing.T) {
 	t.Parallel()
-	setupTest(t)
 
 	configContent := `rules:
   - match: "go test"
@@ -1869,7 +1968,7 @@ session:
 		"source": "startup"
 	}`
 
-	result, err := app.ProcessHook(strings.NewReader(sessionStartInput))
+	result, err := app.ProcessHook(context.Background(), strings.NewReader(sessionStartInput))
 	if err != nil {
 		t.Fatalf("ProcessHook failed for SessionStart: %v", err)
 	}
@@ -1883,7 +1982,6 @@ session:
 
 func TestProcessSessionStartIgnoresResume(t *testing.T) {
 	t.Parallel()
-	setupTest(t)
 
 	configContent := `session:
   - add: "Should not appear"`
@@ -1897,7 +1995,7 @@ func TestProcessSessionStartIgnoresResume(t *testing.T) {
 		"source": "resume"
 	}`
 
-	result, err := app.ProcessHook(strings.NewReader(sessionStartInput))
+	result, err := app.ProcessHook(context.Background(), strings.NewReader(sessionStartInput))
 	if err != nil {
 		t.Fatalf("ProcessHook failed for SessionStart: %v", err)
 	}
@@ -1910,7 +2008,6 @@ func TestProcessSessionStartIgnoresResume(t *testing.T) {
 
 func TestProcessSessionStartWorksWithClear(t *testing.T) {
 	t.Parallel()
-	setupTest(t)
 
 	configContent := `session:
   - add: "Clear message"
@@ -1925,7 +2022,7 @@ func TestProcessSessionStartWorksWithClear(t *testing.T) {
 		"source": "clear"
 	}`
 
-	result, err := app.ProcessHook(strings.NewReader(sessionStartInput))
+	result, err := app.ProcessHook(context.Background(), strings.NewReader(sessionStartInput))
 	if err != nil {
 		t.Fatalf("ProcessHook failed for SessionStart: %v", err)
 	}
@@ -1939,7 +2036,6 @@ func TestProcessSessionStartWorksWithClear(t *testing.T) {
 
 func TestProcessSessionStartWithTemplate(t *testing.T) {
 	t.Parallel()
-	setupTest(t)
 
 	configContent := `session:
   - add: "Hello from template!"
@@ -1954,7 +2050,7 @@ func TestProcessSessionStartWithTemplate(t *testing.T) {
 		"source": "startup"
 	}`
 
-	result, err := app.ProcessHook(strings.NewReader(sessionStartInput))
+	result, err := app.ProcessHook(context.Background(), strings.NewReader(sessionStartInput))
 	if err != nil {
 		t.Fatalf("ProcessHook failed for SessionStart: %v", err)
 	}
@@ -1969,7 +2065,6 @@ func TestProcessSessionStartWithTemplate(t *testing.T) {
 
 func TestProcessHookWithTemplate(t *testing.T) {
 	t.Parallel()
-	setupTest(t)
 
 	configContent := `rules:
   - match: "go test"
@@ -1987,7 +2082,7 @@ func TestProcessHookWithTemplate(t *testing.T) {
 		"tool_name": "Bash"
 	}`
 
-	response, err := app.ProcessHook(strings.NewReader(hookInput))
+	response, err := app.ProcessHook(context.Background(), strings.NewReader(hookInput))
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -2000,7 +2095,6 @@ func TestProcessHookWithTemplate(t *testing.T) {
 
 func TestProcessHookWithTemplatePattern(t *testing.T) {
 	t.Parallel()
-	setupTest(t)
 
 	// Setup a temporary project directory with config
 	projectDir := t.TempDir()
@@ -2026,7 +2120,7 @@ func TestProcessHookWithTemplatePattern(t *testing.T) {
 		"tool_name": "Read"
 	}`, projectDir)
 
-	response, err := app.ProcessHook(strings.NewReader(hookInput))
+	response, err := app.ProcessHook(context.Background(), strings.NewReader(hookInput))
 	require.NoError(t, err, "Expected no error for main config file")
 
 	expectedMessage := "Bumpers configuration file should not be accessed."
@@ -2045,7 +2139,7 @@ func TestProcessHookWithTemplatePattern(t *testing.T) {
 		"tool_name": "Read"
 	}`, projectDir)
 
-	response2, err2 := app.ProcessHook(strings.NewReader(hookInputTest))
+	response2, err2 := app.ProcessHook(context.Background(), strings.NewReader(hookInputTest))
 	// This should NOT match the rule, so we expect no error and empty response (command allowed)
 	require.NoError(t, err2, "Expected no error for non-matching file")
 	assert.Empty(t, response2, "Template pattern should not match test files, so command should be allowed")
@@ -2053,7 +2147,6 @@ func TestProcessHookWithTemplatePattern(t *testing.T) {
 
 func TestProcessHookWithTodayVariable(t *testing.T) {
 	t.Parallel()
-	setupTest(t)
 
 	configContent := `rules:
   - match: "go test"
@@ -2071,7 +2164,7 @@ func TestProcessHookWithTodayVariable(t *testing.T) {
 		"tool_name": "Bash"
 	}`
 
-	response, err := app.ProcessHook(strings.NewReader(hookInput))
+	response, err := app.ProcessHook(context.Background(), strings.NewReader(hookInput))
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -2108,7 +2201,7 @@ func TestTestCommandWithTodayVariable(t *testing.T) {
 
 func TestProcessUserPromptWithTodayVariable(t *testing.T) {
 	t.Parallel()
-	setupTest(t)
+	ctx, _ := setupTestWithContext(t)
 
 	configContent := `commands:
   - name: "hello"
@@ -2119,7 +2212,7 @@ func TestProcessUserPromptWithTodayVariable(t *testing.T) {
 	app := NewApp(configPath)
 
 	promptJSON := `{"prompt": "$hello"}`
-	result, err := app.ProcessUserPrompt(json.RawMessage(promptJSON))
+	result, err := app.ProcessUserPrompt(ctx, json.RawMessage(promptJSON))
 	if err != nil {
 		t.Fatalf("ProcessUserPrompt failed: %v", err)
 	}
@@ -2149,7 +2242,7 @@ func TestProcessUserPromptWithTodayVariable(t *testing.T) {
 
 func TestProcessSessionStartWithTodayVariable(t *testing.T) {
 	t.Parallel()
-	setupTest(t)
+	ctx, _ := setupTestWithContext(t)
 
 	configContent := `session:
   - add: "Today is {{.Today}}"
@@ -2164,7 +2257,7 @@ func TestProcessSessionStartWithTodayVariable(t *testing.T) {
 		"source": "startup"
 	}`
 
-	result, err := app.ProcessSessionStart(json.RawMessage(sessionStartInput))
+	result, err := app.ProcessSessionStart(ctx, json.RawMessage(sessionStartInput))
 	if err != nil {
 		t.Fatalf("ProcessSessionStart failed: %v", err)
 	}
@@ -2193,7 +2286,7 @@ func TestProcessSessionStartWithTodayVariable(t *testing.T) {
 }
 
 func TestProcessSessionStartClearsSessionCache(t *testing.T) { //nolint:paralleltest // t.Setenv() usage
-	setupTest(t)
+	ctx, _ := setupTestWithContext(t)
 
 	app, cachePath, tempDir := setupSessionCacheTest(t)
 	populateSessionCache(t, cachePath, tempDir)
@@ -2205,7 +2298,7 @@ func TestProcessSessionStartClearsSessionCache(t *testing.T) { //nolint:parallel
 	}`
 
 	// Process session start should clear session cache
-	_, err := app.ProcessSessionStart(json.RawMessage(sessionStartInput))
+	_, err := app.ProcessSessionStart(ctx, json.RawMessage(sessionStartInput))
 	if err != nil {
 		t.Fatalf("ProcessSessionStart failed: %v", err)
 	}
@@ -2289,7 +2382,7 @@ func verifySessionCacheCleared(t *testing.T, cachePath, tempDir string) {
 
 func TestProcessSessionStartWithAIGeneration(t *testing.T) {
 	t.Parallel()
-	setupTest(t)
+	ctx, _ := setupTestWithContext(t)
 
 	configContent := `session:
   - add: "Basic session message"
@@ -2309,7 +2402,7 @@ func TestProcessSessionStartWithAIGeneration(t *testing.T) {
 		"source": "startup"
 	}`
 
-	result, err := app.ProcessHook(strings.NewReader(sessionStartInput))
+	result, err := app.ProcessHook(ctx, strings.NewReader(sessionStartInput))
 	if err != nil {
 		t.Fatalf("ProcessHook failed for SessionStart: %v", err)
 	}
@@ -2433,7 +2526,7 @@ func runToolNameTest(t *testing.T, app *App, tc struct {
 	expectBlock bool
 },
 ) {
-	result, err := app.ProcessHook(strings.NewReader(tc.hookInput))
+	result, err := app.ProcessHook(context.Background(), strings.NewReader(tc.hookInput))
 
 	if tc.expectBlock {
 		validateBlockedCommand(t, result, err, tc.expectMsg)
@@ -2493,7 +2586,7 @@ rules:
 		}
 	}`
 
-	result, err := app.ProcessHook(strings.NewReader(hookInput1))
+	result, err := app.ProcessHook(context.Background(), strings.NewReader(hookInput1))
 	// Empty tool name should NOT match Bash-only rules
 	if err != nil {
 		t.Errorf("Expected no error but got: %v", err)
@@ -2511,7 +2604,7 @@ rules:
 		"tool_name": "Bash"
 	}`
 
-	result2, err2 := app.ProcessHook(strings.NewReader(hookInput2))
+	result2, err2 := app.ProcessHook(context.Background(), strings.NewReader(hookInput2))
 
 	// This should be blocked
 	if err2 != nil {
@@ -2525,7 +2618,7 @@ rules:
 func TestProcessHookWithAIGeneration(t *testing.T) {
 	t.Parallel()
 
-	setupTest(t)
+	ctx, _ := setupTestWithContext(t)
 
 	configContent := `rules:
   - match: "^go test"
@@ -2567,7 +2660,7 @@ func TestProcessHookWithAIGeneration(t *testing.T) {
 		"tool_name": "Bash"
 	}`
 
-	result, err := app.ProcessHook(strings.NewReader(hookInput))
+	result, err := app.ProcessHook(ctx, strings.NewReader(hookInput))
 	if err != nil {
 		t.Errorf("Expected no error but got: %v", err)
 	}
@@ -2593,7 +2686,7 @@ func TestProcessHookWithAIGeneration(t *testing.T) {
 	}
 
 	// Run second time - should use cache for "once" mode
-	result2, err2 := app.ProcessHook(strings.NewReader(hookInput))
+	result2, err2 := app.ProcessHook(context.Background(), strings.NewReader(hookInput))
 	if err2 != nil {
 		t.Errorf("Expected no error on second call but got: %v", err2)
 	}
@@ -2606,8 +2699,6 @@ func TestProcessHookWithAIGeneration(t *testing.T) {
 
 func TestProcessHookAIGenerationRequired(t *testing.T) {
 	t.Parallel()
-
-	setupTest(t)
 
 	// Test that AI generation is attempted when generate field is set
 	configContent := `rules:
@@ -2634,7 +2725,7 @@ func TestProcessHookAIGenerationRequired(t *testing.T) {
 		"tool_name": "Bash"
 	}`
 
-	result, err := app.ProcessHook(strings.NewReader(hookInput))
+	result, err := app.ProcessHook(context.Background(), strings.NewReader(hookInput))
 	if err != nil {
 		t.Errorf("Expected no error but got: %v", err)
 	}
@@ -2653,7 +2744,6 @@ func TestProcessHookAIGenerationRequired(t *testing.T) {
 
 func TestProcessHookWithPartiallyInvalidConfig(t *testing.T) {
 	t.Parallel()
-	setupTest(t)
 
 	// Create config with some valid and some invalid rules
 	configContent := `rules:
@@ -2682,7 +2772,7 @@ func TestProcessHookWithPartiallyInvalidConfig(t *testing.T) {
 		}
 	}`
 
-	response, err := app.ProcessHook(strings.NewReader(hookInput))
+	response, err := app.ProcessHook(context.Background(), strings.NewReader(hookInput))
 	if err != nil {
 		t.Fatalf("Expected ProcessHook to work with partial config, got error: %v", err)
 	}
@@ -2703,7 +2793,7 @@ func TestProcessHookWithPartiallyInvalidConfig(t *testing.T) {
 		}
 	}`
 
-	response2, err := app.ProcessHook(strings.NewReader(hookInput2))
+	response2, err := app.ProcessHook(context.Background(), strings.NewReader(hookInput2))
 	if err != nil {
 		t.Fatalf("Expected ProcessHook to work with second valid rule, got error: %v", err)
 	}
@@ -2720,7 +2810,7 @@ func TestProcessHookWithPartiallyInvalidConfig(t *testing.T) {
 		}
 	}`
 
-	response3, err := app.ProcessHook(strings.NewReader(hookInput3))
+	response3, err := app.ProcessHook(context.Background(), strings.NewReader(hookInput3))
 	if err != nil {
 		t.Fatalf("Expected no error for unmatched command, got: %v", err)
 	}
@@ -2732,7 +2822,6 @@ func TestProcessHookWithPartiallyInvalidConfig(t *testing.T) {
 
 func TestValidateConfigWithPartiallyInvalidConfig(t *testing.T) {
 	t.Parallel()
-	setupTest(t)
 
 	// Create config with some valid and some invalid rules
 	configContent := `rules:
@@ -2776,7 +2865,6 @@ func TestValidateConfigWithPartiallyInvalidConfig(t *testing.T) {
 
 func TestProcessHookWithAllInvalidRules(t *testing.T) {
 	t.Parallel()
-	setupTest(t)
 
 	// Create config with only invalid rules
 	configContent := `rules:
@@ -2799,7 +2887,7 @@ func TestProcessHookWithAllInvalidRules(t *testing.T) {
 		}
 	}`
 
-	response, err := app.ProcessHook(strings.NewReader(hookInput))
+	response, err := app.ProcessHook(context.Background(), strings.NewReader(hookInput))
 	if err != nil {
 		t.Fatalf("Expected ProcessHook to work even with all invalid rules, got error: %v", err)
 	}
@@ -2812,7 +2900,6 @@ func TestProcessHookWithAllInvalidRules(t *testing.T) {
 
 func TestReadToolMatching(t *testing.T) {
 	t.Parallel()
-	setupTest(t)
 
 	// Config with rule that should match Read tool accessing bumpers.yml
 	configContent := `rules:
@@ -2832,7 +2919,7 @@ func TestReadToolMatching(t *testing.T) {
 		}
 	}`
 
-	response, err := app.ProcessHook(strings.NewReader(hookInput))
+	response, err := app.ProcessHook(context.Background(), strings.NewReader(hookInput))
 	if err != nil {
 		t.Fatalf("ProcessHook failed: %v", err)
 	}
@@ -2850,7 +2937,6 @@ func TestReadToolMatching(t *testing.T) {
 
 func TestReadToolSecretsMatching(t *testing.T) {
 	t.Parallel()
-	setupTest(t)
 
 	configContent := `rules:
   - match: "secrets"
@@ -2868,7 +2954,7 @@ func TestReadToolSecretsMatching(t *testing.T) {
 		}
 	}`
 
-	response, err := app.ProcessHook(strings.NewReader(hookInput))
+	response, err := app.ProcessHook(context.Background(), strings.NewReader(hookInput))
 	if err != nil {
 		t.Fatalf("ProcessHook failed: %v", err)
 	}
@@ -2880,7 +2966,6 @@ func TestReadToolSecretsMatching(t *testing.T) {
 
 func TestGrepToolPasswordMatching(t *testing.T) {
 	t.Parallel()
-	setupTest(t)
 
 	configContent := `rules:
   - match: "password"
@@ -2899,7 +2984,7 @@ func TestGrepToolPasswordMatching(t *testing.T) {
 		}
 	}`
 
-	response, err := app.ProcessHook(strings.NewReader(hookInput))
+	response, err := app.ProcessHook(context.Background(), strings.NewReader(hookInput))
 	if err != nil {
 		t.Fatalf("ProcessHook failed: %v", err)
 	}
@@ -2911,7 +2996,6 @@ func TestGrepToolPasswordMatching(t *testing.T) {
 
 func TestWriteToolNoMatching(t *testing.T) {
 	t.Parallel()
-	setupTest(t)
 
 	configContent := `rules:
   - match: "secrets"
@@ -2930,7 +3014,7 @@ func TestWriteToolNoMatching(t *testing.T) {
 		}
 	}`
 
-	response, err := app.ProcessHook(strings.NewReader(hookInput))
+	response, err := app.ProcessHook(context.Background(), strings.NewReader(hookInput))
 	if err != nil {
 		t.Fatalf("ProcessHook failed: %v", err)
 	}
@@ -2942,7 +3026,6 @@ func TestWriteToolNoMatching(t *testing.T) {
 
 func TestFindMatchingRule(t *testing.T) {
 	t.Parallel()
-	setupTest(t)
 
 	configContent := `rules:
   - match: "secrets"
@@ -2982,7 +3065,6 @@ func TestFindMatchingRule(t *testing.T) {
 
 // TestProcessHookRoutesPostToolUse tests that PostToolUse hooks are properly routed
 func TestProcessHookRoutesPostToolUse(t *testing.T) {
-	setupTest(t)
 	t.Parallel()
 
 	configContent := `rules:
@@ -3027,7 +3109,7 @@ func TestProcessHookRoutesPostToolUse(t *testing.T) {
 		}
 	}`
 
-	result, err := app.ProcessHook(strings.NewReader(postToolUseInput))
+	result, err := app.ProcessHook(context.Background(), strings.NewReader(postToolUseInput))
 	if err != nil {
 		t.Fatalf("ProcessHook failed for PostToolUse: %v", err)
 	}
@@ -3041,7 +3123,6 @@ func TestProcessHookRoutesPostToolUse(t *testing.T) {
 
 // TestPostToolUseWithDifferentTranscript tests that PostToolUse reads actual transcript content
 func TestPostToolUseWithDifferentTranscript(t *testing.T) {
-	setupTest(t)
 	t.Parallel()
 
 	configContent := `rules:
@@ -3073,7 +3154,7 @@ func TestPostToolUseWithDifferentTranscript(t *testing.T) {
 		"tool_output": {"error": true}
 	}`
 
-	result, err := app.ProcessHook(strings.NewReader(postToolUseInput))
+	result, err := app.ProcessHook(context.Background(), strings.NewReader(postToolUseInput))
 	if err != nil {
 		t.Fatalf("ProcessHook failed: %v", err)
 	}
@@ -3094,7 +3175,6 @@ func TestPostToolUseWithDifferentTranscript(t *testing.T) {
 // TestPostToolUseRuleNotMatching tests that PostToolUse returns empty when no rules match
 func TestPostToolUseRuleNotMatching(t *testing.T) {
 	t.Parallel()
-	setupTest(t)
 
 	configContent := `rules:
   - match:
@@ -3124,7 +3204,7 @@ func TestPostToolUseRuleNotMatching(t *testing.T) {
 		"tool_output": {"success": true}
 	}`
 
-	result, err := app.ProcessHook(strings.NewReader(postToolUseInput))
+	result, err := app.ProcessHook(context.Background(), strings.NewReader(postToolUseInput))
 	if err != nil {
 		t.Fatalf("ProcessHook failed: %v", err)
 	}
@@ -3138,7 +3218,6 @@ func TestPostToolUseRuleNotMatching(t *testing.T) {
 // TestPostToolUseWithCustomPattern tests rule system integration with custom patterns
 func TestPostToolUseWithCustomPattern(t *testing.T) {
 	t.Parallel()
-	setupTest(t)
 
 	// Create a config with a custom pattern that doesn't match hardcoded patterns
 	configContent := `rules:
@@ -3171,7 +3250,7 @@ func TestPostToolUseWithCustomPattern(t *testing.T) {
 		"tool_output": {"success": false}
 	}`, transcriptPath)
 
-	result, err := app.ProcessHook(strings.NewReader(postToolUseInput))
+	result, err := app.ProcessHook(context.Background(), strings.NewReader(postToolUseInput))
 	if err != nil {
 		t.Fatalf("ProcessHook failed: %v", err)
 	}
@@ -3187,7 +3266,6 @@ func TestPostToolUseWithCustomPattern(t *testing.T) {
 // TestPostToolUseWithToolOutputMatching tests tool_output field matching
 func TestPostToolUseWithToolOutputMatching(t *testing.T) {
 	t.Parallel()
-	setupTest(t)
 
 	configContent := `rules:
   - match:
@@ -3208,7 +3286,7 @@ func TestPostToolUseWithToolOutputMatching(t *testing.T) {
 		"tool_response": "Command failed with error: exit code 1"
 	}`
 
-	result, err := app.ProcessPostToolUse(json.RawMessage(jsonData))
+	result, err := app.ProcessPostToolUse(context.Background(), json.RawMessage(jsonData))
 	if err != nil {
 		t.Fatalf("ProcessPostToolUse failed: %v", err)
 	}
@@ -3219,7 +3297,6 @@ func TestPostToolUseWithToolOutputMatching(t *testing.T) {
 // TestPostToolUseWithMultipleFieldMatching tests multiple field matching in a single rule
 func TestPostToolUseWithMultipleFieldMatching(t *testing.T) {
 	t.Parallel()
-	setupTest(t)
 
 	configContent := `rules:
   - match:
@@ -3231,16 +3308,20 @@ func TestPostToolUseWithMultipleFieldMatching(t *testing.T) {
 	configPath := createTempConfig(t, configContent)
 	app := NewApp(configPath)
 
+	// Generate unique session IDs to avoid cross-test interference
+	sessionID1 := fmt.Sprintf("test-%d-1", time.Now().UnixNano())
+	sessionID2 := fmt.Sprintf("test-%d-2", time.Now().UnixNano())
+
 	// Test with tool_output containing timeout
-	jsonData1 := `{
-		"session_id": "test123",
+	jsonData1 := fmt.Sprintf(`{
+		"session_id": "%s",
 		"transcript_path": "",
 		"hook_event_name": "PostToolUse",
 		"tool_name": "Bash",
 		"tool_response": "Connection timeout occurred"
-	}`
+	}`, sessionID1)
 
-	result1, err := app.ProcessPostToolUse(json.RawMessage(jsonData1))
+	result1, err := app.ProcessPostToolUse(context.Background(), json.RawMessage(jsonData1))
 	if err != nil {
 		t.Fatalf("ProcessPostToolUse failed: %v", err)
 	}
@@ -3248,22 +3329,37 @@ func TestPostToolUseWithMultipleFieldMatching(t *testing.T) {
 	assert.Equal(t, "Operation issue detected", result1)
 
 	// Test with reasoning content containing permission denied
-	testdataDir := "../../testdata"
-	transcriptPath := filepath.Join(testdataDir, "transcript-permission-denied.jsonl")
-	absPath, err := filepath.Abs(transcriptPath)
-	if err != nil {
-		t.Fatalf("Could not get absolute path: %v", err)
+	// Create our own temporary transcript file to avoid race conditions with shared files
+	tmpDir := t.TempDir()
+	transcriptPath := filepath.Join(tmpDir, "transcript-permission-denied.jsonl")
+
+	// Content that matches the pattern "permission denied" in intent extraction
+	transcriptContent := `{"type":"user","message":{"role":"user","content":"List the files in /root directory"},` +
+		`"uuid":"user1","timestamp":"2024-01-01T10:00:00Z"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text",` +
+		`"text":"I'll try to list the files in the /root directory for you."}]},` +
+		`"uuid":"assistant1","timestamp":"2024-01-01T10:01:00Z"}
+{"type":"user","message":{"role":"user","content":[{"tool_use_id":"tool1","type":"tool_result",` +
+		`"content":[{"type":"text","text":"ls: cannot access '/root': Permission denied"}]}]},` +
+		`"uuid":"user2","timestamp":"2024-01-01T10:02:00Z"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text",` +
+		`"text":"I can see there's a permission denied error when trying to access the /root directory. ` +
+		`This suggests the command was run without sufficient privileges."}]},` +
+		`"uuid":"assistant2","timestamp":"2024-01-01T10:03:00Z"}`
+
+	if writeErr := os.WriteFile(transcriptPath, []byte(transcriptContent), 0o600); writeErr != nil {
+		t.Fatalf("Failed to write transcript file: %v", writeErr)
 	}
 
 	jsonData2 := fmt.Sprintf(`{
-		"session_id": "test456",
+		"session_id": "%s",
 		"transcript_path": "%s",
 		"hook_event_name": "PostToolUse",
 		"tool_name": "Bash",
 		"tool_response": "Command executed successfully"
-	}`, absPath)
+	}`, sessionID2, transcriptPath)
 
-	result2, err := app.ProcessPostToolUse(json.RawMessage(jsonData2))
+	result2, err := app.ProcessPostToolUse(context.Background(), json.RawMessage(jsonData2))
 	if err != nil {
 		t.Fatalf("ProcessPostToolUse failed: %v", err)
 	}
@@ -3274,7 +3370,6 @@ func TestPostToolUseWithMultipleFieldMatching(t *testing.T) {
 // TestPostToolUseWithThinkingAndTextBlocks tests extraction of both thinking blocks and text content
 func TestPostToolUseWithThinkingAndTextBlocks(t *testing.T) {
 	t.Parallel()
-	setupTest(t)
 
 	configContent := `rules:
   - match:
@@ -3317,7 +3412,7 @@ func TestPostToolUseWithThinkingAndTextBlocks(t *testing.T) {
 		"tool_output": {"success": true}
 	}`, transcriptPath)
 
-	result, err := app.ProcessHook(strings.NewReader(postToolUseInput))
+	result, err := app.ProcessHook(context.Background(), strings.NewReader(postToolUseInput))
 	if err != nil {
 		t.Fatalf("ProcessHook failed: %v", err)
 	}
@@ -3331,7 +3426,7 @@ func TestPostToolUseWithThinkingAndTextBlocks(t *testing.T) {
 
 func TestProcessUserPromptWithCommandArguments(t *testing.T) {
 	t.Parallel()
-	setupTest(t)
+	ctx, _ := setupTestWithContext(t)
 
 	configContent := `commands:
   - name: "test"
@@ -3342,7 +3437,7 @@ func TestProcessUserPromptWithCommandArguments(t *testing.T) {
 	app := NewApp(configPath)
 
 	promptJSON := `{"prompt": "$test arg1 arg2"}`
-	result, err := app.ProcessUserPrompt(json.RawMessage(promptJSON))
+	result, err := app.ProcessUserPrompt(ctx, json.RawMessage(promptJSON))
 	if err != nil {
 		t.Fatalf("ProcessUserPrompt failed: %v", err)
 	}
@@ -3371,7 +3466,7 @@ func TestProcessUserPromptWithCommandArguments(t *testing.T) {
 
 func TestProcessUserPromptWithNoArguments(t *testing.T) {
 	t.Parallel()
-	setupTest(t)
+	ctx, _ := setupTestWithContext(t)
 
 	configContent := `commands:
   - name: "test"
@@ -3382,7 +3477,7 @@ func TestProcessUserPromptWithNoArguments(t *testing.T) {
 	app := NewApp(configPath)
 
 	promptJSON := `{"prompt": "$test"}`
-	result, err := app.ProcessUserPrompt(json.RawMessage(promptJSON))
+	result, err := app.ProcessUserPrompt(ctx, json.RawMessage(promptJSON))
 	if err != nil {
 		t.Fatalf("ProcessUserPrompt failed: %v", err)
 	}
@@ -3449,7 +3544,7 @@ func testPreToolUseIntentMatching(t *testing.T, tc *preToolUseIntentTestCase) {
 		}
 	}`, transcriptPath, tc.command, tc.desc)
 
-	result, err := app.ProcessHook(strings.NewReader(hookInput))
+	result, err := app.ProcessHook(context.Background(), strings.NewReader(hookInput))
 	if err != nil {
 		t.Fatalf("ProcessHook failed: %v", err)
 	}
@@ -3461,7 +3556,6 @@ func testPreToolUseIntentMatching(t *testing.T, tc *preToolUseIntentTestCase) {
 
 func TestPreToolUseIntentSupport(t *testing.T) {
 	t.Parallel()
-	setupTest(t)
 
 	transcriptContent := `{"type":"assistant","message":{"content":[` +
 		`{"type":"thinking","thinking":"I need to run some database tests to verify the connection works"}, ` +
@@ -3478,7 +3572,6 @@ func TestPreToolUseIntentSupport(t *testing.T) {
 
 func TestPreToolUseIntentWithTextOnlyContent(t *testing.T) {
 	t.Parallel()
-	setupTest(t)
 
 	transcriptContent := `{"type":"assistant","message":{"content":[` +
 		`{"type":"text","text":"I need to perform a critical system update to fix vulnerabilities"}]}}`
@@ -3495,7 +3588,6 @@ func TestPreToolUseIntentWithTextOnlyContent(t *testing.T) {
 // TestPreToolUseIntentWithMissingTranscript tests graceful handling when transcript doesn't exist
 func TestPreToolUseIntentWithMissingTranscript(t *testing.T) {
 	t.Parallel()
-	setupTest(t)
 
 	configContent := `rules:
   - match:
@@ -3517,7 +3609,7 @@ func TestPreToolUseIntentWithMissingTranscript(t *testing.T) {
 		}
 	}`
 
-	result, err := app.ProcessHook(strings.NewReader(hookInput))
+	result, err := app.ProcessHook(context.Background(), strings.NewReader(hookInput))
 	if err != nil {
 		t.Fatalf("ProcessHook failed: %v", err)
 	}
@@ -3569,7 +3661,7 @@ func testPostToolUseIntegration(t *testing.T, tc *postToolUseIntegrationTestCase
 		"tool_output": {"success": %t}
 	}`, tc.sessionID, absPath, tc.command, tc.success)
 
-	result, err := app.ProcessHook(strings.NewReader(postToolUseInput))
+	result, err := app.ProcessHook(context.Background(), strings.NewReader(postToolUseInput))
 	if err != nil {
 		t.Fatalf("ProcessHook failed: %v", err)
 	}
@@ -3581,7 +3673,6 @@ func testPostToolUseIntegration(t *testing.T, tc *postToolUseIntegrationTestCase
 
 func TestIntegrationThinkingAndTextExtraction(t *testing.T) {
 	t.Parallel()
-	setupTest(t)
 
 	testPostToolUseIntegration(t, &postToolUseIntegrationTestCase{
 		sessionID:       "integration-test",
@@ -3594,7 +3685,6 @@ func TestIntegrationThinkingAndTextExtraction(t *testing.T) {
 }
 
 func TestIntegrationPerformanceAnalysisDetection(t *testing.T) {
-	setupTest(t)
 	t.Parallel()
 
 	testPostToolUseIntegration(t, &postToolUseIntegrationTestCase{
@@ -3610,7 +3700,6 @@ func TestIntegrationPerformanceAnalysisDetection(t *testing.T) {
 // TestPostToolUseStructuredToolResponseFields tests matching against specific fields in structured tool responses
 func TestPostToolUseStructuredToolResponseFields(t *testing.T) {
 	t.Parallel()
-	setupTest(t)
 
 	// Test that rules can match against specific tool output fields by name
 	configContent := `rules:
@@ -3635,7 +3724,50 @@ func TestPostToolUseStructuredToolResponseFields(t *testing.T) {
 		}
 	}`
 
-	result1, err := app.ProcessPostToolUse(json.RawMessage(jsonWithContent))
+	result1, err := app.ProcessPostToolUse(context.Background(), json.RawMessage(jsonWithContent))
 	require.NoError(t, err)
 	assert.Equal(t, "Configuration file contains sensitive data", result1)
+}
+
+// TestPostToolUseDebugOutputShowsIntentFields tests that debug logging shows extracted intent content
+func TestPostToolUseDebugOutputShowsIntentFields(t *testing.T) {
+	t.Parallel()
+	ctx, getLogs := setupTestWithContext(t)
+
+	configContent := `rules:
+  - match:
+      pattern: "test.*pattern"
+      event: "post"
+      sources: ["#intent"]
+    send: "Found test pattern in intent"`
+
+	configPath := createTempConfig(t, configContent)
+	app := NewApp(configPath)
+
+	// Create transcript with thinking content
+	transcriptContent := `{"type":"assistant","message":{"role":"assistant",` +
+		`"content":[{"type":"thinking","thinking":"I need to test this pattern carefully"}]}}`
+	transcriptPath := createTempTranscript(t, transcriptContent)
+
+	postToolUseInput := fmt.Sprintf(`{
+		"session_id": "debug-test",
+		"transcript_path": "%s",
+		"cwd": "/test/dir",
+		"hook_event_name": "PostToolUse",
+		"tool_name": "Bash",
+		"tool_input": {"command": "echo test"},
+		"tool_output": {"output": "Command output"}
+	}`, transcriptPath)
+
+	// Process hook with context-aware logging
+	_, err := app.ProcessHook(ctx, strings.NewReader(postToolUseInput))
+	require.NoError(t, err)
+
+	// Get captured log output
+	logStr := getLogs()
+
+	// Verify intent extraction debug output appears
+	assert.Contains(t, logStr, "Intent content extracted successfully")
+	assert.Contains(t, logStr, "extractedIntentLength")
+	assert.Contains(t, logStr, "intentPreview")
 }

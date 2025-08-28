@@ -16,7 +16,7 @@ import (
 )
 
 func TestIsClaudeNotFoundError(t *testing.T) {
-	testutil.InitTestLogger(t)
+	_, _ = testutil.NewTestContext(t) // Context-aware logging available
 	t.Parallel()
 
 	// Test with NotFoundError
@@ -38,7 +38,7 @@ func TestIsClaudeNotFoundError(t *testing.T) {
 }
 
 func TestNewLauncher(t *testing.T) {
-	testutil.InitTestLogger(t)
+	_, _ = testutil.NewTestContext(t) // Context-aware logging available
 	t.Parallel()
 
 	cfg := &config.Config{
@@ -54,7 +54,7 @@ func TestNewLauncher(t *testing.T) {
 }
 
 func TestValidateBinary(t *testing.T) {
-	testutil.InitTestLogger(t)
+	_, _ = testutil.NewTestContext(t) // Context-aware logging available
 	t.Parallel()
 
 	tests := []struct {
@@ -132,7 +132,7 @@ func TestValidateBinary(t *testing.T) {
 }
 
 func TestNotFoundError_Error(t *testing.T) {
-	testutil.InitTestLogger(t)
+	_, _ = testutil.NewTestContext(t) // Context-aware logging available
 	t.Parallel()
 
 	tests := []struct {
@@ -253,7 +253,7 @@ func getCLIResponseTestCases() []struct {
 }
 
 func TestCLIResponse_JSONParsing(t *testing.T) {
-	testutil.InitTestLogger(t)
+	_, _ = testutil.NewTestContext(t) // Context-aware logging available
 	t.Parallel()
 
 	tests := getCLIResponseTestCases()

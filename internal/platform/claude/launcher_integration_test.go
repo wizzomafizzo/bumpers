@@ -11,7 +11,7 @@ import (
 // TestLauncherBasicContract tests that both mock and real launcher implementations
 // satisfy the basic MessageGenerator contract
 func TestLauncherBasicContract(t *testing.T) {
-	testutil.InitTestLogger(t)
+	_, _ = testutil.NewTestContext(t) // Context-aware logging available
 	t.Parallel()
 
 	t.Run("MockLauncher", func(t *testing.T) {

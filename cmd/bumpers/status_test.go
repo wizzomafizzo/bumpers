@@ -7,7 +7,7 @@ import (
 )
 
 func TestCreateStatusCommand(t *testing.T) {
-	testutil.InitTestLogger(t)
+	_, _ = testutil.NewTestContext(t) // Context-aware logging
 	t.Parallel()
 
 	cmd := createStatusCommand()

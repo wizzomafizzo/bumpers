@@ -13,7 +13,7 @@ import (
 
 // Test the basic contract we need from our filesystem abstraction
 func TestMemoryFileSystemBasicOperations(t *testing.T) {
-	testutil.InitTestLogger(t)
+	_, _ = testutil.NewTestContext(t) // Context-aware logging available
 	t.Parallel()
 
 	fs := NewMemoryFileSystem()
@@ -81,7 +81,7 @@ func TestOSFileSystemBasicOperations(t *testing.T) {
 
 // Test MkdirAll functionality for both implementations
 func TestFileSystemMkdirAll(t *testing.T) {
-	testutil.InitTestLogger(t)
+	_, _ = testutil.NewTestContext(t) // Context-aware logging available
 	t.Parallel()
 
 	t.Run("MemoryFileSystem", func(t *testing.T) {
@@ -160,7 +160,7 @@ func testOSFileSystemMkdirAll(t *testing.T) {
 
 // TestFileSystemContract runs contract tests against all implementations to ensure consistent behavior
 func TestFileSystemContract(t *testing.T) {
-	testutil.InitTestLogger(t)
+	_, _ = testutil.NewTestContext(t) // Context-aware logging available
 	t.Parallel()
 
 	t.Run("MemoryFileSystem", func(t *testing.T) {

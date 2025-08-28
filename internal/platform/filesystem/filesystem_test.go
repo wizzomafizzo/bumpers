@@ -10,7 +10,7 @@ import (
 )
 
 func TestNewMemoryFileSystem(t *testing.T) {
-	testutil.InitTestLogger(t)
+	_, _ = testutil.NewTestContext(t) // Context-aware logging available
 	t.Parallel()
 
 	fs := NewMemoryFileSystem()
@@ -21,7 +21,7 @@ func TestNewMemoryFileSystem(t *testing.T) {
 }
 
 func TestMemoryFileSystem_WriteFile_ReadFile(t *testing.T) {
-	testutil.InitTestLogger(t)
+	_, _ = testutil.NewTestContext(t) // Context-aware logging available
 	t.Parallel()
 
 	fs := NewMemoryFileSystem()
@@ -50,7 +50,7 @@ func TestMemoryFileSystem_WriteFile_ReadFile(t *testing.T) {
 }
 
 func TestMemoryFileSystem_ReadFile_NonExistent(t *testing.T) {
-	testutil.InitTestLogger(t)
+	_, _ = testutil.NewTestContext(t) // Context-aware logging available
 	t.Parallel()
 
 	fs := NewMemoryFileSystem()
@@ -63,7 +63,7 @@ func TestMemoryFileSystem_ReadFile_NonExistent(t *testing.T) {
 }
 
 func TestMemoryFileSystem_Stat(t *testing.T) {
-	testutil.InitTestLogger(t)
+	_, _ = testutil.NewTestContext(t) // Context-aware logging available
 	t.Parallel()
 
 	fs := NewMemoryFileSystem()
@@ -88,7 +88,7 @@ func TestMemoryFileSystem_Stat(t *testing.T) {
 }
 
 func TestMemoryFileSystem_MkdirAll(t *testing.T) {
-	testutil.InitTestLogger(t)
+	_, _ = testutil.NewTestContext(t) // Context-aware logging available
 	t.Parallel()
 
 	fs := NewMemoryFileSystem()
@@ -106,7 +106,7 @@ func TestMemoryFileSystem_MkdirAll(t *testing.T) {
 }
 
 func TestNewOSFileSystem(t *testing.T) {
-	testutil.InitTestLogger(t)
+	_, _ = testutil.NewTestContext(t) // Context-aware logging available
 	t.Parallel()
 
 	fs := NewOSFileSystem()

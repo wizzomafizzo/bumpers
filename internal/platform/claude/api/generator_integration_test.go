@@ -12,7 +12,7 @@ import (
 // TestMessageGeneratorBasicContract tests that both mock and real implementations
 // can handle a simple valid prompt
 func TestMessageGeneratorBasicContract(t *testing.T) {
-	testutil.InitTestLogger(t)
+	_, _ = testutil.NewTestContext(t) // Context-aware logging available
 	t.Parallel()
 
 	t.Run("MockLauncher", func(t *testing.T) {

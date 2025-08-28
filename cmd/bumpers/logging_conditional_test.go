@@ -150,5 +150,5 @@ func logCommandOutput(t *testing.T, stdout, stderr string, err error) {
 
 func setupTest(t *testing.T) {
 	t.Helper()
-	testutil.InitTestLogger(t)
+	_, _ = testutil.NewTestContext(t) // Context-aware logging
 }

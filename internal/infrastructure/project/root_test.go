@@ -11,7 +11,7 @@ import (
 )
 
 func TestCheckClaudeProjectDir_EmptyEnv(t *testing.T) {
-	testutil.InitTestLogger(t)
+	_, _ = testutil.NewTestContext(t) // Context-aware logging available
 
 	// Ensure CLAUDE_PROJECT_DIR is not set
 	t.Setenv("CLAUDE_PROJECT_DIR", "")
@@ -23,7 +23,7 @@ func TestCheckClaudeProjectDir_EmptyEnv(t *testing.T) {
 }
 
 func TestCheckClaudeProjectDir_ValidDirectory(t *testing.T) {
-	testutil.InitTestLogger(t)
+	_, _ = testutil.NewTestContext(t) // Context-aware logging available
 
 	tempDir := t.TempDir()
 	t.Setenv("CLAUDE_PROJECT_DIR", tempDir)
@@ -35,7 +35,7 @@ func TestCheckClaudeProjectDir_ValidDirectory(t *testing.T) {
 }
 
 func TestCheckClaudeProjectDir_NonexistentDirectory(t *testing.T) {
-	testutil.InitTestLogger(t)
+	_, _ = testutil.NewTestContext(t) // Context-aware logging available
 
 	t.Setenv("CLAUDE_PROJECT_DIR", "/nonexistent/path/that/does/not/exist")
 
@@ -47,7 +47,7 @@ func TestCheckClaudeProjectDir_NonexistentDirectory(t *testing.T) {
 
 func TestHasProjectMarker_WithGitMarker(t *testing.T) {
 	t.Parallel()
-	testutil.InitTestLogger(t)
+	_, _ = testutil.NewTestContext(t) // Context-aware logging available
 
 	tempDir := t.TempDir()
 
@@ -61,7 +61,7 @@ func TestHasProjectMarker_WithGitMarker(t *testing.T) {
 
 func TestHasProjectMarker_NoMarkers(t *testing.T) {
 	t.Parallel()
-	testutil.InitTestLogger(t)
+	_, _ = testutil.NewTestContext(t) // Context-aware logging available
 
 	tempDir := t.TempDir()
 

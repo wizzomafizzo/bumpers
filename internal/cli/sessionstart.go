@@ -1,11 +1,12 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
 
-	"github.com/rs/zerolog/log"
+	"github.com/rs/zerolog"
 	"github.com/wizzomafizzo/bumpers/internal/config"
 	"github.com/wizzomafizzo/bumpers/internal/core/messaging/template"
 	"github.com/wizzomafizzo/bumpers/internal/infrastructure/constants"
@@ -17,7 +18,10 @@ type SessionStartEvent struct {
 	Source        string `json:"source"`
 }
 
-func (a *App) ProcessSessionStart(rawJSON json.RawMessage) (string, error) {
+func (a *App) ProcessSessionStart(ctx context.Context, rawJSON json.RawMessage) (string, error) {
+	logger := zerolog.Ctx(ctx)
+	logger.Debug().Msg("processing SessionStart hook")
+
 	// Parse the SessionStart JSON
 	var event SessionStartEvent
 	if err := json.Unmarshal(rawJSON, &event); err != nil {
@@ -32,7 +36,7 @@ func (a *App) ProcessSessionStart(rawJSON json.RawMessage) (string, error) {
 	// Clear session-based cache entries when a new session starts
 	if cacheErr := a.clearSessionCache(); cacheErr != nil {
 		// Log error but don't fail the hook - cache clearing is non-critical
-		log.Warn().Err(cacheErr).Msg("failed to clear session cache")
+		logger.Warn().Err(cacheErr).Msg("failed to clear session cache")
 	}
 
 	// Load config to get notes
@@ -59,7 +63,7 @@ func (a *App) ProcessSessionStart(rawJSON json.RawMessage) (string, error) {
 		finalMessage, genErr := a.processAIGenerationGeneric(&note, processedMessage, "")
 		if genErr != nil {
 			// Log error but don't fail the hook - fallback to original message
-			log.Error().Err(genErr).Msg("AI generation failed, using original message")
+			logger.Error().Err(genErr).Msg("AI generation failed, using original message")
 			finalMessage = processedMessage
 		}
 

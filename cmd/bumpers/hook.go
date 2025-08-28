@@ -1,13 +1,14 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/wizzomafizzo/bumpers/internal/cli"
-	"github.com/wizzomafizzo/bumpers/internal/core/messaging/context"
+	msgcontext "github.com/wizzomafizzo/bumpers/internal/core/messaging/context"
 	"github.com/wizzomafizzo/bumpers/internal/infrastructure/logging"
 	"github.com/wizzomafizzo/bumpers/internal/infrastructure/project"
 )
@@ -33,7 +34,7 @@ func findWorkingDir() (string, error) {
 
 // initLogging initializes logging for hook commands
 func initLogging(workingDir string) error {
-	projectCtx := context.New(workingDir)
+	projectCtx := msgcontext.New(workingDir)
 	if err := logger.InitWithProjectContext(projectCtx); err != nil {
 		return fmt.Errorf("failed to initialize logger: %w", err)
 	}
@@ -49,7 +50,8 @@ func processHookCommand(app *cli.App, input io.Reader, _ io.Writer) (code int, r
 	}
 
 	// Create a new reader from the bytes we just read
-	response, err = app.ProcessHook(strings.NewReader(string(inputBytes)))
+	ctx := context.Background()
+	response, err = app.ProcessHook(ctx, strings.NewReader(string(inputBytes)))
 	if err != nil {
 		return 1, fmt.Sprintf("Error: %v", err)
 	}

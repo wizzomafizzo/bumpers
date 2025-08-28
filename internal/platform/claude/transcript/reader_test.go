@@ -11,7 +11,7 @@ import (
 )
 
 func TestExtractReasoningContent_WithRealisticTranscript(t *testing.T) {
-	testutil.InitTestLogger(t)
+	_, _ = testutil.NewTestContext(t) // Context-aware logging available
 	t.Parallel()
 
 	// Create a realistic Claude Code transcript with assistant reasoning
@@ -57,7 +57,7 @@ func TestExtractReasoningContent_WithRealisticTranscript(t *testing.T) {
 }
 
 func TestExtractReasoningContent_OnlyExtractsFromAssistantMessages(t *testing.T) {
-	testutil.InitTestLogger(t)
+	_, _ = testutil.NewTestContext(t) // Context-aware logging available
 	t.Parallel()
 
 	tmpDir := t.TempDir()
@@ -89,7 +89,7 @@ func TestExtractReasoningContent_OnlyExtractsFromAssistantMessages(t *testing.T)
 }
 
 func TestExtractReasoningContent_LargeFileEfficiency(t *testing.T) {
-	testutil.InitTestLogger(t)
+	_, _ = testutil.NewTestContext(t) // Context-aware logging available
 	t.Parallel()
 
 	tmpDir := t.TempDir()
@@ -129,7 +129,7 @@ func TestExtractReasoningContent_LargeFileEfficiency(t *testing.T) {
 }
 
 func TestExtractIntentContent_WithThinkingBlocks(t *testing.T) {
-	testutil.InitTestLogger(t)
+	_, _ = testutil.NewTestContext(t) // Context-aware logging available
 	t.Parallel()
 
 	// Create transcript with thinking blocks (new format)
@@ -170,7 +170,7 @@ func TestExtractIntentContent_WithThinkingBlocks(t *testing.T) {
 
 // TestExtractIntentContent_WithTextOnly tests extraction when only text blocks are present
 func TestExtractIntentContent_WithTextOnly(t *testing.T) {
-	testutil.InitTestLogger(t)
+	_, _ = testutil.NewTestContext(t) // Context-aware logging available
 	t.Parallel()
 
 	tmpDir := t.TempDir()
@@ -211,7 +211,7 @@ func TestExtractIntentContent_WithTextOnly(t *testing.T) {
 
 // TestExtractIntentContent_EmptyFile tests handling of empty transcript files
 func TestExtractIntentContent_EmptyFile(t *testing.T) {
-	testutil.InitTestLogger(t)
+	_, _ = testutil.NewTestContext(t) // Context-aware logging available
 	t.Parallel()
 
 	tmpDir := t.TempDir()
@@ -235,7 +235,7 @@ func TestExtractIntentContent_EmptyFile(t *testing.T) {
 
 // TestExtractIntentContent_NonExistentFile tests graceful error handling for missing files
 func TestExtractIntentContent_NonExistentFile(t *testing.T) {
-	testutil.InitTestLogger(t)
+	_, _ = testutil.NewTestContext(t) // Context-aware logging available
 	t.Parallel()
 
 	nonExistentPath := "/tmp/non-existent-transcript.jsonl"
@@ -253,7 +253,7 @@ func TestExtractIntentContent_NonExistentFile(t *testing.T) {
 
 // TestExtractIntentContent_MalformedJSON tests handling of invalid JSON lines
 func TestExtractIntentContent_MalformedJSON(t *testing.T) {
-	testutil.InitTestLogger(t)
+	_, _ = testutil.NewTestContext(t) // Context-aware logging available
 	t.Parallel()
 
 	tmpDir := t.TempDir()
@@ -299,7 +299,7 @@ not even close to json
 
 // TestExtractIntentContent_MixedContent tests complex realistic transcript with various content types
 func TestExtractIntentContent_MixedContent(t *testing.T) {
-	testutil.InitTestLogger(t)
+	_, _ = testutil.NewTestContext(t) // Context-aware logging available
 	t.Parallel()
 
 	tmpDir := t.TempDir()
@@ -386,7 +386,7 @@ func TestExtractIntentContent_MixedContent(t *testing.T) {
 }
 
 func TestExtractIntentContentOptimized_ReadsRecentContentFirst(t *testing.T) {
-	testutil.InitTestLogger(t)
+	_, _ = testutil.NewTestContext(t) // Context-aware logging available
 	t.Parallel()
 
 	// Create a large transcript file to test performance optimization
@@ -507,7 +507,7 @@ func containsPattern(text, pattern string) bool {
 }
 
 func TestExtractIntentContent_ImprovedErrorMessages(t *testing.T) {
-	testutil.InitTestLogger(t)
+	_, _ = testutil.NewTestContext(t) // Context-aware logging available
 	t.Parallel()
 
 	nonExistentPath := "/path/that/definitely/does/not/exist/transcript.jsonl"
@@ -530,7 +530,7 @@ func TestExtractIntentContent_ImprovedErrorMessages(t *testing.T) {
 }
 
 func TestExtractIntentContentOptimized_ImprovedErrorMessages(t *testing.T) {
-	testutil.InitTestLogger(t)
+	_, _ = testutil.NewTestContext(t) // Context-aware logging available
 	t.Parallel()
 
 	nonExistentPath := "/path/that/definitely/does/not/exist/transcript.jsonl"

@@ -14,7 +14,7 @@ import (
 )
 
 func TestCreateHookCommand(t *testing.T) {
-	testutil.InitTestLogger(t)
+	_, _ = testutil.NewTestContext(t) // Context-aware logging for e2e tests
 	t.Parallel()
 
 	cmd := createHookCommand()
@@ -33,7 +33,7 @@ func TestCreateHookCommand(t *testing.T) {
 }
 
 func TestHookCommandBlocksWithProperToolName(t *testing.T) { //nolint:paralleltest // changes working directory
-	testutil.InitTestLogger(t)
+	_, _ = testutil.NewTestContext(t) // Context-aware logging for e2e tests
 	// Test that hook command blocks when tool_name is provided correctly
 	tempDir := t.TempDir()
 	originalDir, err := os.Getwd()
@@ -99,7 +99,7 @@ func TestHookCommandBlocksWithProperToolName(t *testing.T) { //nolint:parallelte
 }
 
 func TestHookCommandNoDuplicateOutput(t *testing.T) { //nolint:paralleltest // changes working directory
-	testutil.InitTestLogger(t)
+	_, _ = testutil.NewTestContext(t) // Context-aware logging for e2e tests
 	// Test that blocked commands don't output the message twice
 	tempDir := t.TempDir()
 	originalDir, err := os.Getwd()
@@ -161,7 +161,7 @@ func TestHookCommandNoDuplicateOutput(t *testing.T) { //nolint:paralleltest // c
 }
 
 func TestHookCommandAllowsInputWithMissingToolName(t *testing.T) { //nolint:paralleltest // changes working directory
-	testutil.InitTestLogger(t)
+	_, _ = testutil.NewTestContext(t) // Context-aware logging for e2e tests
 	// Test that hook command allows input when tool_name is missing (safe default)
 	tempDir := t.TempDir()
 	originalDir, err := os.Getwd()

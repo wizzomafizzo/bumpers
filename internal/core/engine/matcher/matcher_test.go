@@ -10,7 +10,7 @@ import (
 )
 
 func TestRuleMatcher(t *testing.T) {
-	testutil.InitTestLogger(t)
+	_, _ = testutil.NewTestContext(t) // Context-aware logging available
 	t.Parallel()
 
 	rule := config.Rule{
@@ -38,7 +38,7 @@ func TestRuleMatcher(t *testing.T) {
 }
 
 func TestRuleMatcherNoMatch(t *testing.T) {
-	testutil.InitTestLogger(t)
+	_, _ = testutil.NewTestContext(t) // Context-aware logging available
 	t.Parallel()
 
 	rule := config.Rule{
@@ -66,7 +66,7 @@ func TestRuleMatcherNoMatch(t *testing.T) {
 }
 
 func TestRuleMatcherWithPartialConfig(t *testing.T) {
-	testutil.InitTestLogger(t)
+	_, _ = testutil.NewTestContext(t) // Context-aware logging available
 	t.Parallel()
 
 	yamlContent := `rules:
@@ -120,7 +120,7 @@ func TestRuleMatcherWithPartialConfig(t *testing.T) {
 }
 
 func TestRegexPatternMatching(t *testing.T) {
-	testutil.InitTestLogger(t)
+	_, _ = testutil.NewTestContext(t) // Context-aware logging available
 	t.Parallel()
 
 	tests := []struct {
@@ -212,7 +212,7 @@ func assertNoMatch(t *testing.T, match *config.Rule, err error) {
 }
 
 func TestNewRuleMatcherInvalidRegex(t *testing.T) {
-	testutil.InitTestLogger(t)
+	_, _ = testutil.NewTestContext(t) // Context-aware logging available
 	t.Parallel()
 
 	rule := config.Rule{
@@ -231,7 +231,7 @@ func TestNewRuleMatcherInvalidRegex(t *testing.T) {
 }
 
 func TestRuleMatcherWithToolFiltering(t *testing.T) {
-	testutil.InitTestLogger(t)
+	_, _ = testutil.NewTestContext(t) // Context-aware logging available
 	t.Parallel()
 
 	rules := []config.Rule{
@@ -288,7 +288,7 @@ func TestRuleMatcherWithToolFiltering(t *testing.T) {
 }
 
 func TestBumpersYmlToolMatching(t *testing.T) {
-	testutil.InitTestLogger(t)
+	_, _ = testutil.NewTestContext(t) // Context-aware logging available
 	t.Parallel()
 
 	// This test specifically covers the bumpers.yml rule from the config
@@ -437,7 +437,7 @@ func FuzzRuleMatcherMatch(f *testing.F) {
 // TestMatcherBehaviorWithInvalidPatterns tests what happens when regex compilation fails
 // This addresses mutation testing findings about missing continue vs break logic
 func TestMatcherBehaviorWithInvalidPatterns(t *testing.T) {
-	testutil.InitTestLogger(t)
+	_, _ = testutil.NewTestContext(t) // Context-aware logging available
 	t.Parallel()
 
 	// Create rules where some have invalid patterns that would fail during matching
@@ -508,7 +508,7 @@ func ExampleNewRuleMatcher() {
 }
 
 func TestRuleMatcherWithTemplatePattern(t *testing.T) {
-	testutil.InitTestLogger(t)
+	_, _ = testutil.NewTestContext(t) // Context-aware logging available
 	t.Parallel()
 
 	rule := config.Rule{
