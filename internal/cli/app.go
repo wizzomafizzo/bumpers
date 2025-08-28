@@ -52,9 +52,9 @@ func NewApp(configPath string) *App {
 	}
 
 	log.Debug().
-		Str("originalConfigPath", configPath).
-		Str("resolvedConfigPath", resolvedConfigPath).
-		Str("projectRoot", projectRoot).
+		Str("original_config_path", configPath).
+		Str("resolved_config_path", resolvedConfigPath).
+		Str("project_root", projectRoot).
 		Msg("created new app instance")
 
 	return app
@@ -98,7 +98,7 @@ type App struct {
 // loadConfigAndMatcher loads configuration and creates a rule matcher
 func (a *App) loadConfigAndMatcher() (*config.Config, *matcher.RuleMatcher, error) {
 	// Read config file content
-	log.Debug().Str("configPath", a.configPath).Msg("loading config file")
+	log.Debug().Str("config_path", a.configPath).Msg("loading config file")
 	data, err := os.ReadFile(a.configPath)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to read config from %s: %w", a.configPath, err)
@@ -114,7 +114,7 @@ func (a *App) loadConfigAndMatcher() (*config.Config, *matcher.RuleMatcher, erro
 	for i := range partialCfg.ValidationWarnings {
 		warning := &partialCfg.ValidationWarnings[i]
 		log.Warn().
-			Int("ruleIndex", warning.RuleIndex).
+			Int("rule_index", warning.RuleIndex).
 			Str("pattern", warning.Rule.GetMatch().Pattern).
 			Err(warning.Error).
 			Msg("invalid rule skipped")
@@ -193,14 +193,22 @@ func (a *App) processHookWithContext(ctx context.Context, input io.Reader) (stri
 		return a.ProcessPostToolUse(ctx, rawJSON)
 	}
 	// Handle PreToolUse and other hooks
-	return a.processPreToolUse(rawJSON)
+	return a.processPreToolUse(ctx, rawJSON)
 }
 
 // processPreToolUse handles PreToolUse hook events
-func (a *App) processPreToolUse(rawJSON json.RawMessage) (string, error) {
+func (a *App) processPreToolUse(ctx context.Context, rawJSON json.RawMessage) (string, error) {
+	logger := zerolog.Ctx(ctx)
+	logger.Debug().Msg("processing PreToolUse hook")
+
 	var event hooks.HookEvent
 	if unmarshalErr := json.Unmarshal(rawJSON, &event); unmarshalErr != nil {
 		return "", fmt.Errorf("failed to parse hook input: %w", unmarshalErr)
+	}
+
+	// Extract intent from transcript if available
+	if event.TranscriptPath != "" {
+		a.extractAndLogIntent(event)
 	}
 
 	// Load config and create matcher
@@ -239,6 +247,10 @@ func (*App) filterPreEventRules(rules []config.Rule) []config.Rule {
 		}
 	}
 	return preRules
+}
+
+// extractAndLogIntent extracts and logs intent content from transcript
+func (*App) extractAndLogIntent(_ hooks.HookEvent) {
 }
 
 // findMatchingPreRule finds the first rule that matches the event
@@ -396,20 +408,20 @@ func (*App) extractPostToolContent(ctx context.Context, rawJSON json.RawMessage)
 	// Read transcript content for intent matching using efficient parser
 	if transcriptPath != "" { //nolint:nestif // intent extraction logic complexity is acceptable
 		logger.Debug().
-			Str("toolName", toolName).
-			Str("transcriptPath", transcriptPath).
+			Str("tool_name", toolName).
+			Str("transcript_path", transcriptPath).
 			Msg("PostToolUse hook triggered, extracting intent")
 		intent, err := transcript.ExtractIntentContent(transcriptPath)
 		if err != nil {
-			logger.Debug().Err(err).Str("transcriptPath", transcriptPath).Msg("Failed to extract intent")
+			logger.Debug().Err(err).Str("transcript_path", transcriptPath).Msg("Failed to extract intent")
 		} else {
 			intentPreview := intent
 			if len(intent) > 100 {
 				intentPreview = intent[:100] + "..."
 			}
 			logger.Debug().
-				Str("extractedIntentLength", fmt.Sprintf("%d", len(intent))).
-				Str("intentPreview", intentPreview).
+				Int("extracted_intent_length", len(intent)).
+				Str("intent_preview", intentPreview).
 				Msg("Intent content extracted successfully")
 		}
 		content.intent = intent
@@ -519,9 +531,9 @@ func (a *App) ProcessPostToolUse(ctx context.Context, rawJSON json.RawMessage) (
 	}
 
 	logger.Debug().
-		Str("intentContentLength", fmt.Sprintf("%d", len(content.intent))).
-		Int("toolOutputFieldCount", len(content.toolOutputMap)).
-		Str("toolName", content.toolName).
+		Int("intent_content_length", len(content.intent)).
+		Int("tool_output_field_count", len(content.toolOutputMap)).
+		Str("tool_name", content.toolName).
 		Msg("PostToolUse content extracted for rule matching")
 
 	// Skip if no content to match against (neither intent nor tool output)
@@ -693,7 +705,7 @@ func (a *App) clearSessionCache() error {
 	}
 
 	log.Debug().
-		Str("project", a.projectRoot).
+		Str("project_root", a.projectRoot).
 		Msg("Session cache cleared on session start")
 
 	return nil

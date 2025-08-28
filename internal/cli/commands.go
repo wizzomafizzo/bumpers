@@ -51,12 +51,12 @@ func (a *App) ProcessUserPrompt(ctx context.Context, rawJSON json.RawMessage) (s
 
 	// Extract command string and parse arguments
 	commandStr := strings.TrimPrefix(event.Prompt, constants.CommandPrefix)
-	logger.Debug().Str("commandStr", commandStr).Msg("extracted command string")
+	logger.Debug().Str("command_str", commandStr).Msg("extracted command string")
 
 	// Parse command name and arguments
 	commandName, args, argv := ParseCommandArgs(commandStr)
 	logger.Debug().
-		Str("commandName", commandName).
+		Str("command_name", commandName).
 		Str("args", args).
 		Int("argc", len(argv)-1).
 		Msg("parsed command arguments")
@@ -64,7 +64,7 @@ func (a *App) ProcessUserPrompt(ctx context.Context, rawJSON json.RawMessage) (s
 	// Load config to get commands
 	cfg, err := config.Load(a.configPath)
 	if err != nil {
-		logger.Error().Err(err).Str("configPath", a.configPath).Msg("Failed to load config")
+		logger.Error().Err(err).Str("config_path", a.configPath).Msg("Failed to load config")
 		return "", fmt.Errorf("failed to load config: %w", err)
 	}
 

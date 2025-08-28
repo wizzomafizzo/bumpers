@@ -103,7 +103,16 @@ func ExtractIntentContent(transcriptPath string) (string, error) {
 		return "", fmt.Errorf("error reading transcript file %s: %w", transcriptPath, err)
 	}
 
-	return strings.Join(intentParts, " "), nil
+	result := strings.Join(intentParts, " ")
+
+	// Log what we extracted for debugging
+	log.Debug().
+		Str("transcript_path", transcriptPath).
+		Int("intent_parts_count", len(intentParts)).
+		Str("extracted_intent", result).
+		Msg("ExtractIntentContent extracted content from transcript")
+
+	return result, nil
 }
 
 // extractIntentFromLine extracts intent content from a single transcript line

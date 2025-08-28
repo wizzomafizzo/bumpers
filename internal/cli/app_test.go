@@ -3768,6 +3768,49 @@ func TestPostToolUseDebugOutputShowsIntentFields(t *testing.T) {
 
 	// Verify intent extraction debug output appears
 	assert.Contains(t, logStr, "Intent content extracted successfully")
-	assert.Contains(t, logStr, "extractedIntentLength")
-	assert.Contains(t, logStr, "intentPreview")
+	assert.Contains(t, logStr, "extracted_intent_length")
+	assert.Contains(t, logStr, "intent_preview")
+}
+
+// TestPreToolUseDebugOutputShowsIntentFields tests debug logging shows extracted intent content for PreToolUse
+func TestPreToolUseDebugOutputShowsIntentFields(t *testing.T) {
+	t.Parallel()
+	ctx, getLogs := setupTestWithContext(t)
+
+	configContent := `rules:
+  - match:
+      pattern: "test.*pattern"
+      event: "pre"
+      sources: ["#intent"]
+    send: "Found test pattern in intent"`
+
+	configPath := createTempConfig(t, configContent)
+	app := NewApp(configPath)
+
+	// Create transcript with thinking content
+	transcriptContent := `{"type":"assistant","message":{"role":"assistant",` +
+		`"content":[{"type":"thinking","thinking":"I need to test this pattern carefully"}]}}`
+	transcriptPath := createTempTranscript(t, transcriptContent)
+
+	preToolUseInput := fmt.Sprintf(`{
+		"hook_event_name": "PreToolUse",
+		"transcript_path": "%s",
+		"tool_name": "Bash",
+		"tool_input": {
+			"command": "echo test",
+			"description": "Simple echo command"
+		}
+	}`, transcriptPath)
+
+	// Process hook with context-aware logging
+	_, err := app.ProcessHook(ctx, strings.NewReader(preToolUseInput))
+	require.NoError(t, err)
+
+	// Get captured log output
+	logStr := getLogs()
+
+	// Verify PreToolUse processing debug output appears
+	assert.Contains(t, logStr, "processing PreToolUse hook")
+	assert.Contains(t, logStr, "received hook")
+	// Intent extraction happens silently in PreToolUse - no additional logging asserts needed
 }

@@ -6,6 +6,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 	"github.com/wizzomafizzo/bumpers/internal/cli"
 	msgcontext "github.com/wizzomafizzo/bumpers/internal/core/messaging/context"
@@ -49,8 +50,8 @@ func processHookCommand(app *cli.App, input io.Reader, _ io.Writer) (code int, r
 		return 1, fmt.Sprintf("Error reading input: %v", err)
 	}
 
-	// Create a new reader from the bytes we just read
-	ctx := context.Background()
+	// Create context with the initialized global logger attached
+	ctx := log.Logger.WithContext(context.Background())
 	response, err = app.ProcessHook(ctx, strings.NewReader(string(inputBytes)))
 	if err != nil {
 		return 1, fmt.Sprintf("Error: %v", err)
