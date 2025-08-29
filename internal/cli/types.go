@@ -44,3 +44,18 @@ type postToolContent struct {
 	toolOutputMap map[string]any
 	toolName      string
 }
+
+// ProcessResult represents the result of processing a hook event
+type ProcessResult struct {
+	Mode    ProcessMode `json:"mode"`
+	Message string      `json:"message"`
+}
+
+// ProcessMode defines how the CLI should respond to a hook event
+type ProcessMode string
+
+const (
+	ProcessModeAllow         ProcessMode = "allow"         // Exit 0, no output
+	ProcessModeInformational ProcessMode = "informational" // Exit 0, print message
+	ProcessModeBlock         ProcessMode = "block"         // Exit 2, print message
+)

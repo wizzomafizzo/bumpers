@@ -444,19 +444,10 @@ func TestInstall_UsesProjectRoot(t *testing.T) {
 		t.Fatalf("Failed to create dummy bumpers binary: %v", err)
 	}
 
-	// Test with relative config path using workdir approach
-	app := NewAppWithWorkDir("bumpers.yml", subDir)
-
-	// Manually set project root since NewAppWithWorkDir doesn't detect it
-	app.projectRoot = projectDir
-
-	// Apply config resolution logic manually
-	if app.projectRoot != "" && !filepath.IsAbs("bumpers.yml") {
-		app.configPath = filepath.Join(app.projectRoot, "bumpers.yml")
-	}
-
-	// Recreate InstallManager with correct project root
-	app.installManager = NewInstallManager(app.configPath, app.workDir, app.projectRoot, nil)
+	// Test with resolved config path using workdir approach
+	// Now that NewAppWithWorkDir properly sets projectRoot, we should use the actual config path
+	configPath := filepath.Join(projectDir, "bumpers.yml")
+	app := NewAppWithWorkDir(configPath, subDir)
 
 	// Initialize should create .claude directory at project root
 	err = app.Initialize()

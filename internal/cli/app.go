@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/afero"
 	"github.com/wizzomafizzo/bumpers/internal/core/engine/hooks"
@@ -94,12 +95,18 @@ func findAlternativeConfig(projectRoot string) string {
 // NewAppWithWorkDir creates a new App instance with an injectable working directory.
 // This is primarily used for testing to avoid global state dependencies.
 func NewAppWithWorkDir(configPath, workDir string) *App {
-	// Create specialized components
-	configValidator := NewConfigValidator(configPath, "")
-	hookProcessor := NewHookProcessor(configValidator, "")
-	promptHandler := NewPromptHandler(configPath, "")
-	sessionManager := NewSessionManager(configPath, "", nil)
-	installManager := NewInstallManager(configPath, workDir, "", nil)
+	// Detect project root starting from workDir (similar to NewApp)
+	projectRoot := workDir
+	if root, found := project.FindProjectMarkerFrom(workDir); found {
+		projectRoot = root
+	}
+
+	// Create specialized components with consistent projectRoot
+	configValidator := NewConfigValidator(configPath, projectRoot)
+	hookProcessor := NewHookProcessor(configValidator, projectRoot)
+	promptHandler := NewPromptHandler(configPath, projectRoot)
+	sessionManager := NewSessionManager(configPath, projectRoot, nil)
+	installManager := NewInstallManager(configPath, projectRoot, projectRoot, nil)
 
 	return &App{
 		hookProcessor:   hookProcessor,
@@ -109,18 +116,19 @@ func NewAppWithWorkDir(configPath, workDir string) *App {
 		installManager:  installManager,
 		configPath:      configPath,
 		workDir:         workDir,
+		projectRoot:     projectRoot, // Use detected project root
 	}
 }
 
 // NewAppWithFileSystem creates a new App instance with injectable filesystem.
 // This enables parallel testing by using in-memory filesystem instead of real I/O.
 func NewAppWithFileSystem(configPath, workDir string, fs afero.Fs) *App {
-	// Create specialized components with injected filesystem
-	configValidator := NewConfigValidator(configPath, "")
-	hookProcessor := NewHookProcessor(configValidator, "")
-	promptHandler := NewPromptHandler(configPath, "")
-	sessionManager := NewSessionManager(configPath, "", fs)
-	installManager := NewInstallManager(configPath, workDir, "", fs)
+	// Create specialized components with consistent workDir as projectRoot and injected filesystem
+	configValidator := NewConfigValidator(configPath, workDir)
+	hookProcessor := NewHookProcessor(configValidator, workDir)
+	promptHandler := NewPromptHandler(configPath, workDir)
+	sessionManager := NewSessionManager(configPath, workDir, fs)
+	installManager := NewInstallManager(configPath, workDir, workDir, fs)
 
 	return &App{
 		hookProcessor:   hookProcessor,
@@ -130,13 +138,33 @@ func NewAppWithFileSystem(configPath, workDir string, fs afero.Fs) *App {
 		installManager:  installManager,
 		configPath:      configPath,
 		workDir:         workDir,
+		projectRoot:     workDir, // Ensure projectRoot is set consistently
 		fileSystem:      fs,
 	}
 }
 
 // ProcessHook delegates to HookProcessor
-func (a *App) ProcessHook(ctx context.Context, input io.Reader) (string, error) {
-	return a.processHookWithContext(ctx, input)
+func (a *App) ProcessHook(ctx context.Context, input io.Reader) (ProcessResult, error) {
+	response, err := a.processHookWithContext(ctx, input)
+	if err != nil {
+		return ProcessResult{}, err
+	}
+	return a.convertResponseToProcessResult(response), nil
+}
+
+// convertResponseToProcessResult converts legacy string responses to structured ProcessResult
+func (*App) convertResponseToProcessResult(response string) ProcessResult {
+	if response == "" {
+		return ProcessResult{Mode: ProcessModeAllow, Message: ""}
+	}
+
+	// Check if response is hookSpecificOutput format (should be informational)
+	if strings.Contains(response, "hookEventName") {
+		return ProcessResult{Mode: ProcessModeInformational, Message: response}
+	}
+
+	// Otherwise it's a blocking response
+	return ProcessResult{Mode: ProcessModeBlock, Message: response}
 }
 
 func (a *App) processHookWithContext(ctx context.Context, input io.Reader) (string, error) {

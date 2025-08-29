@@ -183,7 +183,7 @@ func TestConfigurationIsUsed(t *testing.T) {
 	}
 
 	// Should contain the exact message from config file
-	if !strings.Contains(response, "better TDD integration") {
+	if !strings.Contains(response.Message, "better TDD integration") {
 		t.Error("Response should contain message from config file")
 	}
 }
@@ -302,15 +302,9 @@ func TestNewApp_ProjectRootDetection(t *testing.T) {
 	defer cleanup()
 
 	// Test with relative config path using workdir approach
-	app := NewAppWithWorkDir("bumpers.yml", subDir)
-
-	// Manually set project root since NewAppWithWorkDir doesn't detect it
-	app.projectRoot = projectDir
-
-	// Apply config resolution logic manually
-	if app.projectRoot != "" && !filepath.IsAbs("bumpers.yml") {
-		app.configPath = filepath.Join(app.projectRoot, "bumpers.yml")
-	}
+	// Now that NewAppWithWorkDir properly sets projectRoot, we should use the projectDir directly
+	configPath := filepath.Join(projectDir, "bumpers.yml")
+	app := NewAppWithWorkDir(configPath, subDir)
 
 	// Verify that the app can find and load the config from project root
 	result, err := app.ValidateConfig()
@@ -330,27 +324,9 @@ func testNewAppAutoFindsConfigFile(t *testing.T, configFileName string) {
 	defer cleanup()
 
 	// Test with default config path using workdir approach
-	app := NewAppWithWorkDir("bumpers.yml", subDir)
-
-	// Manually set project root since NewAppWithWorkDir doesn't detect it
-	app.projectRoot = projectDir
-
-	// Apply config resolution logic manually
-	if app.projectRoot != "" && !filepath.IsAbs("bumpers.yml") {
-		app.configPath = filepath.Join(app.projectRoot, "bumpers.yml")
-
-		// Try different extensions in order
-		if _, err := os.Stat(app.configPath); os.IsNotExist(err) {
-			extensions := []string{"yaml", "toml", "json"}
-			for _, ext := range extensions {
-				candidatePath := filepath.Join(app.projectRoot, "bumpers."+ext)
-				if _, statErr := os.Stat(candidatePath); statErr == nil {
-					app.configPath = candidatePath
-					break
-				}
-			}
-		}
-	}
+	// Now that NewAppWithWorkDir properly sets projectRoot, we should use the actual config path
+	configPath := filepath.Join(projectDir, configFileName)
+	app := NewAppWithWorkDir(configPath, subDir)
 
 	// Verify that the app can find and load the config from project root
 	result, err := app.ValidateConfig()

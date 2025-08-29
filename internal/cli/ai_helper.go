@@ -11,6 +11,7 @@ import (
 
 // AIHelper provides shared AI generation functionality
 type AIHelper struct {
+	cachePath   string // Optional cache path injection for tests
 	aiGenerator ai.MessageGenerator
 	fileSystem  afero.Fs
 	projectRoot string
@@ -19,9 +20,20 @@ type AIHelper struct {
 // NewAIHelper creates a new AI helper
 func NewAIHelper(projectRoot string, aiGenerator ai.MessageGenerator, fileSystem afero.Fs) *AIHelper {
 	return &AIHelper{
+		cachePath:   "", // Use XDG path (production default)
 		projectRoot: projectRoot,
 		aiGenerator: aiGenerator,
 		fileSystem:  fileSystem,
+	}
+}
+
+// NewAIHelperWithCache creates a new AI helper with custom cache path (for tests)
+func NewAIHelperWithCache(cachePath, projectRoot string, generator ai.MessageGenerator, fs afero.Fs) *AIHelper {
+	return &AIHelper{
+		cachePath:   cachePath,
+		projectRoot: projectRoot,
+		aiGenerator: generator,
+		fileSystem:  fs,
 	}
 }
 
@@ -45,11 +57,20 @@ func (h *AIHelper) ProcessAIGenerationGeneric(
 		return message, nil
 	}
 
-	// Use XDG-compliant cache path
-	storageManager := storage.New(h.getFileSystem())
-	cachePath, err := storageManager.GetCachePath()
-	if err != nil {
-		return message, fmt.Errorf("failed to get cache path: %w", err)
+	// Use injected cache path (for tests) or XDG-compliant cache path (production)
+	var cachePath string
+	var err error
+
+	if h.cachePath != "" {
+		// Use injected cache path (for tests)
+		cachePath = h.cachePath
+	} else {
+		// Use XDG-compliant cache path (production)
+		storageManager := storage.New(h.getFileSystem())
+		cachePath, err = storageManager.GetCachePath()
+		if err != nil {
+			return message, fmt.Errorf("failed to get cache path: %w", err)
+		}
 	}
 
 	// Create AI generator with mock launcher if available

@@ -29,6 +29,13 @@ func FindRoot() (string, error) {
 	return cwd, nil
 }
 
+// FindProjectMarkerFrom finds the project root directory starting from the given directory.
+// This is useful for testing when you want to find the project root from a specific directory
+// rather than the current working directory.
+func FindProjectMarkerFrom(startDir string) (string, bool) {
+	return findProjectMarker(startDir)
+}
+
 // checkClaudeProjectDir checks if CLAUDE_PROJECT_DIR environment variable is set and valid
 func checkClaudeProjectDir() (string, bool) {
 	claudeDir := os.Getenv("CLAUDE_PROJECT_DIR")

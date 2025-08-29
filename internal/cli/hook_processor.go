@@ -23,7 +23,7 @@ import (
 
 // HookProcessor handles all hook-related processing including pre/post tool use
 type HookProcessor interface {
-	ProcessHook(ctx context.Context, input io.Reader) (string, error)
+	ProcessHook(ctx context.Context, input io.Reader) (ProcessResult, error)
 	ProcessPreToolUse(ctx context.Context, rawJSON json.RawMessage) (string, error)
 	ProcessPostToolUse(ctx context.Context, rawJSON json.RawMessage) (string, error)
 }
@@ -48,12 +48,12 @@ func (h *DefaultHookProcessor) SetMockAIGenerator(generator ai.MessageGenerator)
 	h.aiGenerator = generator
 }
 
-func (h *DefaultHookProcessor) ProcessHook(ctx context.Context, input io.Reader) (string, error) {
+func (h *DefaultHookProcessor) ProcessHook(ctx context.Context, input io.Reader) (ProcessResult, error) {
 	logger := logging.Get(ctx)
 
 	if os.Getenv("BUMPERS_SKIP") == "1" {
 		logger.Debug().Msg("BUMPERS_SKIP is set, skipping hook processing")
-		return "", nil
+		return ProcessResult{Mode: ProcessModeAllow, Message: ""}, nil
 	}
 
 	logger.Debug().Msg("processing hook input")
@@ -62,17 +62,41 @@ func (h *DefaultHookProcessor) ProcessHook(ctx context.Context, input io.Reader)
 	hookType, rawJSON, err := hooks.DetectHookType(input)
 	if err != nil {
 		logger.Error().Err(err).Msg("Failed to detect hook type")
-		return "", fmt.Errorf("failed to detect hook type: %w", err)
+		return ProcessResult{}, fmt.Errorf("failed to detect hook type: %w", err)
 	}
 	logger.Debug().RawJSON("hook", rawJSON).Str("type", hookType.String()).Msg("received hook")
 
-	// Route to appropriate handler based on hook type
+	// Route to appropriate handler based on hook type and convert response to ProcessResult
+	var response string
 	if hookType == hooks.PostToolUseHook {
 		logger.Debug().Msg("processing PostToolUse hook")
-		return h.ProcessPostToolUse(ctx, rawJSON)
+		response, err = h.ProcessPostToolUse(ctx, rawJSON)
+	} else {
+		// Handle PreToolUse and other hooks
+		response, err = h.ProcessPreToolUse(ctx, rawJSON)
 	}
-	// Handle PreToolUse and other hooks
-	return h.ProcessPreToolUse(ctx, rawJSON)
+
+	if err != nil {
+		return ProcessResult{}, err
+	}
+
+	// Convert string response to ProcessResult
+	return h.convertResponseToProcessResult(response), nil
+}
+
+// convertResponseToProcessResult converts legacy string responses to structured ProcessResult
+func (*DefaultHookProcessor) convertResponseToProcessResult(response string) ProcessResult {
+	if response == "" {
+		return ProcessResult{Mode: ProcessModeAllow, Message: ""}
+	}
+
+	// Check if response is hookSpecificOutput format (should be informational)
+	if strings.Contains(response, "hookEventName") {
+		return ProcessResult{Mode: ProcessModeInformational, Message: response}
+	}
+
+	// Otherwise it's a blocking response
+	return ProcessResult{Mode: ProcessModeBlock, Message: response}
 }
 
 // ProcessPreToolUse handles PreToolUse hook events

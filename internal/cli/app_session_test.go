@@ -72,8 +72,8 @@ session:
 
 	expectedJSON := `{"hookSpecificOutput":{"hookEventName":"SessionStart",` +
 		`"additionalContext":"Remember to run tests first\nCheck CLAUDE.md for project conventions"}}`
-	if result != expectedJSON {
-		t.Errorf("Expected %q, got %q", expectedJSON, result)
+	if result.Message != expectedJSON {
+		t.Errorf("Expected %q, got %q", expectedJSON, result.Message)
 	}
 }
 
@@ -105,8 +105,8 @@ session:
 
 	expectedJSON := `{"hookSpecificOutput":{"hookEventName":"SessionStart",` +
 		`"additionalContext":"Different message here"}}`
-	if result != expectedJSON {
-		t.Errorf("Expected %q, got %q", expectedJSON, result)
+	if result.Message != expectedJSON {
+		t.Errorf("Expected %q, got %q", expectedJSON, result.Message)
 	}
 }
 
@@ -132,8 +132,8 @@ func TestProcessSessionStartIgnoresResume(t *testing.T) {
 	}
 
 	// Should return empty string for resume source
-	if result != "" {
-		t.Errorf("Expected empty string for resume source, got %q", result)
+	if result.Message != "" {
+		t.Errorf("Expected empty string for resume source, got %q", result.Message)
 	}
 }
 
@@ -161,8 +161,8 @@ func TestProcessSessionStartWorksWithClear(t *testing.T) {
 
 	expectedJSON := `{"hookSpecificOutput":{"hookEventName":"SessionStart",` +
 		`"additionalContext":"Clear message"}}`
-	if result != expectedJSON {
-		t.Errorf("Expected %q, got %q", expectedJSON, result)
+	if result.Message != expectedJSON {
+		t.Errorf("Expected %q, got %q", expectedJSON, result.Message)
 	}
 }
 
@@ -191,8 +191,8 @@ func TestProcessSessionStartWithTemplate(t *testing.T) {
 	// The template should be processed (no template syntax, so it should pass through as-is)
 	expectedJSON := `{"hookSpecificOutput":{"hookEventName":"SessionStart",` +
 		`"additionalContext":"Hello from template!"}}`
-	if result != expectedJSON {
-		t.Errorf("Expected %q, got %q", expectedJSON, result)
+	if result.Message != expectedJSON {
+		t.Errorf("Expected %q, got %q", expectedJSON, result.Message)
 	}
 }
 
@@ -369,8 +369,8 @@ func TestProcessSessionStartWithAIGeneration(t *testing.T) {
 
 	expectedJSON := `{"hookSpecificOutput":{"hookEventName":"SessionStart",` +
 		`"additionalContext":"Enhanced session message from AI"}}`
-	if result != expectedJSON {
-		t.Errorf("Expected AI-generated session output %q, got %q", expectedJSON, result)
+	if result.Message != expectedJSON {
+		t.Errorf("Expected AI-generated session output %q, got %q", expectedJSON, result.Message)
 	}
 
 	// Verify the mock was called with the right prompt

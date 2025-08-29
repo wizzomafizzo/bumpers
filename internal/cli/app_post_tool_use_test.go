@@ -102,8 +102,8 @@ func TestProcessHookRoutesPostToolUse(t *testing.T) {
 
 	// Should match the reasoning rule and return the message
 	expectedMessage := "AI claiming unrelated - please verify"
-	if result != expectedMessage {
-		t.Errorf("Expected %q, got %q", expectedMessage, result)
+	if result.Message != expectedMessage {
+		t.Errorf("Expected %q, got %q", expectedMessage, result.Message)
 	}
 }
 
@@ -148,13 +148,13 @@ func TestPostToolUseWithDifferentTranscript(t *testing.T) {
 
 	// This should match "permission denied" pattern, not return the hardcoded stub message
 	expectedMessage := "File permission error detected"
-	if result != expectedMessage {
-		t.Errorf("Expected %q (from transcript matching), got %q", expectedMessage, result)
+	if result.Message != expectedMessage {
+		t.Errorf("Expected %q (from transcript matching), got %q", expectedMessage, result.Message)
 	}
 
 	// Verify it's NOT returning the hardcoded stub message
 	stubMessage := "AI claiming unrelated - please verify"
-	if result == stubMessage {
+	if result.Message == stubMessage {
 		t.Error("Got hardcoded stub message - PostToolUse handler not reading transcript properly")
 	}
 }
@@ -198,8 +198,8 @@ func TestPostToolUseRuleNotMatching(t *testing.T) {
 	}
 
 	// Should return empty string when no rules match
-	if result != "" {
-		t.Errorf("Expected empty result when no rules match, got %q", result)
+	if result.Message != "" {
+		t.Errorf("Expected empty result when no rules match, got %q", result.Message)
 	}
 }
 
@@ -246,9 +246,9 @@ func TestPostToolUseWithCustomPattern(t *testing.T) {
 
 	// Should match the custom pattern and return the configured message
 	expectedMessage := "Operation timed out - check network connection"
-	if result != expectedMessage {
+	if result.Message != expectedMessage {
 		t.Errorf("Expected %q, got %q (rule system integration needed)",
-			expectedMessage, result)
+			expectedMessage, result.Message)
 	}
 }
 
@@ -414,8 +414,8 @@ func TestPostToolUseWithThinkingAndTextBlocks(t *testing.T) {
 
 	// Should match pattern from text content
 	expectedMessage := "Performance analysis detected"
-	if result != expectedMessage {
-		t.Errorf("Expected %q (text content should be extracted), got %q", expectedMessage, result)
+	if result.Message != expectedMessage {
+		t.Errorf("Expected %q (text content should be extracted), got %q", expectedMessage, result.Message)
 	}
 }
 
@@ -466,8 +466,8 @@ func testPostToolUseIntegration(t *testing.T, tc *postToolUseIntegrationTestCase
 		t.Fatalf("ProcessHook failed: %v", err)
 	}
 
-	if result != tc.expectedMessage {
-		t.Errorf("Expected %q, got %q", tc.expectedMessage, result)
+	if result.Message != tc.expectedMessage {
+		t.Errorf("Expected %q, got %q", tc.expectedMessage, result.Message)
 	}
 }
 

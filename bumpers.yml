@@ -3,18 +3,17 @@ rules:
       send: Use a "tmp" directory in the project root instead.
     - match: 'go test '
       send: |
-        Use "just test" instead for TDD integration:
-        - just test
-        - just test-unit
-        - just test-integration
-        - just test-e2e
+        **Direct replacement:** Simply replace `go test` with `just test-unit`:
+        - `go test -v ./internal/cli -run TestName` → `just test-unit -v ./internal/cli -run TestName`
+        - `go test ./...` → `just test-unit ./...`
+        - `go test -timeout 10s ./pkg` → `just test-unit -timeout 10s ./pkg`
         
-        These commands have EXACTLY the same arguments as "go test" and
-        actually pass args straight through to the official commands. No
-        special syntax required.
+        **Other test commands:**
+        - `just test` - Full test suite (recommended for commits)
+        - `just test-integration` - Tests with dependencies  
+        - `just test-e2e` - Complete system validation
         
-        They still MUST include paths like ./... or ./internal and will fail
-        if flags are given without a path as well.
+        **Why this helps:** The `just` commands ensure consistent test execution across the team and integrate seamlessly with our TDD practices and coverage requirements.
     - match: ^(gci|go vet|goimports|gofumpt|go *fmt|golangci-lint)
       send: Use "just lint fix" instead to resolve lint/formatting issues.
     - match: git commit --no-verify|LEFTHOOK=0

@@ -32,7 +32,7 @@ rules: []
 
 	// Should not return an error
 	require.NoError(t, err)
-	assert.Empty(t, result) // No rules to match
+	assert.Empty(t, result.Message) // No rules to match
 
 	// Should be able to capture logs without race conditions
 	logOutput := getLogs()
@@ -68,11 +68,11 @@ func TestProcessHook(t *testing.T) {
 	}
 
 	// Should return a response since "go test" matches a rule
-	if response == "" {
+	if response.Message == "" {
 		t.Error("Expected non-empty response for blocked command")
 	}
 
-	if !strings.Contains(response, "just test") {
+	if !strings.Contains(response.Message, "just test") {
 		t.Error("Response should suggest just test alternative")
 	}
 }
@@ -101,8 +101,8 @@ func TestProcessHookAllowed(t *testing.T) {
 	}
 
 	// Should return empty response since "make test" doesn't match any deny rule
-	if response != "" {
-		t.Errorf("Expected empty response for allowed command, got %s", response)
+	if response.Message != "" {
+		t.Errorf("Expected empty response for allowed command, got %s", response.Message)
 	}
 }
 
@@ -142,7 +142,7 @@ func TestProcessHookDangerousCommand(t *testing.T) {
 	}
 
 	// Should return a response since dangerous rm command matches a rule
-	if response == "" {
+	if response.Message == "" {
 		t.Error("Expected non-empty response for dangerous command")
 	}
 }
@@ -176,11 +176,11 @@ func TestProcessHookPatternMatching(t *testing.T) {
 	}
 
 	// Should return a response since this matches "go test.*" pattern
-	if response == "" {
+	if response.Message == "" {
 		t.Error("Expected non-empty response for go test pattern match")
 	}
 
-	if !strings.Contains(response, "just test") {
+	if !strings.Contains(response.Message, "just test") {
 		t.Error("Response should suggest just test alternative")
 	}
 }
@@ -228,8 +228,8 @@ func TestProcessHookPreToolUseMatchesCommand(t *testing.T) {
 
 	response, err := app.ProcessHook(context.Background(), strings.NewReader(hookInput))
 	require.NoError(t, err)
-	assert.NotEmpty(t, response, "Should deny command with message")
-	assert.Contains(t, response, "Use file explorer instead")
+	assert.NotEmpty(t, response.Message, "Should deny command with message")
+	assert.Contains(t, response.Message, "Use file explorer instead")
 }
 
 func TestProcessHookPreToolUseRespectsEventField(t *testing.T) {
@@ -255,7 +255,7 @@ func TestProcessHookPreToolUseRespectsEventField(t *testing.T) {
 
 	response, err := app.ProcessHook(context.Background(), strings.NewReader(hookInput))
 	require.NoError(t, err)
-	assert.Empty(t, response, "Rule with event=post should not match PreToolUse hooks")
+	assert.Empty(t, response.Message, "Rule with event=post should not match PreToolUse hooks")
 }
 
 func TestProcessHookPreToolUseSourcesFiltering(t *testing.T) {
@@ -281,7 +281,7 @@ func TestProcessHookPreToolUseSourcesFiltering(t *testing.T) {
 
 	response, err := app.ProcessHook(context.Background(), strings.NewReader(hookInput))
 	require.NoError(t, err)
-	assert.Empty(t, response, "Rule with sources=[command] should not match description field")
+	assert.Empty(t, response.Message, "Rule with sources=[command] should not match description field")
 }
 
 func TestProcessHookLogsErrors(t *testing.T) {
@@ -344,8 +344,8 @@ func TestProcessHookSimplifiedSchemaAlwaysDenies(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ProcessHook failed: %v", err)
 	}
-	if result1 != "Use just test instead" {
-		t.Errorf("Expected 'Use just test instead', got %q", result1)
+	if result1.Message != "Use just test instead" {
+		t.Errorf("Expected 'Use just test instead', got %q", result1.Message)
 	}
 
 	// Test second rule - should be blocked because it matches (no action field needed)
@@ -360,8 +360,8 @@ func TestProcessHookSimplifiedSchemaAlwaysDenies(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ProcessHook failed: %v", err)
 	}
-	if result2 != "Dangerous command detected" {
-		t.Errorf("Expected 'Dangerous command detected', got %q", result2)
+	if result2.Message != "Dangerous command detected" {
+		t.Errorf("Expected 'Dangerous command detected', got %q", result2.Message)
 	}
 
 	// Test non-matching command - should be allowed
@@ -375,7 +375,7 @@ func TestProcessHookSimplifiedSchemaAlwaysDenies(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ProcessHook failed: %v", err)
 	}
-	if result3 != "" {
-		t.Errorf("Expected empty result for allowed command, got %q", result3)
+	if result3.Message != "" {
+		t.Errorf("Expected empty result for allowed command, got %q", result3.Message)
 	}
 }

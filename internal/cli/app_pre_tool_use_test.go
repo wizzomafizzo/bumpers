@@ -62,8 +62,8 @@ func testPreToolUseIntentMatching(t *testing.T, tc *preToolUseIntentTestCase) {
 		t.Fatalf("ProcessHook failed: %v", err)
 	}
 
-	if result != tc.expectedMessage {
-		t.Errorf("Expected %q, got %q", tc.expectedMessage, result)
+	if result.Message != tc.expectedMessage {
+		t.Errorf("Expected %q, got %q", tc.expectedMessage, result.Message)
 	}
 }
 
@@ -129,8 +129,8 @@ func TestPreToolUseIntentWithMissingTranscript(t *testing.T) {
 	}
 
 	// Should return empty when transcript can't be read
-	if result != "" {
-		t.Errorf("Expected empty result when transcript missing, got %q", result)
+	if result.Message != "" {
+		t.Errorf("Expected empty result when transcript missing, got %q", result.Message)
 	}
 }
 
@@ -243,7 +243,7 @@ func TestPreToolUseWithToolUseIDExtraction(t *testing.T) {
 
 	response, err := app.ProcessHook(context.Background(), strings.NewReader(hookInput))
 	require.NoError(t, err)
-	assert.Contains(t, response, "Consider checking database connection first",
+	assert.Contains(t, response.Message, "Consider checking database connection first",
 		"Should match intent extracted by tool_use_id")
 }
 
@@ -296,10 +296,10 @@ func TestPreToolUseWithoutToolUseIDNeedsNewReliableMethod(t *testing.T) {
 
 	// With old method, this would wrongly block due to "rm -rf" in combined text
 	// With new method, it should correctly allow and provide test guidance
-	if strings.Contains(response, "DANGEROUS COMMAND BLOCKED") {
+	if strings.Contains(response.Message, "DANGEROUS COMMAND BLOCKED") {
 		t.Error("Old method incorrectly blocked safe command due to noise in transcript")
 	}
-	assert.Contains(t, response, "Test guidance",
+	assert.Contains(t, response.Message, "Test guidance",
 		"Should match correct recent intent, not old noise")
 }
 
@@ -335,7 +335,7 @@ func TestPreToolUseWithoutToolUseIDUsesOldMethod(t *testing.T) {
 
 	response, err := app.ProcessHook(context.Background(), strings.NewReader(hookInput))
 	require.NoError(t, err)
-	assert.Contains(t, response, "Database test guidance",
+	assert.Contains(t, response.Message, "Database test guidance",
 		"Should match using old extraction method when tool_use_id not available")
 }
 
@@ -369,7 +369,7 @@ func TestPreToolUseToolUseIDExtractsPreciseIntent(t *testing.T) {
 
 	response, err := app.ProcessHook(context.Background(), strings.NewReader(hookInput))
 	require.NoError(t, err)
-	assert.Contains(t, response, "Matched precise intent via tool_use_id",
+	assert.Contains(t, response.Message, "Matched precise intent via tool_use_id",
 		"Should match only the precise parent intent, not all assistant messages")
 }
 
