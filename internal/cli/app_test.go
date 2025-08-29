@@ -3068,11 +3068,11 @@ func TestProcessHookRoutesPostToolUse(t *testing.T) {
 	t.Parallel()
 
 	configContent := `rules:
-  # Post-tool-use rule matching output (TODO: implement tool_output support)
+  # Post-tool-use rule matching output (TODO: implement tool_response support)
   - match:
       pattern: "error|failed"
       event: "post"
-      sources: ["tool_output"]
+      sources: ["tool_response"]
     send: "Command failed - check the output"
   # Post-tool-use rule matching reasoning
   - match:
@@ -3103,7 +3103,7 @@ func TestProcessHookRoutesPostToolUse(t *testing.T) {
 		"tool_input": {
 			"command": "npm test"
 		},
-		"tool_output": {
+		"tool_response": {
 			"success": true,
 			"output": "All tests passed"
 		}
@@ -3151,7 +3151,7 @@ func TestPostToolUseWithDifferentTranscript(t *testing.T) {
 		"hook_event_name": "PostToolUse",
 		"tool_name": "Bash",
 		"tool_input": {"command": "ls /root"},
-		"tool_output": {"error": true}
+		"tool_response": {"error": true}
 	}`
 
 	result, err := app.ProcessHook(context.Background(), strings.NewReader(postToolUseInput))
@@ -3201,7 +3201,7 @@ func TestPostToolUseRuleNotMatching(t *testing.T) {
 		"hook_event_name": "PostToolUse",
 		"tool_name": "Bash",
 		"tool_input": {"command": "ls"},
-		"tool_output": {"success": true}
+		"tool_response": {"success": true}
 	}`
 
 	result, err := app.ProcessHook(context.Background(), strings.NewReader(postToolUseInput))
@@ -3247,7 +3247,7 @@ func TestPostToolUseWithCustomPattern(t *testing.T) {
 		"hook_event_name": "PostToolUse",
 		"tool_name": "Bash",
 		"tool_input": {"command": "curl -m 5 example.com"},
-		"tool_output": {"success": false}
+		"tool_response": {"success": false}
 	}`, transcriptPath)
 
 	result, err := app.ProcessHook(context.Background(), strings.NewReader(postToolUseInput))
@@ -3263,7 +3263,7 @@ func TestPostToolUseWithCustomPattern(t *testing.T) {
 	}
 }
 
-// TestPostToolUseWithToolOutputMatching tests tool_output field matching
+// TestPostToolUseWithToolOutputMatching tests tool_response field matching
 func TestPostToolUseWithToolOutputMatching(t *testing.T) {
 	t.Parallel()
 
@@ -3312,7 +3312,7 @@ func TestPostToolUseWithMultipleFieldMatching(t *testing.T) {
 	sessionID1 := fmt.Sprintf("test-%d-1", time.Now().UnixNano())
 	sessionID2 := fmt.Sprintf("test-%d-2", time.Now().UnixNano())
 
-	// Test with tool_output containing timeout
+	// Test with tool_response containing timeout
 	jsonData1 := fmt.Sprintf(`{
 		"session_id": "%s",
 		"transcript_path": "",
@@ -3381,22 +3381,25 @@ func TestPostToolUseWithThinkingAndTextBlocks(t *testing.T) {
 	configPath := createTempConfig(t, configContent)
 	app := NewApp(configPath)
 
-	// Create transcript with both thinking blocks and text content
+	// Create transcript with text content and proper tool_use structure
 	tmpDir := t.TempDir()
 	transcriptPath := filepath.Join(tmpDir, "thinking-text-transcript.jsonl")
 	transcriptContent := `{"type":"user","message":{"role":"user","content":"Check system performance"},` +
 		`"uuid":"user1","timestamp":"2024-01-01T10:00:00Z"}
-{"type":"assistant","message":{"role":"assistant","content":[{"type":"thinking",` +
-		`"thinking":"I need to analyze the system performance metrics to identify bottlenecks."},` +
-		`{"type":"text","text":"I'll check the system performance for you."}]},"uuid":"assistant1",` +
+{"type":"assistant","message":{"role":"assistant","content":[` +
+		`{"type":"text","text":"I need to analyze the system performance metrics to ` +
+		`identify bottlenecks. I'll check the system performance for you."}]},"uuid":"assistant1",` +
 		`"timestamp":"2024-01-01T10:01:00Z"}
+{"type":"assistant","message":{"role":"assistant","content":[` +
+		`{"type":"tool_use","id":"tool1","name":"Bash","input":{"command":"top"}}]},"uuid":"assistant2",` +
+		`"parentUuid":"assistant1","timestamp":"2024-01-01T10:01:30Z"}
 {"type":"user","message":{"role":"user","content":[{"tool_use_id":"tool1","type":"tool_result",` +
 		`"content":[{"type":"text","text":"CPU: 85%, Memory: 70%, Disk: 40%"}]}]},"uuid":"user2",` +
 		`"timestamp":"2024-01-01T10:02:00Z"}
-{"type":"assistant","message":{"role":"assistant","content":[{"type":"thinking",` +
-		`"thinking":"The CPU usage is quite high at 85%, which could indicate performance issues."},` +
-		`{"type":"text","text":"The system shows high CPU usage at 85%. ` +
-		`This could be causing performance issues."}]},"uuid":"assistant2","timestamp":"2024-01-01T10:03:00Z"}`
+{"type":"assistant","message":{"role":"assistant","content":[` +
+		`{"type":"text","text":"The CPU usage is quite high at 85%, which could indicate performance issues. ` +
+		`The system shows high CPU usage at 85%. This could be causing performance issues."}}],"uuid":"assistant3",` +
+		`"timestamp":"2024-01-01T10:03:00Z"}`
 
 	if err := os.WriteFile(transcriptPath, []byte(transcriptContent), 0o600); err != nil {
 		t.Fatalf("Failed to write transcript file: %v", err)
@@ -3409,7 +3412,7 @@ func TestPostToolUseWithThinkingAndTextBlocks(t *testing.T) {
 		"hook_event_name": "PostToolUse",
 		"tool_name": "Bash",
 		"tool_input": {"command": "top"},
-		"tool_output": {"success": true}
+		"tool_response": {"success": true}
 	}`, transcriptPath)
 
 	result, err := app.ProcessHook(context.Background(), strings.NewReader(postToolUseInput))
@@ -3417,10 +3420,10 @@ func TestPostToolUseWithThinkingAndTextBlocks(t *testing.T) {
 		t.Fatalf("ProcessHook failed: %v", err)
 	}
 
-	// Should match pattern from thinking block content
+	// Should match pattern from text content
 	expectedMessage := "Performance analysis detected"
 	if result != expectedMessage {
-		t.Errorf("Expected %q (thinking block should be extracted), got %q", expectedMessage, result)
+		t.Errorf("Expected %q (text content should be extracted), got %q", expectedMessage, result)
 	}
 }
 
@@ -3558,7 +3561,7 @@ func TestPreToolUseIntentSupport(t *testing.T) {
 	t.Parallel()
 
 	transcriptContent := `{"type":"assistant","message":{"content":[` +
-		`{"type":"thinking","thinking":"I need to run some database tests to verify the connection works"}, ` +
+		`{"type":"text","text":"I need to run some database tests to verify the connection works"}, ` +
 		`{"type":"text","text":"I'll run the database tests for you"}]}}`
 	testPreToolUseIntentMatching(t, &preToolUseIntentTestCase{
 		testName:          "test",
@@ -3658,7 +3661,7 @@ func testPostToolUseIntegration(t *testing.T, tc *postToolUseIntegrationTestCase
 		"hook_event_name": "PostToolUse",
 		"tool_name": "Bash",
 		"tool_input": {"command": "%s"},
-		"tool_output": {"success": %t}
+		"tool_response": {"success": %t}
 	}`, tc.sessionID, absPath, tc.command, tc.success)
 
 	result, err := app.ProcessHook(context.Background(), strings.NewReader(postToolUseInput))
@@ -3744,9 +3747,14 @@ func TestPostToolUseDebugOutputShowsIntentFields(t *testing.T) {
 	configPath := createTempConfig(t, configContent)
 	app := NewApp(configPath)
 
-	// Create transcript with thinking content
+	// Set up mock launcher to avoid real Claude calls
+	mockLauncher := claude.SetupMockLauncherWithDefaults()
+	mockLauncher.SetResponseForPattern("", "Enhanced message from AI")
+	app.SetMockLauncher(mockLauncher)
+
+	// Create transcript with text content
 	transcriptContent := `{"type":"assistant","message":{"role":"assistant",` +
-		`"content":[{"type":"thinking","thinking":"I need to test this pattern carefully"}]}}`
+		`"content":[{"type":"text","text":"I need to test this pattern carefully"}]}}`
 	transcriptPath := createTempTranscript(t, transcriptContent)
 
 	postToolUseInput := fmt.Sprintf(`{
@@ -3756,7 +3764,7 @@ func TestPostToolUseDebugOutputShowsIntentFields(t *testing.T) {
 		"hook_event_name": "PostToolUse",
 		"tool_name": "Bash",
 		"tool_input": {"command": "echo test"},
-		"tool_output": {"output": "Command output"}
+		"tool_response": {"output": "Command output"}
 	}`, transcriptPath)
 
 	// Process hook with context-aware logging
@@ -3767,12 +3775,43 @@ func TestPostToolUseDebugOutputShowsIntentFields(t *testing.T) {
 	logStr := getLogs()
 
 	// Verify intent extraction debug output appears
-	assert.Contains(t, logStr, "Intent content extracted successfully")
-	assert.Contains(t, logStr, "extracted_intent_length")
-	assert.Contains(t, logStr, "intent_preview")
+	assert.Contains(t, logStr, "FindRecentToolUseAndExtractIntent extracted content from transcript")
 }
 
 // TestPreToolUseDebugOutputShowsIntentFields tests debug logging shows extracted intent content for PreToolUse
+func TestExtractAndLogIntentCalledForAllPreToolUseEvents(t *testing.T) {
+	t.Parallel()
+	ctx, getLogs := setupTestWithContext(t)
+
+	// Create a simple config (no specific rules needed - intent should be extracted regardless)
+	configContent := `rules: []`
+	configPath := createTempConfig(t, configContent)
+	app := NewApp(configPath)
+
+	// Create a transcript with intent content
+	transcriptContent := `{"type":"assistant","uuid":"parent-uuid","message":{"role":"assistant",` +
+		`"content":[{"type":"text","text":"I need to run echo hello for testing"}]}}`
+	transcriptPath := createTempTranscript(t, transcriptContent)
+
+	// Create PreToolUse hook input with transcript
+	preToolUseInput := fmt.Sprintf(`{
+		"tool_name": "Bash",
+		"tool_input": {"command": "echo hello"},
+		"transcript_path": "%s"
+	}`, transcriptPath)
+
+	// Process hook - this should call extractAndLogIntent and log the extracted intent
+	_, err := app.ProcessHook(ctx, strings.NewReader(preToolUseInput))
+	require.NoError(t, err)
+
+	// Get captured log output
+	logStr := getLogs()
+
+	// Verify intent extraction debug output appears (this will fail until extractAndLogIntent is implemented)
+	assert.Contains(t, logStr, "Intent extracted from transcript for hook processing")
+	assert.Contains(t, logStr, "I need to run echo hello for testing")
+}
+
 func TestPreToolUseDebugOutputShowsIntentFields(t *testing.T) {
 	t.Parallel()
 	ctx, getLogs := setupTestWithContext(t)
@@ -3787,9 +3826,14 @@ func TestPreToolUseDebugOutputShowsIntentFields(t *testing.T) {
 	configPath := createTempConfig(t, configContent)
 	app := NewApp(configPath)
 
-	// Create transcript with thinking content
+	// Set up mock launcher to avoid real Claude calls
+	mockLauncher := claude.SetupMockLauncherWithDefaults()
+	mockLauncher.SetResponseForPattern("", "Enhanced message from AI")
+	app.SetMockLauncher(mockLauncher)
+
+	// Create transcript with text content
 	transcriptContent := `{"type":"assistant","message":{"role":"assistant",` +
-		`"content":[{"type":"thinking","thinking":"I need to test this pattern carefully"}]}}`
+		`"content":[{"type":"text","text":"I need to test this pattern carefully"}]}}`
 	transcriptPath := createTempTranscript(t, transcriptContent)
 
 	preToolUseInput := fmt.Sprintf(`{
@@ -3813,4 +3857,207 @@ func TestPreToolUseDebugOutputShowsIntentFields(t *testing.T) {
 	assert.Contains(t, logStr, "processing PreToolUse hook")
 	assert.Contains(t, logStr, "received hook")
 	// Intent extraction happens silently in PreToolUse - no additional logging asserts needed
+}
+
+// Test helper for creating tool use transcript test scenarios
+func createToolUseTestScenario(t *testing.T, transcriptContent, configContent string) (string, *App) {
+	tempDir := t.TempDir()
+	transcriptPath := filepath.Join(tempDir, "transcript.jsonl")
+	err := os.WriteFile(transcriptPath, []byte(transcriptContent), 0o600)
+	require.NoError(t, err)
+
+	configPath := createTempConfig(t, configContent)
+	app := NewApp(configPath)
+
+	return transcriptPath, app
+}
+
+func TestPreToolUseWithToolUseIDExtraction(t *testing.T) {
+	t.Parallel()
+
+	transcriptContent := `{"type":"assistant","uuid":"parent-uuid",` +
+		`"message":{"role":"assistant","content":[{"type":"text",` +
+		`"text":"I need to run some database tests to verify the connection works"}]}}
+{"type":"assistant","uuid":"tool-use-uuid","parentUuid":"parent-uuid",` +
+		`"message":{"role":"assistant","content":[{"type":"tool_use",` +
+		`"id":"toolu_01KTePc3uLq34eriLmSLbgnx","name":"Bash"}]}}`
+
+	configContent := `rules:
+  - match:
+      pattern: "database.*test"
+      sources: ["#intent"]
+    send: "Consider checking database connection first"
+    generate: "off"`
+
+	transcriptPath, app := createToolUseTestScenario(t, transcriptContent, configContent)
+
+	hookInput := fmt.Sprintf(`{
+		"tool_input": {"command": "python test_db.py"},
+		"tool_name": "Bash",
+		"transcript_path": "%s",
+		"tool_use_id": "toolu_01KTePc3uLq34eriLmSLbgnx"
+	}`, transcriptPath)
+
+	response, err := app.ProcessHook(context.Background(), strings.NewReader(hookInput))
+	require.NoError(t, err)
+	assert.Contains(t, response, "Consider checking database connection first",
+		"Should match intent extracted by tool_use_id")
+}
+
+func TestPreToolUseWithoutToolUseIDNeedsNewReliableMethod(t *testing.T) {
+	t.Parallel()
+
+	// Create a transcript where old method would match wrong pattern due to noise
+	// Old method concatenates ALL assistant text, new method gets most recent intent
+	transcriptContent := `{"type":"assistant","message":{"role":"assistant",` +
+		`"content":[{"type":"text","text":"I want to delete dangerous files using rm -rf"}]}}
+{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Actually, let's focus on testing instead"}]}}
+{"type":"assistant","message":{"role":"assistant",` +
+		`"content":[{"type":"text","text":"Good idea, let's focus on proper testing approaches"}]}}
+{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Run the tests please"}]}}
+{"type":"assistant","message":{"role":"assistant",` +
+		`"content":[{"type":"text","text":"Let me run some unit tests instead"}]}}
+{"type":"assistant","message":{"role":"assistant",` +
+		`"content":[{"type":"tool_use","id":"toolu_123","name":"Bash","input":{"command":"npm test"}}]}}`
+
+	tempDir := t.TempDir()
+	transcriptPath := filepath.Join(tempDir, "transcript.jsonl")
+	err := os.WriteFile(transcriptPath, []byte(transcriptContent), 0o600)
+	require.NoError(t, err)
+
+	configContent := `rules:
+  - match:
+      pattern: "delete.*dangerous|rm.*-rf"
+      sources: ["#intent"]
+    send: "DANGEROUS COMMAND BLOCKED"
+    generate: "off"
+  - match:
+      pattern: "unit.*test"
+      sources: ["#intent"]
+    send: "Test guidance"
+    generate: "off"`
+
+	configPath := createTempConfig(t, configContent)
+	app := NewApp(configPath)
+
+	// Hook input WITHOUT tool_use_id - old method would include dangerous pattern
+	hookInput := fmt.Sprintf(`{
+		"tool_input": {"command": "npm test"},
+		"tool_name": "Bash",
+		"transcript_path": "%s"
+	}`, transcriptPath)
+
+	response, err := app.ProcessHook(context.Background(), strings.NewReader(hookInput))
+	require.NoError(t, err)
+
+	// With old method, this would wrongly block due to "rm -rf" in combined text
+	// With new method, it should correctly allow and provide test guidance
+	if strings.Contains(response, "DANGEROUS COMMAND BLOCKED") {
+		t.Error("Old method incorrectly blocked safe command due to noise in transcript")
+	}
+	assert.Contains(t, response, "Test guidance",
+		"Should match correct recent intent, not old noise")
+}
+
+func TestPreToolUseWithoutToolUseIDUsesOldMethod(t *testing.T) {
+	t.Parallel()
+
+	// Create a transcript that only works with the OLD method (no parent-child relationship)
+	transcriptContent := `{"type":"assistant","message":{"role":"assistant",` +
+		`"content":[{"type":"text","text":"I need to run database tests for verification"}]}}`
+
+	tempDir := t.TempDir()
+	transcriptPath := filepath.Join(tempDir, "transcript.jsonl")
+	err := os.WriteFile(transcriptPath, []byte(transcriptContent), 0o600)
+	require.NoError(t, err)
+
+	configContent := `rules:
+  - match:
+      pattern: "database.*test"
+      sources: ["#intent"]
+    send: "Database test guidance"
+    generate: "off"`
+
+	configPath := createTempConfig(t, configContent)
+	app := NewApp(configPath)
+
+	// Hook input WITHOUT tool_use_id - should fall back to old method
+	hookInput := fmt.Sprintf(`{
+		"tool_input": {"command": "python test_db.py"},
+		"tool_name": "Bash",
+		"transcript_path": "%s"
+	}`, transcriptPath)
+
+	response, err := app.ProcessHook(context.Background(), strings.NewReader(hookInput))
+	require.NoError(t, err)
+	assert.Contains(t, response, "Database test guidance",
+		"Should match using old extraction method when tool_use_id not available")
+}
+
+func TestPreToolUseToolUseIDExtractsPreciseIntent(t *testing.T) {
+	t.Parallel()
+
+	transcriptContent := `{"type":"user","message":{"role":"user","content":"unrelated user text"}}
+{"type":"assistant","uuid":"parent-uuid","message":{"role":"assistant",` +
+		`"content":[{"type":"text","text":"precise-target-intent"}]}}
+{"type":"assistant","uuid":"tool-use-uuid","parentUuid":"parent-uuid",` +
+		`"message":{"role":"assistant","content":[{"type":"tool_use",` +
+		`"id":"toolu_01KTePc3uLq34eriLmSLbgnx","name":"Bash"}]}}
+{"type":"assistant","message":{"role":"assistant",` +
+		`"content":[{"type":"text","text":"other unrelated assistant message"}]}}`
+
+	configContent := `rules:
+  - match:
+      pattern: "^precise-target-intent$"
+      sources: ["#intent"]
+    send: "Matched precise intent via tool_use_id"
+    generate: "off"`
+
+	transcriptPath, app := createToolUseTestScenario(t, transcriptContent, configContent)
+
+	hookInput := fmt.Sprintf(`{
+		"tool_input": {"command": "test command"},
+		"tool_name": "Bash",
+		"transcript_path": "%s",
+		"tool_use_id": "toolu_01KTePc3uLq34eriLmSLbgnx"
+	}`, transcriptPath)
+
+	response, err := app.ProcessHook(context.Background(), strings.NewReader(hookInput))
+	require.NoError(t, err)
+	assert.Contains(t, response, "Matched precise intent via tool_use_id",
+		"Should match only the precise parent intent, not all assistant messages")
+}
+
+func TestPostToolUseWithToolUseIDExtraction(t *testing.T) {
+	t.Parallel()
+
+	transcriptContent := `{"type":"assistant","message":{"role":"assistant",` +
+		`"content":[{"type":"text","text":"general background intent"}]}}
+{"type":"assistant","uuid":"parent-uuid","message":{"role":"assistant",` +
+		`"content":[{"type":"text","text":"specific error handling needed for this operation"}]}}
+{"type":"assistant","uuid":"tool-use-uuid","parentUuid":"parent-uuid",` +
+		`"message":{"role":"assistant","content":[{"type":"tool_use",` +
+		`"id":"toolu_01KTePc3uLq34eriLmSLbgnx","name":"Bash"}]}}`
+
+	configContent := `rules:
+  - match:
+      pattern: "^specific error handling needed"
+      sources: ["#intent"]
+      event: "post"
+    send: "Matched specific post-tool intent via tool_use_id"
+    generate: "off"`
+
+	transcriptPath, app := createToolUseTestScenario(t, transcriptContent, configContent)
+
+	hookInput := fmt.Sprintf(`{
+		"tool_name": "Bash",
+		"transcript_path": "%s",
+		"tool_use_id": "toolu_01KTePc3uLq34eriLmSLbgnx",
+		"tool_response": "command output"
+	}`, transcriptPath)
+
+	response, err := app.ProcessPostToolUse(context.Background(), json.RawMessage(hookInput))
+	require.NoError(t, err)
+	assert.Contains(t, response, "Matched specific post-tool intent via tool_use_id",
+		"Should match specific intent from tool_use_id extraction in PostToolUse")
 }

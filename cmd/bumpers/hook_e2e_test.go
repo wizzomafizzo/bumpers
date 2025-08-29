@@ -65,7 +65,8 @@ func TestHookCommandBlocksWithProperToolName(t *testing.T) { //nolint:parallelte
 			"command": "go test ./...",
 			"description": "Run tests"
 		},
-		"tool_name": "Bash"
+		"tool_name": "Bash",
+		"tool_use_id": "toolu_01KTePc3uLq34eriLmSLbgnx"
 	}`
 
 	// Test hook command execution
@@ -131,7 +132,8 @@ func TestHookCommandNoDuplicateOutput(t *testing.T) { //nolint:paralleltest // c
 			"command": "go test ./...",
 			"description": "Run tests"
 		},
-		"tool_name": "Bash"
+		"tool_name": "Bash",
+		"tool_use_id": "toolu_01KTePc3uLq34eriLmSLbgnx"
 	}`
 
 	// Test hook command execution
@@ -192,7 +194,8 @@ func TestHookCommandAllowsInputWithMissingToolName(t *testing.T) { //nolint:para
 		"tool_input": {
 			"command": "go test ./...",
 			"description": "Run tests"
-		}
+		},
+		"tool_use_id": "toolu_01KTePc3uLq34eriLmSLbgnx"
 	}`
 
 	// Test hook command execution

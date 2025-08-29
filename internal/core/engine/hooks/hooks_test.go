@@ -57,7 +57,7 @@ func TestDetectHookType(t *testing.T) {
 		{
 			name: "PostToolUse hook",
 			jsonData: `{
-				"tool_output": {
+				"tool_response": {
 					"command": "go test",
 					"status": "success"
 				}
@@ -132,6 +132,29 @@ func TestParseInputWithToolName(t *testing.T) {
 
 	if event.ToolName != "Bash" {
 		t.Errorf("Expected tool name 'Bash', got '%s'", event.ToolName)
+	}
+}
+
+func TestParseInputWithToolUseID(t *testing.T) {
+	_, _ = testutil.NewTestContext(t)
+	t.Parallel()
+
+	jsonInput := `{
+		"tool_input": {
+			"command": "go test ./...",
+			"description": "Run tests"
+		},
+		"tool_name": "Bash",
+		"tool_use_id": "toolu_01KTePc3uLq34eriLmSLbgnx"
+	}`
+
+	event, err := ParseInput(strings.NewReader(jsonInput))
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	if event.ToolUseID != "toolu_01KTePc3uLq34eriLmSLbgnx" {
+		t.Errorf("Expected tool use ID 'toolu_01KTePc3uLq34eriLmSLbgnx', got '%s'", event.ToolUseID)
 	}
 }
 

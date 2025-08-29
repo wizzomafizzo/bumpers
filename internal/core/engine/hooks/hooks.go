@@ -38,6 +38,7 @@ type HookEvent struct {
 	ToolInput      map[string]any `json:"tool_input"`      //nolint:tagliatelle // API uses snake_case
 	ToolName       string         `json:"tool_name"`       //nolint:tagliatelle // API uses snake_case
 	TranscriptPath string         `json:"transcript_path"` //nolint:tagliatelle // API uses snake_case
+	ToolUseID      string         `json:"tool_use_id"`     //nolint:tagliatelle // API uses snake_case
 }
 
 func ParseInput(reader io.Reader) (*HookEvent, error) {
@@ -64,9 +65,9 @@ func DetectHookType(reader io.Reader) (HookType, json.RawMessage, error) {
 	}
 
 	// Check for distinctive fields to determine hook type
-	// PostToolUse has both tool_input and tool_output, so check for it first
+	// PostToolUse has both tool_input and tool_response, so check for it first
 	if _, hasInput := generic["tool_input"]; hasInput {
-		if _, hasOutput := generic["tool_output"]; hasOutput {
+		if _, hasResponse := generic["tool_response"]; hasResponse {
 			return PostToolUseHook, json.RawMessage(data), nil
 		}
 		return PreToolUseHook, json.RawMessage(data), nil
@@ -74,7 +75,7 @@ func DetectHookType(reader io.Reader) (HookType, json.RawMessage, error) {
 	if _, ok := generic["prompt"]; ok {
 		return UserPromptSubmitHook, json.RawMessage(data), nil
 	}
-	if _, ok := generic["tool_output"]; ok {
+	if _, ok := generic["tool_response"]; ok {
 		return PostToolUseHook, json.RawMessage(data), nil
 	}
 	if hookEventName, ok := generic["hook_event_name"]; ok {

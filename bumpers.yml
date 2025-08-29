@@ -8,9 +8,13 @@ rules:
         - just test-unit
         - just test-integration
         - just test-e2e
-        These commands have *exactly* the same arguments as "go test" and
+        
+        These commands have EXACTLY the same arguments as "go test" and
         actually pass args straight through to the official commands. No
-        special syntax required. They still MUST include paths like ./... and ./internal/example/...
+        special syntax required.
+        
+        They still MUST include paths like ./... or ./internal and will fail
+        if flags are given without a path as well.
     - match: ^(gci|go vet|goimports|gofumpt|go *fmt|golangci-lint)
       send: Use "just lint fix" instead to resolve lint/formatting issues.
     - match: git commit --no-verify|LEFTHOOK=0

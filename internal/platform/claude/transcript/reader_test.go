@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/wizzomafizzo/bumpers/internal/testing"
 )
@@ -52,7 +53,7 @@ func TestExtractReasoningContent_WithRealisticTranscript(t *testing.T) {
 
 	// Should contain patterns indicating reasoning
 	if !containsPattern(reasoning, "I need to") && !containsPattern(reasoning, "I can see") {
-		t.Errorf("Expected reasoning content to contain thinking patterns, got: %s", reasoning)
+		t.Errorf("Expected reasoning content to contain reasoning patterns, got: %s", reasoning)
 	}
 }
 
@@ -128,111 +129,6 @@ func TestExtractReasoningContent_LargeFileEfficiency(t *testing.T) {
 	}
 }
 
-func TestExtractIntentContent_WithThinkingBlocks(t *testing.T) {
-	_, _ = testutil.NewTestContext(t) // Context-aware logging available
-	t.Parallel()
-
-	// Create transcript with thinking blocks (new format)
-	tmpDir := t.TempDir()
-	transcriptPath := filepath.Join(tmpDir, "test-transcript-thinking.jsonl")
-
-	// Realistic transcript content with thinking blocks and text content
-	transcriptContent := `{"type":"user","message":{"role":"user","content":"Run some tests"},"uuid":"user1"}
-{"type":"assistant","message":{"role":"assistant","content":[{"type":"thinking",` +
-		`"thinking":"I need to analyze what tests to run and how to execute them properly. ` +
-		`Let me check the available test commands."},` +
-		`{"type":"text","text":"I'll run the tests for you."}]},"uuid":"assistant1"}
-{"type":"assistant","message":{"role":"assistant","content":[` +
-		`{"type":"text","text":"The tests completed successfully."}]},"uuid":"assistant2"}`
-
-	err := os.WriteFile(transcriptPath, []byte(transcriptContent), 0o600)
-	if err != nil {
-		t.Fatalf("Failed to create test transcript: %v", err)
-	}
-
-	// Extract intent content
-	intent, err := ExtractIntentContent(transcriptPath)
-	if err != nil {
-		t.Fatalf("ExtractIntentContent failed: %v", err)
-	}
-
-	// Should contain both thinking and text content
-	if !containsPattern(intent, "I need to analyze what tests to run") {
-		t.Errorf("Expected intent to contain thinking content, got: %s", intent)
-	}
-	if !containsPattern(intent, "I'll run the tests for you") {
-		t.Errorf("Expected intent to contain text content, got: %s", intent)
-	}
-	if !containsPattern(intent, "The tests completed successfully") {
-		t.Errorf("Expected intent to contain second text content, got: %s", intent)
-	}
-}
-
-// TestExtractIntentContent_WithTextOnly tests extraction when only text blocks are present
-func TestExtractIntentContent_WithTextOnly(t *testing.T) {
-	_, _ = testutil.NewTestContext(t) // Context-aware logging available
-	t.Parallel()
-
-	tmpDir := t.TempDir()
-	transcriptPath := filepath.Join(tmpDir, "text-only-transcript.jsonl")
-
-	// Content with only text blocks, no thinking blocks
-	transcriptContent := `{"type":"user","message":{"role":"user","content":"Show me the status"},"uuid":"user1",` +
-		`"timestamp":"2024-01-01T10:00:00Z"}
-{"type":"assistant","message":{"role":"assistant","content":[{"type":"text",` +
-		`"text":"I'll check the current status for you."}]},"uuid":"assistant1","timestamp":"2024-01-01T10:00:05Z"}
-{"type":"assistant","message":{"role":"assistant","content":[{"type":"text",` +
-		`"text":"The system is running normally with no issues detected."}]},"uuid":"assistant2",` +
-		`"timestamp":"2024-01-01T10:00:10Z"}`
-
-	err := os.WriteFile(transcriptPath, []byte(transcriptContent), 0o600)
-	if err != nil {
-		t.Fatalf("Failed to create text-only transcript: %v", err)
-	}
-
-	intent, err := ExtractIntentContent(transcriptPath)
-	if err != nil {
-		t.Fatalf("ExtractIntentContent failed: %v", err)
-	}
-
-	// Should contain text content from both assistant messages
-	if !containsPattern(intent, "I'll check the current status") {
-		t.Errorf("Expected intent to contain first text content, got: %s", intent)
-	}
-	if !containsPattern(intent, "The system is running normally") {
-		t.Errorf("Expected intent to contain second text content, got: %s", intent)
-	}
-
-	// Should not contain user content
-	if containsPattern(intent, "Show me the status") {
-		t.Errorf("Intent should not contain user content, got: %s", intent)
-	}
-}
-
-// TestExtractIntentContent_EmptyFile tests handling of empty transcript files
-func TestExtractIntentContent_EmptyFile(t *testing.T) {
-	_, _ = testutil.NewTestContext(t) // Context-aware logging available
-	t.Parallel()
-
-	tmpDir := t.TempDir()
-	transcriptPath := filepath.Join(tmpDir, "empty-transcript.jsonl")
-
-	// Create empty file
-	err := os.WriteFile(transcriptPath, []byte(""), 0o600)
-	if err != nil {
-		t.Fatalf("Failed to create empty transcript: %v", err)
-	}
-
-	intent, err := ExtractIntentContent(transcriptPath)
-	if err != nil {
-		t.Fatalf("ExtractIntentContent should handle empty file gracefully, got: %v", err)
-	}
-
-	if intent != "" {
-		t.Errorf("Expected empty intent from empty file, got: %s", intent)
-	}
-}
-
 // TestExtractIntentContent_NonExistentFile tests graceful error handling for missing files
 func TestExtractIntentContent_NonExistentFile(t *testing.T) {
 	_, _ = testutil.NewTestContext(t) // Context-aware logging available
@@ -264,8 +160,8 @@ func TestExtractIntentContent_MalformedJSON(t *testing.T) {
 {"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Valid assistant response"}]}` +
 		`,"uuid":"assistant1"}
 {invalid json line without proper structure}
-{"type":"assistant","message":{"role":"assistant","content":[{"type":"thinking",` +
-		`"thinking":"This should still be extracted despite the bad line above."}]},"uuid":"assistant2"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text",` +
+		`"text":"This should still be extracted despite the bad line above."}]},"uuid":"assistant2"}
 not even close to json
 {"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Final valid response"}]}` +
 		`,"uuid":"assistant3"}`
@@ -285,7 +181,7 @@ not even close to json
 		t.Errorf("Expected intent to contain valid assistant text, got: %s", intent)
 	}
 	if !containsPattern(intent, "This should still be extracted") {
-		t.Errorf("Expected intent to contain thinking after malformed line, got: %s", intent)
+		t.Errorf("Expected intent to contain text after malformed line, got: %s", intent)
 	}
 	if !containsPattern(intent, "Final valid response") {
 		t.Errorf("Expected intent to contain final valid response, got: %s", intent)
@@ -305,15 +201,11 @@ func TestExtractIntentContent_MixedContent(t *testing.T) {
 	tmpDir := t.TempDir()
 	transcriptPath := filepath.Join(tmpDir, "mixed-content-transcript.jsonl")
 
-	// Realistic transcript with mixed thinking and text, tool calls, longer reasoning chains
+	// Realistic transcript with text content, tool calls, and longer message chains
 	transcriptContent := `{"type":"user","message":{"role":"user",` +
 		`"content":"I need to implement a new feature for user authentication"},` +
 		`"uuid":"user1","timestamp":"2024-01-01T10:00:00Z"}
-` + `{"type":"assistant","message":{"role":"assistant","content":[{"type":"thinking",` +
-		`"thinking":"The user wants to implement authentication. I should consider the current ` +
-		`architecture, security best practices, and available authentication methods. Let me think ` +
-		`about JWT tokens, session management, password hashing, and database schema changes that ` +
-		`might be needed."},` +
+` + `{"type":"assistant","message":{"role":"assistant","content":[` +
 		`{"type":"text","text":"I'll help you implement user authentication. Let me start by ` +
 		`examining your current setup to recommend the best approach."}]},"uuid":"assistant1",` +
 		`"timestamp":"2024-01-01T10:00:05Z"}
@@ -322,11 +214,7 @@ func TestExtractIntentContent_MixedContent(t *testing.T) {
 ` + `{"type":"tool_response","tool_response":{"content":"// Current auth config\nmodule.exports = ` +
 		`{\n  secret: process.env.JWT_SECRET,\n  expiry: '24h'\n};"},"uuid":"tool_response1",` +
 		`"timestamp":"2024-01-01T10:00:12Z"}
-` + `{"type":"assistant","message":{"role":"assistant","content":[{"type":"thinking",` +
-		`"thinking":"I can see they already have some JWT configuration set up. This is good - ` +
-		`I can build on their existing setup. I should recommend implementing proper password ` +
-		`hashing with bcrypt, setting up user registration and login endpoints, and ensuring ` +
-		`proper middleware for route protection."},` +
+` + `{"type":"assistant","message":{"role":"assistant","content":[` +
 		`{"type":"text","text":"Great! I can see you already have JWT configuration in place. ` +
 		`Let's build on that foundation."},` +
 		`{"type":"text","text":"I'll help you implement: 1) User registration with password ` +
@@ -334,11 +222,7 @@ func TestExtractIntentContent_MixedContent(t *testing.T) {
 		`"uuid":"assistant2","timestamp":"2024-01-01T10:00:15Z"}
 ` + `{"type":"user","message":{"role":"user","content":"That sounds perfect. Can you start ` +
 		`with the registration endpoint?"},"uuid":"user2","timestamp":"2024-01-01T10:00:20Z"}
-` + `{"type":"assistant","message":{"role":"assistant","content":[{"type":"thinking",` +
-		`"thinking":"For the registration endpoint, I need to create a route that accepts ` +
-		`username/email and password, validates the input, hashes the password with bcrypt, ` +
-		`stores the user in the database, and returns appropriate success/error responses. ` +
-		`I should also check for existing users to prevent duplicates."},` +
+` + `{"type":"assistant","message":{"role":"assistant","content":[` +
 		`{"type":"text","text":"I'll create a registration endpoint with proper validation ` +
 		`and security measures."}]},"uuid":"assistant3","timestamp":"2024-01-01T10:00:25Z"}`
 
@@ -352,18 +236,7 @@ func TestExtractIntentContent_MixedContent(t *testing.T) {
 		t.Fatalf("ExtractIntentContent failed: %v", err)
 	}
 
-	// Should extract thinking blocks
-	if !containsPattern(intent, "I should consider the current architecture") {
-		t.Errorf("Expected intent to contain architectural thinking, got: %s", intent)
-	}
-	if !containsPattern(intent, "I can see they already have some JWT") {
-		t.Errorf("Expected intent to contain analysis thinking, got: %s", intent)
-	}
-	if !containsPattern(intent, "For the registration endpoint") {
-		t.Errorf("Expected intent to contain implementation thinking, got: %s", intent)
-	}
-
-	// Should extract text blocks
+	// Should extract text blocks only
 	if !containsPattern(intent, "I'll help you implement user authentication") {
 		t.Errorf("Expected intent to contain initial text response, got: %s", intent)
 	}
@@ -407,7 +280,7 @@ func TestExtractIntentContentOptimized_ReadsRecentContentFirst(t *testing.T) {
 
 	// Add recent relevant content that should be found
 	_, err := transcriptContent.WriteString(`{"type":"assistant","message":{"content":[` +
-		`{"type":"thinking","thinking":"I need to analyze the recent performance issue"},` +
+		`{"type":"text","text":"I need to analyze the recent performance issue"},` +
 		`{"type":"text","text":"Recent analysis shows performance problems"}]}}` + "\n")
 	if err != nil {
 		t.Fatalf("Failed to write to builder: %v", err)
@@ -452,7 +325,6 @@ func BenchmarkExtractIntentContent(b *testing.B) {
 	var transcriptContent strings.Builder
 	for i := 0; i < 1000; i++ {
 		_, err := transcriptContent.WriteString(`{"type":"assistant","message":{"content":[` +
-			`{"type":"thinking","thinking":"Analysis step ` + fmt.Sprintf("%d", i) + `"},` +
 			`{"type":"text","text":"Processing message ` + fmt.Sprintf("%d", i) + `"}]}}` + "\n")
 		if err != nil {
 			b.Fatalf("Failed to write to builder: %v", err)
@@ -481,7 +353,6 @@ func BenchmarkExtractIntentContentOptimized(b *testing.B) {
 	var transcriptContent strings.Builder
 	for i := 0; i < 1000; i++ {
 		_, err := transcriptContent.WriteString(`{"type":"assistant","message":{"content":[` +
-			`{"type":"thinking","thinking":"Analysis step ` + fmt.Sprintf("%d", i) + `"},` +
 			`{"type":"text","text":"Processing message ` + fmt.Sprintf("%d", i) + `"}]}}` + "\n")
 		if err != nil {
 			b.Fatalf("Failed to write to builder: %v", err)
@@ -504,6 +375,145 @@ func BenchmarkExtractIntentContentOptimized(b *testing.B) {
 // Helper function for test
 func containsPattern(text, pattern string) bool {
 	return strings.Contains(text, pattern)
+}
+
+func TestExtractIntentByToolUseID_Success(t *testing.T) {
+	_, _ = testutil.NewTestContext(t)
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	transcriptPath := filepath.Join(tmpDir, "test-transcript-tool-use-id.jsonl")
+
+	// Create test transcript with proper structure:
+	// 1. Assistant intent message (uuid: parent-uuid)
+	// 2. Assistant tool_use message (parentUuid: parent-uuid, content.id: tool-use-id)
+	transcriptContent := `{"type":"user","message":{"role":"user","content":"Run some tests"},"uuid":"user1"}
+{"type":"assistant","uuid":"parent-uuid","message":{"role":"assistant",` +
+		`"content":[{"type":"text","text":"I'll help you run the tests. ` +
+		`Let me check the current test configuration and run the appropriate test command."}]}}
+{"type":"assistant","uuid":"tool-use-uuid","parentUuid":"parent-uuid",` +
+		`"message":{"role":"assistant","content":[{"type":"tool_use",` +
+		`"id":"toolu_01KTePc3uLq34eriLmSLbgnx","name":"Bash"}]}}
+{"type":"system","toolUseID":"toolu_01KTePc3uLq34eriLmSLbgnx",` +
+		`"content":"PreToolUse:Bash [bumpers hook] completed successfully"}`
+
+	err := os.WriteFile(transcriptPath, []byte(transcriptContent), 0o600)
+	if err != nil {
+		t.Fatalf("Failed to create test transcript: %v", err)
+	}
+
+	// Test extracting intent by tool use ID
+	intent, err := ExtractIntentByToolUseID(transcriptPath, "toolu_01KTePc3uLq34eriLmSLbgnx")
+	if err != nil {
+		t.Fatalf("ExtractIntentByToolUseID failed: %v", err)
+	}
+
+	// Should return the parent message text content
+	expected := "I'll help you run the tests. Let me check the current test " +
+		"configuration and run the appropriate test command."
+	if intent != expected {
+		t.Errorf("Expected intent: %q, got: %q", expected, intent)
+	}
+}
+
+func TestExtractIntentByToolUseID_LogsExtractedContent(t *testing.T) {
+	ctx, getLogs := testutil.NewTestContext(t)
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	transcriptPath := filepath.Join(tmpDir, "test-transcript-logging.jsonl")
+
+	// Create test transcript
+	transcriptContent := `{"type":"assistant","uuid":"parent-uuid","message":{"role":"assistant",` +
+		`"content":[{"type":"text","text":"Testing logging behavior"}]}}
+{"type":"assistant","uuid":"tool-use-uuid","parentUuid":"parent-uuid","message":{"role":"assistant",` +
+		`"content":[{"type":"tool_use","id":"test-tool-id","name":"Bash"}]}}`
+
+	err := os.WriteFile(transcriptPath, []byte(transcriptContent), 0o600)
+	if err != nil {
+		t.Fatalf("Failed to create test transcript: %v", err)
+	}
+
+	// Extract intent using context-aware function - this should log the result
+	intent, err := ExtractIntentByToolUseIDWithContext(ctx, transcriptPath, "test-tool-id")
+	if err != nil {
+		t.Fatalf("ExtractIntentByToolUseID failed: %v", err)
+	}
+
+	if intent != "Testing logging behavior" {
+		t.Errorf("Expected 'Testing logging behavior', got: %q", intent)
+	}
+
+	// Check logs contain the extracted content
+	logOutput := getLogs()
+	if !strings.Contains(logOutput, "ExtractIntentByToolUseID extracted content from transcript") {
+		t.Errorf("Expected log message not found in logs: %s", logOutput)
+	}
+	if !strings.Contains(logOutput, "Testing logging behavior") {
+		t.Errorf("Expected extracted content not found in logs: %s", logOutput)
+	}
+}
+
+func TestExtractIntentByToolUseID_NotFound(t *testing.T) {
+	_, _ = testutil.NewTestContext(t)
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	transcriptPath := filepath.Join(tmpDir, "test-transcript-no-match.jsonl")
+
+	// Create transcript without the requested tool use ID
+	transcriptContent := `{"type":"assistant","uuid":"parent-uuid",` +
+		`"message":{"role":"assistant","content":[{"type":"text","text":"Some content"}]}}
+{"type":"assistant","uuid":"tool-use-uuid","parentUuid":"parent-uuid",` +
+		`"message":{"role":"assistant","content":[{"type":"tool_use","id":"different-id","name":"Bash"}]}}`
+
+	err := os.WriteFile(transcriptPath, []byte(transcriptContent), 0o600)
+	if err != nil {
+		t.Fatalf("Failed to create test transcript: %v", err)
+	}
+
+	// Should return empty string when tool_use_id not found
+	intent, err := ExtractIntentByToolUseID(transcriptPath, "toolu_01KTePc3uLq34eriLmSLbgnx")
+	if err != nil {
+		t.Fatalf("ExtractIntentByToolUseID failed: %v", err)
+	}
+
+	if intent != "" {
+		t.Errorf("Expected empty string when tool_use_id not found, got: %q", intent)
+	}
+}
+
+func TestExtractIntentByToolUseID_MalformedJSON(t *testing.T) {
+	_, _ = testutil.NewTestContext(t)
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	transcriptPath := filepath.Join(tmpDir, "test-transcript-malformed.jsonl")
+
+	// Mix valid and invalid JSON lines - should skip malformed lines
+	transcriptContent := `{"type":"assistant","uuid":"parent-uuid",` +
+		`"message":{"role":"assistant","content":[{"type":"text","text":"Valid intent message"}]}}
+{invalid json line}
+{"type":"assistant","uuid":"tool-use-uuid","parentUuid":"parent-uuid",` +
+		`"message":{"role":"assistant","content":[{"type":"tool_use",` +
+		`"id":"toolu_01KTePc3uLq34eriLmSLbgnx","name":"Bash"}]}}
+not json at all`
+
+	err := os.WriteFile(transcriptPath, []byte(transcriptContent), 0o600)
+	if err != nil {
+		t.Fatalf("Failed to create test transcript: %v", err)
+	}
+
+	// Should handle malformed JSON gracefully and still find the valid intent
+	intent, err := ExtractIntentByToolUseID(transcriptPath, "toolu_01KTePc3uLq34eriLmSLbgnx")
+	if err != nil {
+		t.Fatalf("ExtractIntentByToolUseID failed: %v", err)
+	}
+
+	expected := "Valid intent message"
+	if intent != expected {
+		t.Errorf("Expected intent: %q, got: %q", expected, intent)
+	}
 }
 
 func TestExtractIntentContent_ImprovedErrorMessages(t *testing.T) {
@@ -549,5 +559,219 @@ func TestExtractIntentContentOptimized_ImprovedErrorMessages(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), nonExistentPath) {
 		t.Errorf("Expected error message to include file path %s, got: %v", nonExistentPath, err)
+	}
+}
+
+func TestExtractIntentContent_HandlesLongLines(t *testing.T) {
+	_, _ = testutil.NewTestContext(t)
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	transcriptPath := filepath.Join(tempDir, "long-line-transcript.jsonl")
+
+	// Create a transcript with very long lines (over default buffer size)
+	longText := strings.Repeat("This is a very long line of text that exceeds the "+
+		"default bufio scanner buffer size. ", 1000)
+	longEntry := fmt.Sprintf(`{"type":"assistant","message":{"content":[{"type":"text","text":%q}]}}`, longText)
+
+	if err := os.WriteFile(transcriptPath, []byte(longEntry+"\n"), 0o600); err != nil {
+		t.Fatalf("Failed to create test transcript: %v", err)
+	}
+
+	// This should not fail with "token too long" error
+	_, err := ExtractIntentContent(transcriptPath)
+	if err != nil && strings.Contains(err.Error(), "token too long") {
+		t.Fatalf("ExtractIntentContent failed with token too long error: %v", err)
+	}
+
+	// Also test the optimized version
+	_, err = ExtractIntentContentOptimized(transcriptPath, 50)
+	if err != nil && strings.Contains(err.Error(), "token too long") {
+		t.Fatalf("ExtractIntentContentOptimized failed with token too long error: %v", err)
+	}
+}
+
+// TestFindRecentToolUseAndExtractIntent tests the new reliable intent extraction method
+func TestFindRecentToolUseAndExtractIntent(t *testing.T) {
+	_, _ = testutil.NewTestContext(t) // Context-aware logging available
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	transcriptPath := filepath.Join(tmpDir, "test-transcript-recent-tool-use.jsonl")
+
+	// Create realistic transcript with recent entries - system message includes toolUseID
+	now := time.Now()
+	recentTime := now.Format(time.RFC3339Nano)
+	oldTime := now.Add(-2 * time.Minute).Format(time.RFC3339Nano) // Outside 1-minute window
+
+	transcriptContent := fmt.Sprintf(
+		`{"type":"assistant","message":{"role":"assistant","content":[{"type":"text",`+
+			`"text":"I'll help you run the tests."}]},"uuid":"intent1","timestamp":"%s"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_123",`+
+			`"name":"Bash","input":{"command":"just test"}}]},"uuid":"tool1","parentUuid":"intent1","timestamp":"%s"}
+{"type":"system","message":{"toolUseID":"toolu_123","result":"Tests passed"},"timestamp":"%s"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text",`+
+			`"text":"Old intent from long ago"}]},"uuid":"old1","timestamp":"%s"}
+`, recentTime, recentTime, recentTime, oldTime)
+
+	err := os.WriteFile(transcriptPath, []byte(transcriptContent), 0o600)
+	if err != nil {
+		t.Fatalf("Failed to create test transcript: %v", err)
+	}
+
+	// Test the new function
+	intent, err := FindRecentToolUseAndExtractIntent(transcriptPath)
+	if err != nil {
+		t.Fatalf("FindRecentToolUseAndExtractIntent failed: %v", err)
+	}
+
+	// Should extract the intent from the tool_use parent message (correct behavior)
+	if !containsPattern(intent, "I'll help you run the tests.") {
+		t.Errorf("Expected intent to contain tool_use parent content, got: %s", intent)
+	}
+
+	// Should NOT contain the old intent that's not related to the tool_use
+	if containsPattern(intent, "Old intent from long ago") {
+		t.Errorf("Expected intent not to contain unrelated old content, got: %s", intent)
+	}
+}
+
+// TestFindRecentToolUseAndExtractIntent_ShouldPrioritizeToolUseParentIntent tests the correct behavior
+// where intent should be extracted from tool_use parent messages, not just the most recent text
+func TestFindRecentToolUseAndExtractIntent_ShouldPrioritizeToolUseParentIntent(t *testing.T) {
+	_, _ = testutil.NewTestContext(t)
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	transcriptPath := filepath.Join(tmpDir, "test-transcript-tool-use-priority.jsonl")
+
+	// Simulate the exact scenario from the bug report:
+	// 1. Assistant text message with current intent: "Now let me update the Testing section:"
+	// 2. Assistant tool_use message that references the intent message via parentUuid
+	// 3. When PreToolUse hook fires, it should extract from step 1, not any older text
+	transcriptContent := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"text",` +
+		`"text":"Previous intent that should be ignored"}]},"uuid":"old-intent"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text",` +
+		`"text":"Now let me update the Testing section:"}]},"uuid":"current-intent"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_xyz",` +
+		`"name":"Edit","input":{"file_path":"README.md"}}]},"uuid":"tool-use","parentUuid":"current-intent"}
+{"type":"system","message":{"toolUseID":"toolu_xyz",` +
+		`"content":"PreToolUse:Edit [bumpers hook] completed successfully"}}`
+
+	err := os.WriteFile(transcriptPath, []byte(transcriptContent), 0o600)
+	if err != nil {
+		t.Fatalf("Failed to create test transcript: %v", err)
+	}
+
+	// Test the function - it should extract the CURRENT intent, not the previous one
+	intent, err := FindRecentToolUseAndExtractIntent(transcriptPath)
+	if err != nil {
+		t.Fatalf("FindRecentToolUseAndExtractIntent failed: %v", err)
+	}
+
+	// Should contain the current intent that's linked to the tool_use via parentUuid
+	expected := "Now let me update the Testing section:"
+	if !containsPattern(intent, expected) {
+		t.Errorf("Expected intent to contain current tool_use parent intent %q, but got: %q", expected, intent)
+	}
+
+	// Should NOT contain the previous intent
+	unwanted := "Previous intent that should be ignored"
+	if containsPattern(intent, unwanted) {
+		t.Errorf("Intent should not contain previous intent %q, but got: %q", unwanted, intent)
+	}
+}
+
+// TestFindRecentToolUseAndExtractIntent_WithDifferentContent tests with different transcript content
+func TestFindRecentToolUseAndExtractIntent_WithDifferentContent(t *testing.T) {
+	_, _ = testutil.NewTestContext(t)
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	transcriptPath := filepath.Join(tmpDir, "different-content.jsonl")
+
+	// Create transcript with different content
+	transcriptContent := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"text",` +
+		`"text":"Let me analyze your codebase first."}]},"uuid":"intent1"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_456",` +
+		`"name":"Read","input":{"file_path":"src/app.js"}}]},"uuid":"tool1","parentUuid":"intent1"}
+{"type":"system","message":{"toolUseID":"toolu_456","result":"File read successfully"}}`
+
+	err := os.WriteFile(transcriptPath, []byte(transcriptContent), 0o600)
+	if err != nil {
+		t.Fatalf("Failed to create test transcript: %v", err)
+	}
+
+	// Test the new function
+	intent, err := FindRecentToolUseAndExtractIntent(transcriptPath)
+	if err != nil {
+		t.Fatalf("FindRecentToolUseAndExtractIntent failed: %v", err)
+	}
+
+	// Should extract the correct intent
+	if !containsPattern(intent, "Let me analyze your codebase first") {
+		t.Errorf("Expected intent to contain 'analyze your codebase', got: %s", intent)
+	}
+}
+
+func TestFindRecentToolUseAndExtractIntent_WithTextContent(t *testing.T) {
+	_, _ = testutil.NewTestContext(t)
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	transcriptPath := filepath.Join(tmpDir, "text-content.jsonl")
+
+	// Create transcript with only text content (realistic for Claude Code)
+	transcriptContent := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"text",` +
+		`"text":"Let me help you with that analysis."}]},"uuid":"recent"}`
+
+	err := os.WriteFile(transcriptPath, []byte(transcriptContent), 0o600)
+	if err != nil {
+		t.Fatalf("Failed to create test transcript: %v", err)
+	}
+
+	intent, err := FindRecentToolUseAndExtractIntent(transcriptPath)
+	if err != nil {
+		t.Fatalf("FindRecentToolUseAndExtractIntent failed: %v", err)
+	}
+
+	// Should extract text content
+	if !containsPattern(intent, "Let me help you with that analysis") {
+		t.Errorf("Expected intent to contain text content, got: %s", intent)
+	}
+}
+
+func TestFindRecentToolUseAndExtractIntent_WithMultipleAssistantMessages(t *testing.T) {
+	_, _ = testutil.NewTestContext(t)
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	transcriptPath := filepath.Join(tmpDir, "multiple-assistants.jsonl")
+
+	// Create transcript with multiple assistant messages - should include content from recent ones
+	transcriptContent := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"text",` +
+		`"text":"I'll check the system performance for you."}]},"uuid":"assistant1"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text",` +
+		`"text":"The system shows high CPU usage at 85%."}]},"uuid":"assistant2"}`
+
+	err := os.WriteFile(transcriptPath, []byte(transcriptContent), 0o600)
+	if err != nil {
+		t.Fatalf("Failed to create test transcript: %v", err)
+	}
+
+	intent, err := FindRecentToolUseAndExtractIntent(transcriptPath)
+	if err != nil {
+		t.Fatalf("FindRecentToolUseAndExtractIntent failed: %v", err)
+	}
+
+	// Should include content from both recent assistant messages (not just the last one)
+	// This test will fail with current implementation that only gets the last message
+	if !containsPattern(intent, "check the system performance") {
+		t.Errorf("Expected intent to contain content from first assistant (check the system performance), got: %s",
+			intent)
+	}
+	if !containsPattern(intent, "high CPU usage at 85%") {
+		t.Errorf("Expected intent to contain content from second assistant with 'high CPU usage at 85%%', got: %s",
+			intent)
 	}
 }

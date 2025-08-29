@@ -2,6 +2,7 @@ package transcript
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -21,44 +22,73 @@ func ExtractReasoningContent(transcriptPath string) (string, error) {
 		_ = file.Close()
 	}()
 
-	scanner := bufio.NewScanner(file)
+	reader := bufio.NewReader(file)
 	result := make([]string, 0, 10) // Pre-allocate with reasonable capacity
 
-	for scanner.Scan() {
-		line := scanner.Text()
-		// Only include lines from assistant messages
-		hasAssistantType := strings.Contains(line, `"type":"assistant"`)
-		hasReasoningPattern := strings.Contains(line, "I need to") ||
-			strings.Contains(line, "I can see") ||
-			strings.Contains(line, "not related") ||
-			strings.Contains(line, "timed out") ||
-			strings.Contains(line, "timeout")
-
-		if !hasAssistantType || !hasReasoningPattern {
-			continue
+	for {
+		line, readErr := reader.ReadString('\n')
+		if readErr != nil && readErr != io.EOF {
+			return "", fmt.Errorf("error reading transcript file %s: %w", transcriptPath, readErr)
+		}
+		if line == "" && readErr == io.EOF {
+			break
 		}
 
-		// Extract text content from the JSONL line
-		start := strings.Index(line, `"text":"`)
-		if start < 0 {
-			continue
+		if text := processReasoningLine(line); text != "" {
+			result = append(result, text)
 		}
-		start += 8 // Skip `"text":"`
-		end := strings.Index(line[start:], `"`)
-		if end < 0 {
-			continue
+
+		if readErr == io.EOF {
+			break
 		}
-		text := line[start : start+end]
-		result = append(result, text)
 	}
 
 	return strings.Join(result, " "), nil
 }
 
+// processReasoningLine extracts reasoning content from a single line
+func processReasoningLine(line string) string {
+	line = strings.TrimSuffix(line, "\n")
+
+	if !hasReasoningContent(line) {
+		return ""
+	}
+
+	return extractTextFromLine(line)
+}
+
+// hasReasoningContent checks if line contains assistant reasoning patterns
+func hasReasoningContent(line string) bool {
+	hasAssistantType := strings.Contains(line, `"type":"assistant"`)
+	hasReasoningPattern := strings.Contains(line, "I need to") ||
+		strings.Contains(line, "I can see") ||
+		strings.Contains(line, "not related") ||
+		strings.Contains(line, "timed out") ||
+		strings.Contains(line, "timeout")
+
+	return hasAssistantType && hasReasoningPattern
+}
+
+// extractTextFromLine extracts text content from JSONL line
+func extractTextFromLine(line string) string {
+	start := strings.Index(line, `"text":"`)
+	if start < 0 {
+		return ""
+	}
+	start += 8 // Skip `"text":"`
+	end := strings.Index(line[start:], `"`)
+	if end < 0 {
+		return ""
+	}
+	return line[start : start+end]
+}
+
 // TranscriptEntry represents a single entry in the Claude Code transcript
 type TranscriptEntry struct {
-	Type    string         `json:"type"`
-	Message MessageContent `json:"message"`
+	Type       string         `json:"type"`
+	UUID       string         `json:"uuid"`
+	ParentUUID string         `json:"parentUuid"`
+	Message    MessageContent `json:"message"`
 }
 
 // MessageContent contains the content for assistant messages
@@ -69,9 +99,9 @@ type MessageContent struct {
 
 // ContentItem represents individual content items in a message
 type ContentItem struct {
-	Type     string `json:"type"`
-	Text     string `json:"text,omitempty"`
-	Thinking string `json:"thinking,omitempty"`
+	Type string `json:"type"`
+	Text string `json:"text,omitempty"`
+	ID   string `json:"id,omitempty"` // For tool_use content
 }
 
 func ExtractIntentContent(transcriptPath string) (string, error) {
@@ -85,34 +115,60 @@ func ExtractIntentContent(transcriptPath string) (string, error) {
 		}
 	}()
 
-	scanner := bufio.NewScanner(file)
-	var intentParts []string
-
-	for scanner.Scan() {
-		line := scanner.Text()
-		if strings.TrimSpace(line) == "" {
-			continue
-		}
-
-		parts := extractIntentFromLine(line)
-		intentParts = append(intentParts, parts...)
-	}
-
-	// Check for scanner errors
-	if err := scanner.Err(); err != nil {
-		return "", fmt.Errorf("error reading transcript file %s: %w", transcriptPath, err)
+	intentParts, err := readIntentFromFile(file, transcriptPath)
+	if err != nil {
+		return "", err
 	}
 
 	result := strings.Join(intentParts, " ")
+	logExtractedIntent(transcriptPath, intentParts, result)
 
-	// Log what we extracted for debugging
+	return result, nil
+}
+
+// readIntentFromFile reads and processes all lines from the file
+func readIntentFromFile(file *os.File, transcriptPath string) ([]string, error) {
+	reader := bufio.NewReader(file)
+	var intentParts []string
+
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil && err != io.EOF {
+			return nil, fmt.Errorf("error reading transcript file %s: %w", transcriptPath, err)
+		}
+
+		if line == "" && err == io.EOF {
+			break
+		}
+
+		if processedLine := processIntentLine(line); len(processedLine) > 0 {
+			intentParts = append(intentParts, processedLine...)
+		}
+
+		if err == io.EOF {
+			break
+		}
+	}
+
+	return intentParts, nil
+}
+
+// processIntentLine processes a single line for intent content
+func processIntentLine(line string) []string {
+	line = strings.TrimSuffix(line, "\n")
+	if strings.TrimSpace(line) == "" {
+		return nil
+	}
+	return extractIntentFromLine(line)
+}
+
+// logExtractedIntent logs the extraction results for debugging
+func logExtractedIntent(transcriptPath string, intentParts []string, result string) {
 	log.Debug().
 		Str("transcript_path", transcriptPath).
 		Int("intent_parts_count", len(intentParts)).
 		Str("extracted_intent", result).
 		Msg("ExtractIntentContent extracted content from transcript")
-
-	return result, nil
 }
 
 // extractIntentFromLine extracts intent content from a single transcript line
@@ -139,15 +195,8 @@ func extractIntentFromLine(line string) []string {
 // extractContentByType extracts content based on the content item type
 func extractContentByType(content ContentItem) []string {
 	var parts []string
-	switch content.Type {
-	case "thinking":
-		if strings.TrimSpace(content.Thinking) != "" {
-			parts = append(parts, strings.TrimSpace(content.Thinking))
-		}
-	case "text":
-		if strings.TrimSpace(content.Text) != "" {
-			parts = append(parts, strings.TrimSpace(content.Text))
-		}
+	if content.Type == "text" && strings.TrimSpace(content.Text) != "" {
+		parts = append(parts, strings.TrimSpace(content.Text))
 	}
 	return parts
 }
@@ -285,4 +334,355 @@ func extractIntentFromLines(lines []string) string {
 		intentParts = append(intentParts, parts...)
 	}
 	return strings.Join(intentParts, " ")
+}
+
+// ExtractIntentByToolUseID extracts the intent for a specific tool use ID
+// by finding the assistant message that precedes the tool_use message
+func ExtractIntentByToolUseID(transcriptPath, toolUseID string) (string, error) {
+	return ExtractIntentByToolUseIDWithContext(context.Background(), transcriptPath, toolUseID)
+}
+
+func ExtractIntentByToolUseIDWithContext(ctx context.Context, transcriptPath, toolUseID string) (string, error) {
+	file, err := os.Open(transcriptPath) // #nosec G304 - path is validated by caller
+	if err != nil {
+		return "", fmt.Errorf("failed to open transcript file %s: %w", transcriptPath, err)
+	}
+	defer func() {
+		if closeErr := file.Close(); closeErr != nil {
+			log.Ctx(ctx).Debug().Err(closeErr).
+				Str("transcript_path", transcriptPath).
+				Msg("Failed to close transcript file")
+		}
+	}()
+
+	result, err := findIntentByToolUseID(file, toolUseID)
+	if err == nil {
+		log.Ctx(ctx).Debug().
+			Str("transcript_path", transcriptPath).
+			Str("tool_use_id", toolUseID).
+			Str("extracted_intent", result).
+			Msg("ExtractIntentByToolUseID extracted content from transcript")
+	}
+	return result, err
+}
+
+// findIntentByToolUseID searches for intent message associated with tool use ID
+func findIntentByToolUseID(file *os.File, toolUseID string) (string, error) {
+	reader := bufio.NewReader(file)
+	processedEntries := make([]TranscriptEntry, 0, 100)
+
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil && err != io.EOF {
+			return "", fmt.Errorf("error reading transcript: %w", err)
+		}
+		if line == "" && err == io.EOF {
+			break
+		}
+
+		entry, valid := parseTranscriptEntry(line)
+		if !valid {
+			continue
+		}
+
+		processedEntries = append(processedEntries, entry)
+
+		if result := checkForToolUseMatch(&entry, toolUseID, processedEntries); result != "" {
+			return result, nil
+		}
+
+		if err == io.EOF {
+			break
+		}
+	}
+
+	return "", nil // No intent found for this tool use ID
+}
+
+// parseTranscriptEntry parses a transcript line into an entry
+func parseTranscriptEntry(line string) (TranscriptEntry, bool) {
+	var entry TranscriptEntry
+	if err := json.Unmarshal([]byte(strings.TrimSpace(line)), &entry); err != nil {
+		return entry, false
+	}
+	return entry, true
+}
+
+// checkForToolUseMatch checks if entry contains matching tool use and returns intent
+func checkForToolUseMatch(entry *TranscriptEntry, toolUseID string, processedEntries []TranscriptEntry) string {
+	if entry.Type != "assistant" {
+		return ""
+	}
+
+	if content := findToolUseWithID(entry, toolUseID); content != nil {
+		return findParentIntent(entry, processedEntries)
+	}
+
+	return ""
+}
+
+// findParentIntent finds the parent intent message for the given entry
+func findParentIntent(entry *TranscriptEntry, processedEntries []TranscriptEntry) string {
+	for _, processed := range processedEntries {
+		if processed.Type == "assistant" && processed.UUID == entry.ParentUUID {
+			return extractTextContent(&processed)
+		}
+	}
+	return ""
+}
+
+// findToolUseWithID searches for tool_use content with matching ID
+func findToolUseWithID(entry *TranscriptEntry, toolUseID string) *ContentItem {
+	for i := range entry.Message.Content {
+		content := &entry.Message.Content[i]
+		if content.Type == "tool_use" && content.ID == toolUseID {
+			return content
+		}
+	}
+	return nil
+}
+
+// extractTextContent extracts text content from a transcript entry
+func extractTextContent(entry *TranscriptEntry) string {
+	var parts []string
+	for _, content := range entry.Message.Content {
+		if content.Type == "text" && strings.TrimSpace(content.Text) != "" {
+			parts = append(parts, strings.TrimSpace(content.Text))
+		}
+	}
+	return strings.Join(parts, " ")
+}
+
+// findMostRecentToolUseParentUUID scans backwards to find the most recent tool_use and returns its parentUuid
+func findMostRecentToolUseParentUUID(lines []string) string {
+	for i := len(lines) - 1; i >= 0; i-- {
+		if parentUUID := extractParentUUIDFromLine(lines[i]); parentUUID != "" {
+			return parentUUID
+		}
+	}
+	return ""
+}
+
+// extractParentUUIDFromLine extracts parent UUID from a single line if it contains tool use
+func extractParentUUIDFromLine(line string) string {
+	var entry map[string]any
+	if err := json.Unmarshal([]byte(line), &entry); err != nil {
+		return ""
+	}
+
+	if !isAssistantEntry(entry) {
+		return ""
+	}
+
+	return findToolUseParentUUID(entry)
+}
+
+// isAssistantEntry checks if the entry is an assistant type
+func isAssistantEntry(entry map[string]any) bool {
+	entryType, ok := entry["type"].(string)
+	return ok && entryType == "assistant"
+}
+
+// findToolUseParentUUID finds the parent UUID for a tool use entry
+func findToolUseParentUUID(entry map[string]any) string {
+	message, ok := entry["message"].(map[string]any)
+	if !ok {
+		return ""
+	}
+
+	content, ok := message["content"].([]any)
+	if !ok {
+		return ""
+	}
+
+	if hasToolUseContent(content) {
+		if parentUUID, ok := entry["parentUuid"].(string); ok && parentUUID != "" {
+			return parentUUID
+		}
+	}
+	return ""
+}
+
+// hasToolUseContent checks if content array contains a tool_use item
+func hasToolUseContent(content []any) bool {
+	for _, contentItem := range content {
+		if item, ok := contentItem.(map[string]any); ok {
+			if itemType, ok := item["type"].(string); ok && itemType == "tool_use" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// extractTextContentFromMessage extracts text content from an assistant message entry
+func extractTextContentFromMessage(entry map[string]any) []string {
+	message, ok := entry["message"].(map[string]any)
+	if !ok {
+		return nil
+	}
+
+	content, ok := message["content"].([]any)
+	if !ok {
+		return nil
+	}
+
+	return extractTextFromContent(content)
+}
+
+// extractTextFromContent extracts text items from content array
+func extractTextFromContent(content []any) []string {
+	var contentParts []string
+
+	for _, contentItem := range content {
+		if text := extractTextFromContentItem(contentItem); text != "" {
+			contentParts = append(contentParts, text)
+		}
+	}
+	return contentParts
+}
+
+// extractTextFromContentItem extracts text from a single content item
+func extractTextFromContentItem(contentItem any) string {
+	item, ok := contentItem.(map[string]any)
+	if !ok {
+		return ""
+	}
+
+	itemType, ok := item["type"].(string)
+	if !ok || itemType != "text" {
+		return ""
+	}
+
+	text, ok := item["text"].(string)
+	if !ok || text == "" {
+		return ""
+	}
+
+	return strings.TrimSpace(text)
+}
+
+// FindRecentToolUseAndExtractIntent scans backwards through transcript to find recent tool uses
+// and extracts the associated intent content within a 1-minute time window
+func FindRecentToolUseAndExtractIntent(transcriptPath string) (string, error) {
+	lines, err := readTranscriptLines(transcriptPath)
+	if err != nil {
+		return "", err
+	}
+
+	// First pass: find the most recent tool_use message and get its parent UUID
+	mostRecentToolUseParentUUID := findMostRecentToolUseParentUUID(lines)
+
+	// Second pass: collect text content, prioritizing the tool_use parent message
+	allContentParts := extractPrioritizedContent(lines, mostRecentToolUseParentUUID)
+
+	if len(allContentParts) > 0 {
+		result := strings.Join(allContentParts, " ")
+		log.Debug().
+			Str("transcript_path", transcriptPath).
+			Int("content_parts_count", len(allContentParts)).
+			Str("extracted_intent", result).
+			Msg("FindRecentToolUseAndExtractIntent extracted content from transcript")
+		return result, nil
+	}
+
+	return "", errors.New("no recent tool use intent found")
+}
+
+// readTranscriptLines reads all lines from the transcript file
+func readTranscriptLines(transcriptPath string) ([]string, error) {
+	file, err := os.Open(transcriptPath) // #nosec G304 - path is validated by caller
+	if err != nil {
+		return nil, fmt.Errorf("failed to open transcript file %s: %w", transcriptPath, err)
+	}
+	defer func() {
+		if closeErr := file.Close(); closeErr != nil {
+			log.Debug().Err(closeErr).Str("transcript_path", transcriptPath).Msg("Failed to close transcript file")
+		}
+	}()
+
+	var lines []string
+	reader := bufio.NewReader(file)
+
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil && err != io.EOF {
+			return nil, fmt.Errorf("error reading line: %w", err)
+		}
+
+		if line != "" {
+			lines = append(lines, strings.TrimSuffix(line, "\n"))
+		}
+
+		if err == io.EOF {
+			break
+		}
+	}
+
+	return lines, nil
+}
+
+// extractPrioritizedContent extracts content from lines, prioritizing tool use parent message
+func extractPrioritizedContent(lines []string, mostRecentToolUseParentUUID string) []string {
+	var allContentParts []string
+	assistantCount := 0
+	maxRecentAssistants := 2
+
+	for i := len(lines) - 1; i >= 0 && assistantCount < maxRecentAssistants; i-- {
+		contentParts := extractContentFromLine(lines[i])
+		if len(contentParts) == 0 {
+			continue
+		}
+
+		if shouldUseContent(lines[i], mostRecentToolUseParentUUID, &allContentParts, contentParts, &assistantCount) {
+			break
+		}
+	}
+
+	return allContentParts
+}
+
+// extractContentFromLine extracts text content from a single line
+func extractContentFromLine(line string) []string {
+	var entry map[string]any
+	if err := json.Unmarshal([]byte(line), &entry); err != nil {
+		return nil
+	}
+
+	if !isAssistantEntry(entry) {
+		return nil
+	}
+
+	return extractTextContentFromMessage(entry)
+}
+
+// shouldUseContent determines if content should be used and updates collections
+func shouldUseContent(line, parentUUID string, allParts *[]string, contentParts []string, assistantCount *int) bool {
+	if parentUUID != "" {
+		return useSpecificParentContent(line, parentUUID, allParts, contentParts)
+	}
+	return useFallbackContent(allParts, contentParts, assistantCount)
+}
+
+// useSpecificParentContent uses content only from the specific parent UUID
+func useSpecificParentContent(line, parentUUID string, allParts *[]string, contentParts []string) bool {
+	var entry map[string]any
+	if err := json.Unmarshal([]byte(line), &entry); err != nil {
+		return false
+	}
+
+	uuid, ok := entry["uuid"].(string)
+	if !ok || uuid != parentUUID {
+		return false
+	}
+
+	*allParts = append(*allParts, contentParts...)
+	return true // Found the parent intent message, we're done
+}
+
+// useFallbackContent uses content as fallback when no specific parent is found
+func useFallbackContent(allParts *[]string, contentParts []string, assistantCount *int) bool {
+	*allParts = append(contentParts, *allParts...)
+	*assistantCount++
+	return false // Continue collecting
 }

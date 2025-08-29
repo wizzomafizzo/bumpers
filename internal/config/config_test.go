@@ -1184,10 +1184,10 @@ func getEventSourcesTestCases() []struct {
   - match:
       pattern: "error|failed"
       event: "post"
-      sources: ["tool_output"]
+      sources: ["tool_response"]
     send: "Command failed"`,
 			expectedEvent:   "post",
-			expectedSources: []string{"tool_output"},
+			expectedSources: []string{"tool_response"},
 		},
 		{
 			name: "multiple field matching",

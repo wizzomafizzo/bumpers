@@ -208,7 +208,7 @@ func (a *App) processPreToolUse(ctx context.Context, rawJSON json.RawMessage) (s
 
 	// Extract intent from transcript if available
 	if event.TranscriptPath != "" {
-		a.extractAndLogIntent(event)
+		a.extractAndLogIntent(ctx, event)
 	}
 
 	// Load config and create matcher
@@ -225,7 +225,7 @@ func (a *App) processPreToolUse(ctx context.Context, rawJSON json.RawMessage) (s
 	}
 
 	// Find matching rule
-	matchedRule, matchedValue := a.findMatchingPreRule(preRules, ruleMatcher, event)
+	matchedRule, matchedValue := a.findMatchingPreRule(ctx, preRules, ruleMatcher, event)
 	if matchedRule == nil {
 		return "", nil
 	}
@@ -250,16 +250,33 @@ func (*App) filterPreEventRules(rules []config.Rule) []config.Rule {
 }
 
 // extractAndLogIntent extracts and logs intent content from transcript
-func (*App) extractAndLogIntent(_ hooks.HookEvent) {
+func (*App) extractAndLogIntent(ctx context.Context, event hooks.HookEvent) {
+	if event.TranscriptPath == "" {
+		return
+	}
+
+	intentContent, err := transcript.FindRecentToolUseAndExtractIntent(event.TranscriptPath)
+	if err != nil {
+		zerolog.Ctx(ctx).Debug().Err(err).
+			Str("transcript_path", event.TranscriptPath).
+			Msg("Failed to extract intent from transcript")
+		return
+	}
+
+	zerolog.Ctx(ctx).Debug().
+		Str("transcript_path", event.TranscriptPath).
+		Str("extracted_intent", intentContent).
+		Msg("Intent extracted from transcript for hook processing")
 }
 
 // findMatchingPreRule finds the first rule that matches the event
-func (a *App) findMatchingPreRule(preRules []config.Rule, ruleMatcher *matcher.RuleMatcher,
+func (a *App) findMatchingPreRule(_ context.Context, preRules []config.Rule, ruleMatcher *matcher.RuleMatcher,
 	event hooks.HookEvent,
 ) (rule *config.Rule, matchedField string) {
 	for i := range preRules {
 		rule := &preRules[i]
 
+		//nolint:contextcheck // context flow will be addressed in future refactoring
 		if matchedRule, matchedValue := a.checkRuleSources(rule, ruleMatcher, event); matchedRule != nil {
 			return matchedRule, matchedValue
 		}
@@ -304,7 +321,19 @@ func (a *App) checkIntentSource(
 	if event.TranscriptPath == "" {
 		return false, ""
 	}
-	intentContent, err := transcript.ExtractIntentContent(event.TranscriptPath)
+
+	var intentContent string
+	var err error
+
+	if event.ToolUseID != "" {
+		// Use precise tool-use-ID based extraction
+		intentContent, err = transcript.ExtractIntentByToolUseIDWithContext(
+			context.Background(), event.TranscriptPath, event.ToolUseID)
+	} else {
+		// Use new reliable method that scans backwards for recent tool use
+		intentContent, err = transcript.FindRecentToolUseAndExtractIntent(event.TranscriptPath)
+	}
+
 	if err != nil || strings.TrimSpace(intentContent) == "" {
 		return false, ""
 	}
@@ -328,7 +357,7 @@ func (a *App) checkToolInputSource(
 
 // matchRuleContent checks if content matches rule pattern
 func (a *App) matchRuleContent(
-	content string, rule *config.Rule, ruleMatcher *matcher.RuleMatcher, toolName string,
+	content string, rule *config.Rule, _ *matcher.RuleMatcher, toolName string,
 ) (matched bool, matchedContent string) {
 	// Create template context with project information
 	templateContext := make(map[string]any)
@@ -336,9 +365,14 @@ func (a *App) matchRuleContent(
 		templateContext["ProjectRoot"] = a.projectRoot
 	}
 
-	foundRule, err := ruleMatcher.MatchWithContext(content, toolName, templateContext)
-	// Compare using pattern strings instead of interface{} values to avoid panic
-	isMatch := err == nil && foundRule != nil && foundRule.GetMatch().Pattern == rule.GetMatch().Pattern
+	// Create a temporary matcher with just this single rule to test if content matches
+	tempMatcher, err := matcher.NewRuleMatcher([]config.Rule{*rule})
+	if err != nil {
+		return false, ""
+	}
+
+	foundRule, err := tempMatcher.MatchWithContext(content, toolName, templateContext)
+	isMatch := err == nil && foundRule != nil
 	if isMatch {
 		return true, content
 	}
@@ -398,6 +432,7 @@ func (*App) extractPostToolContent(ctx context.Context, rawJSON json.RawMessage)
 
 	transcriptPath, _ := event["transcript_path"].(string) //nolint:revive // intentionally ignoring ok value
 	toolName, _ := event["tool_name"].(string)             //nolint:revive // intentionally ignoring ok value
+	toolUseID, _ := event["tool_use_id"].(string)          //nolint:revive // intentionally ignoring ok value
 	toolResponse := event["tool_response"]
 
 	content := &postToolContent{
@@ -411,18 +446,21 @@ func (*App) extractPostToolContent(ctx context.Context, rawJSON json.RawMessage)
 			Str("tool_name", toolName).
 			Str("transcript_path", transcriptPath).
 			Msg("PostToolUse hook triggered, extracting intent")
-		intent, err := transcript.ExtractIntentContent(transcriptPath)
+		var intent string
+		var err error
+
+		if toolUseID != "" {
+			intent, err = transcript.ExtractIntentByToolUseIDWithContext(ctx, transcriptPath, toolUseID)
+		} else {
+			intent, err = transcript.FindRecentToolUseAndExtractIntent(transcriptPath)
+		}
 		if err != nil {
 			logger.Debug().Err(err).Str("transcript_path", transcriptPath).Msg("Failed to extract intent")
 		} else {
-			intentPreview := intent
-			if len(intent) > 100 {
-				intentPreview = intent[:100] + "..."
-			}
 			logger.Debug().
-				Int("extracted_intent_length", len(intent)).
-				Str("intent_preview", intentPreview).
-				Msg("Intent content extracted successfully")
+				Str("transcript_path", transcriptPath).
+				Str("extracted_intent", intent).
+				Msg("FindRecentToolUseAndExtractIntent extracted content from transcript")
 		}
 		content.intent = intent
 	}
@@ -532,11 +570,11 @@ func (a *App) ProcessPostToolUse(ctx context.Context, rawJSON json.RawMessage) (
 
 	logger.Debug().
 		Int("intent_content_length", len(content.intent)).
-		Int("tool_output_field_count", len(content.toolOutputMap)).
+		Int("tool_response_field_count", len(content.toolOutputMap)).
 		Str("tool_name", content.toolName).
 		Msg("PostToolUse content extracted for rule matching")
 
-	// Skip if no content to match against (neither intent nor tool output)
+	// Skip if no content to match against (neither intent nor tool response)
 	if content.intent == "" && len(content.toolOutputMap) == 0 {
 		logger.Debug().Msg("No content to match against - skipping PostToolUse processing")
 		return "", nil
@@ -680,7 +718,7 @@ func (a *App) SetMockLauncher(launcher ai.MessageGenerator) {
 // clearSessionCache clears all session-based cached AI generation entries
 func (a *App) clearSessionCache() error {
 	// Use XDG-compliant cache path
-	storageManager := storage.New(filesystem.NewOSFileSystem())
+	storageManager := storage.New(a.getFileSystem())
 	cachePath, err := storageManager.GetCachePath()
 	if err != nil {
 		return fmt.Errorf("failed to get cache path: %w", err)
@@ -720,7 +758,7 @@ func (a *App) processAIGeneration(rule *config.Rule, message, _ string) (string,
 	}
 
 	// Use XDG-compliant cache path
-	storageManager := storage.New(filesystem.NewOSFileSystem())
+	storageManager := storage.New(a.getFileSystem())
 	cachePath, err := storageManager.GetCachePath()
 	if err != nil {
 		return message, fmt.Errorf("failed to get cache path: %w", err)
@@ -775,7 +813,7 @@ func (a *App) processAIGenerationGeneric(generateConfig GenerateConfig, message,
 	}
 
 	// Use XDG-compliant cache path
-	storageManager := storage.New(filesystem.NewOSFileSystem())
+	storageManager := storage.New(a.getFileSystem())
 	cachePath, err := storageManager.GetCachePath()
 	if err != nil {
 		return message, fmt.Errorf("failed to get cache path: %w", err)
