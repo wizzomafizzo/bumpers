@@ -207,9 +207,18 @@ func (a *App) processPreToolUse(ctx context.Context, rawJSON json.RawMessage) (s
 	}
 
 	// Extract intent from transcript if available
+	var intentContent string
 	if event.TranscriptPath != "" {
-		a.extractAndLogIntent(ctx, event)
+		intentContent = a.extractAndLogIntent(ctx, event)
 	}
+
+	// Log summary of available sources for rule matching
+	logger.Debug().
+		Str("hook_type", "PreToolUse").
+		Str("tool_name", event.ToolName).
+		Str("extracted_intent", intentContent).
+		Interface("tool_input", event.ToolInput).
+		Msg("Hook processing summary - sources available for rule matching")
 
 	// Load config and create matcher
 	cfg, _, err := a.loadConfigAndMatcher()
@@ -250,34 +259,35 @@ func (*App) filterPreEventRules(rules []config.Rule) []config.Rule {
 }
 
 // extractAndLogIntent extracts and logs intent content from transcript
-func (*App) extractAndLogIntent(ctx context.Context, event hooks.HookEvent) {
+func (*App) extractAndLogIntent(ctx context.Context, event hooks.HookEvent) string {
 	if event.TranscriptPath == "" {
-		return
+		return ""
 	}
 
-	intentContent, err := transcript.FindRecentToolUseAndExtractIntent(event.TranscriptPath)
+	intentContent, err := transcript.FindRecentToolUseAndExtractIntent(ctx, event.TranscriptPath)
 	if err != nil {
 		zerolog.Ctx(ctx).Debug().Err(err).
 			Str("transcript_path", event.TranscriptPath).
 			Msg("Failed to extract intent from transcript")
-		return
+		return ""
 	}
 
 	zerolog.Ctx(ctx).Debug().
 		Str("transcript_path", event.TranscriptPath).
 		Str("extracted_intent", intentContent).
 		Msg("Intent extracted from transcript for hook processing")
+
+	return intentContent
 }
 
 // findMatchingPreRule finds the first rule that matches the event
-func (a *App) findMatchingPreRule(_ context.Context, preRules []config.Rule, ruleMatcher *matcher.RuleMatcher,
+func (a *App) findMatchingPreRule(ctx context.Context, preRules []config.Rule, ruleMatcher *matcher.RuleMatcher,
 	event hooks.HookEvent,
 ) (rule *config.Rule, matchedField string) {
 	for i := range preRules {
 		rule := &preRules[i]
 
-		//nolint:contextcheck // context flow will be addressed in future refactoring
-		if matchedRule, matchedValue := a.checkRuleSources(rule, ruleMatcher, event); matchedRule != nil {
+		if matchedRule, matchedValue := a.checkRuleSources(ctx, rule, ruleMatcher, event); matchedRule != nil {
 			return matchedRule, matchedValue
 		}
 	}
@@ -285,23 +295,23 @@ func (a *App) findMatchingPreRule(_ context.Context, preRules []config.Rule, rul
 }
 
 // checkRuleSources checks if rule matches using sources or fallback behavior
-func (a *App) checkRuleSources(rule *config.Rule, ruleMatcher *matcher.RuleMatcher,
+func (a *App) checkRuleSources(ctx context.Context, rule *config.Rule, ruleMatcher *matcher.RuleMatcher,
 	event hooks.HookEvent,
 ) (matchedRule *config.Rule, matchedField string) {
 	match := rule.GetMatch()
 	if len(match.Sources) > 0 {
-		return a.checkSpecificSources(rule, ruleMatcher, event)
+		return a.checkSpecificSources(ctx, rule, ruleMatcher, event)
 	}
 	return a.checkOriginalBehavior(rule, event)
 }
 
 // checkSpecificSources checks only specified source fields
-func (a *App) checkSpecificSources(rule *config.Rule, ruleMatcher *matcher.RuleMatcher,
+func (a *App) checkSpecificSources(ctx context.Context, rule *config.Rule, ruleMatcher *matcher.RuleMatcher,
 	event hooks.HookEvent,
 ) (matchedRule *config.Rule, matchedField string) {
 	match := rule.GetMatch()
 	for _, fieldName := range match.Sources {
-		if matched, content := a.checkIntentSource(fieldName, rule, ruleMatcher, event); matched {
+		if matched, content := a.checkIntentSource(ctx, fieldName, rule, ruleMatcher, event); matched {
 			return rule, content
 		}
 		if matched, content := a.checkToolInputSource(fieldName, rule, ruleMatcher, event); matched {
@@ -313,7 +323,7 @@ func (a *App) checkSpecificSources(rule *config.Rule, ruleMatcher *matcher.RuleM
 
 // checkIntentSource handles #intent source field
 func (a *App) checkIntentSource(
-	fieldName string, rule *config.Rule, ruleMatcher *matcher.RuleMatcher, event hooks.HookEvent,
+	ctx context.Context, fieldName string, rule *config.Rule, ruleMatcher *matcher.RuleMatcher, event hooks.HookEvent,
 ) (matched bool, content string) {
 	if fieldName != "#intent" {
 		return false, ""
@@ -328,10 +338,10 @@ func (a *App) checkIntentSource(
 	if event.ToolUseID != "" {
 		// Use precise tool-use-ID based extraction
 		intentContent, err = transcript.ExtractIntentByToolUseIDWithContext(
-			context.Background(), event.TranscriptPath, event.ToolUseID)
+			ctx, event.TranscriptPath, event.ToolUseID)
 	} else {
 		// Use new reliable method that scans backwards for recent tool use
-		intentContent, err = transcript.FindRecentToolUseAndExtractIntent(event.TranscriptPath)
+		intentContent, err = transcript.FindRecentToolUseAndExtractIntent(ctx, event.TranscriptPath)
 	}
 
 	if err != nil || strings.TrimSpace(intentContent) == "" {
@@ -452,7 +462,7 @@ func (*App) extractPostToolContent(ctx context.Context, rawJSON json.RawMessage)
 		if toolUseID != "" {
 			intent, err = transcript.ExtractIntentByToolUseIDWithContext(ctx, transcriptPath, toolUseID)
 		} else {
-			intent, err = transcript.FindRecentToolUseAndExtractIntent(transcriptPath)
+			intent, err = transcript.FindRecentToolUseAndExtractIntent(ctx, transcriptPath)
 		}
 		if err != nil {
 			logger.Debug().Err(err).Str("transcript_path", transcriptPath).Msg("Failed to extract intent")
@@ -569,10 +579,18 @@ func (a *App) ProcessPostToolUse(ctx context.Context, rawJSON json.RawMessage) (
 	}
 
 	logger.Debug().
-		Int("intent_content_length", len(content.intent)).
-		Int("tool_response_field_count", len(content.toolOutputMap)).
+		Str("hook_type", "PostToolUse").
 		Str("tool_name", content.toolName).
-		Msg("PostToolUse content extracted for rule matching")
+		Str("extracted_intent", content.intent).
+		Int("tool_response_field_count", len(content.toolOutputMap)).
+		Interface("tool_response_sources", func() []string {
+			sources := make([]string, 0, len(content.toolOutputMap))
+			for key := range content.toolOutputMap {
+				sources = append(sources, key)
+			}
+			return sources
+		}()).
+		Msg("Hook processing summary - sources available for rule matching")
 
 	// Skip if no content to match against (neither intent nor tool response)
 	if content.intent == "" && len(content.toolOutputMap) == 0 {

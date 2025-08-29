@@ -10,7 +10,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/rs/zerolog/log"
+	"github.com/rs/zerolog"
 )
 
 func ExtractReasoningContent(transcriptPath string) (string, error) {
@@ -28,7 +28,7 @@ func ExtractReasoningContent(transcriptPath string) (string, error) {
 	for {
 		line, readErr := reader.ReadString('\n')
 		if readErr != nil && readErr != io.EOF {
-			return "", fmt.Errorf("error reading transcript file %s: %w", transcriptPath, readErr)
+			return "", fmt.Errorf("failed to read transcript file %s: %w", transcriptPath, readErr)
 		}
 		if line == "" && readErr == io.EOF {
 			break
@@ -50,23 +50,12 @@ func ExtractReasoningContent(transcriptPath string) (string, error) {
 func processReasoningLine(line string) string {
 	line = strings.TrimSuffix(line, "\n")
 
-	if !hasReasoningContent(line) {
+	// Check if it's an assistant message and extract text content
+	if !strings.Contains(line, `"type":"assistant"`) {
 		return ""
 	}
 
 	return extractTextFromLine(line)
-}
-
-// hasReasoningContent checks if line contains assistant reasoning patterns
-func hasReasoningContent(line string) bool {
-	hasAssistantType := strings.Contains(line, `"type":"assistant"`)
-	hasReasoningPattern := strings.Contains(line, "I need to") ||
-		strings.Contains(line, "I can see") ||
-		strings.Contains(line, "not related") ||
-		strings.Contains(line, "timed out") ||
-		strings.Contains(line, "timeout")
-
-	return hasAssistantType && hasReasoningPattern
 }
 
 // extractTextFromLine extracts text content from JSONL line
@@ -99,19 +88,22 @@ type MessageContent struct {
 
 // ContentItem represents individual content items in a message
 type ContentItem struct {
-	Type string `json:"type"`
-	Text string `json:"text,omitempty"`
-	ID   string `json:"id,omitempty"` // For tool_use content
+	Type     string `json:"type"`
+	Text     string `json:"text,omitempty"`
+	Thinking string `json:"thinking,omitempty"` // For thinking content
+	ID       string `json:"id,omitempty"`       // For tool_use content
 }
 
-func ExtractIntentContent(transcriptPath string) (string, error) {
+func ExtractIntentContent(ctx context.Context, transcriptPath string) (string, error) {
 	file, err := os.Open(transcriptPath) // #nosec G304 - path is validated by caller
 	if err != nil {
 		return "", fmt.Errorf("failed to open transcript file %s: %w", transcriptPath, err)
 	}
 	defer func() {
 		if closeErr := file.Close(); closeErr != nil {
-			log.Debug().Err(closeErr).Str("transcript_path", transcriptPath).Msg("Failed to close transcript file")
+			zerolog.Ctx(ctx).Debug().Err(closeErr).
+				Str("transcript_path", transcriptPath).
+				Msg("Failed to close transcript file")
 		}
 	}()
 
@@ -121,7 +113,7 @@ func ExtractIntentContent(transcriptPath string) (string, error) {
 	}
 
 	result := strings.Join(intentParts, " ")
-	logExtractedIntent(transcriptPath, intentParts, result)
+	logExtractedIntent(ctx, transcriptPath, intentParts, result)
 
 	return result, nil
 }
@@ -134,7 +126,7 @@ func readIntentFromFile(file *os.File, transcriptPath string) ([]string, error) 
 	for {
 		line, err := reader.ReadString('\n')
 		if err != nil && err != io.EOF {
-			return nil, fmt.Errorf("error reading transcript file %s: %w", transcriptPath, err)
+			return nil, fmt.Errorf("failed to read transcript file %s: %w", transcriptPath, err)
 		}
 
 		if line == "" && err == io.EOF {
@@ -163,8 +155,8 @@ func processIntentLine(line string) []string {
 }
 
 // logExtractedIntent logs the extraction results for debugging
-func logExtractedIntent(transcriptPath string, intentParts []string, result string) {
-	log.Debug().
+func logExtractedIntent(ctx context.Context, transcriptPath string, intentParts []string, result string) {
+	zerolog.Ctx(ctx).Debug().
 		Str("transcript_path", transcriptPath).
 		Int("intent_parts_count", len(intentParts)).
 		Str("extracted_intent", result).
@@ -187,23 +179,26 @@ func extractIntentFromLine(line string) []string {
 	var intentParts []string
 	// Extract content from all assistant message content blocks
 	for _, content := range entry.Message.Content {
-		intentParts = append(intentParts, extractContentByType(content)...)
+		intentParts = append(intentParts, extractContentFromContentItem(content)...)
 	}
 	return intentParts
 }
 
-// extractContentByType extracts content based on the content item type
-func extractContentByType(content ContentItem) []string {
+// extractContentFromContentItem extracts text content from a single content item
+func extractContentFromContentItem(content ContentItem) []string {
 	var parts []string
 	if content.Type == "text" && strings.TrimSpace(content.Text) != "" {
 		parts = append(parts, strings.TrimSpace(content.Text))
+	}
+	if content.Type == "thinking" && strings.TrimSpace(content.Thinking) != "" {
+		parts = append(parts, strings.TrimSpace(content.Thinking))
 	}
 	return parts
 }
 
 // ExtractIntentContentOptimized reads transcript files efficiently by reading from the end backwards
 // This is optimized for large files where recent content is most relevant
-func ExtractIntentContentOptimized(transcriptPath string, maxLines int) (string, error) {
+func ExtractIntentContentOptimized(ctx context.Context, transcriptPath string, maxLines int) (string, error) {
 	if maxLines <= 0 {
 		maxLines = 100 // Default reasonable limit for recent content
 	}
@@ -214,7 +209,9 @@ func ExtractIntentContentOptimized(transcriptPath string, maxLines int) (string,
 	}
 	defer func() {
 		if closeErr := file.Close(); closeErr != nil {
-			log.Debug().Err(closeErr).Str("transcript_path", transcriptPath).Msg("Failed to close transcript file")
+			zerolog.Ctx(ctx).Debug().Err(closeErr).
+				Str("transcript_path", transcriptPath).
+				Msg("Failed to close transcript file")
 		}
 	}()
 
@@ -267,7 +264,7 @@ func readChunk(file *os.File, offset, chunkSize int64) (chunk []byte, newOffset 
 	chunk = make([]byte, readSize)
 	_, err = file.ReadAt(chunk, newOffset)
 	if err != nil && !errors.Is(err, io.EOF) {
-		err = fmt.Errorf("error reading file at offset %d: %w", newOffset, err)
+		err = fmt.Errorf("failed to read file at offset %d: %w", newOffset, err)
 		return
 	}
 
@@ -338,8 +335,8 @@ func extractIntentFromLines(lines []string) string {
 
 // ExtractIntentByToolUseID extracts the intent for a specific tool use ID
 // by finding the assistant message that precedes the tool_use message
-func ExtractIntentByToolUseID(transcriptPath, toolUseID string) (string, error) {
-	return ExtractIntentByToolUseIDWithContext(context.Background(), transcriptPath, toolUseID)
+func ExtractIntentByToolUseID(ctx context.Context, transcriptPath, toolUseID string) (string, error) {
+	return ExtractIntentByToolUseIDWithContext(ctx, transcriptPath, toolUseID)
 }
 
 func ExtractIntentByToolUseIDWithContext(ctx context.Context, transcriptPath, toolUseID string) (string, error) {
@@ -349,7 +346,7 @@ func ExtractIntentByToolUseIDWithContext(ctx context.Context, transcriptPath, to
 	}
 	defer func() {
 		if closeErr := file.Close(); closeErr != nil {
-			log.Ctx(ctx).Debug().Err(closeErr).
+			zerolog.Ctx(ctx).Debug().Err(closeErr).
 				Str("transcript_path", transcriptPath).
 				Msg("Failed to close transcript file")
 		}
@@ -357,7 +354,7 @@ func ExtractIntentByToolUseIDWithContext(ctx context.Context, transcriptPath, to
 
 	result, err := findIntentByToolUseID(file, toolUseID)
 	if err == nil {
-		log.Ctx(ctx).Debug().
+		zerolog.Ctx(ctx).Debug().
 			Str("transcript_path", transcriptPath).
 			Str("tool_use_id", toolUseID).
 			Str("extracted_intent", result).
@@ -374,7 +371,7 @@ func findIntentByToolUseID(file *os.File, toolUseID string) (string, error) {
 	for {
 		line, err := reader.ReadString('\n')
 		if err != nil && err != io.EOF {
-			return "", fmt.Errorf("error reading transcript: %w", err)
+			return "", fmt.Errorf("failed to read transcript: %w", err)
 		}
 		if line == "" && err == io.EOF {
 			break
@@ -425,7 +422,7 @@ func checkForToolUseMatch(entry *TranscriptEntry, toolUseID string, processedEnt
 func findParentIntent(entry *TranscriptEntry, processedEntries []TranscriptEntry) string {
 	for _, processed := range processedEntries {
 		if processed.Type == "assistant" && processed.UUID == entry.ParentUUID {
-			return extractTextContent(&processed)
+			return extractTextFromEntry(&processed)
 		}
 	}
 	return ""
@@ -442,15 +439,21 @@ func findToolUseWithID(entry *TranscriptEntry, toolUseID string) *ContentItem {
 	return nil
 }
 
-// extractTextContent extracts text content from a transcript entry
-func extractTextContent(entry *TranscriptEntry) string {
+// extractTextFromEntry extracts text content from a transcript entry
+func extractTextFromEntry(entry *TranscriptEntry) string {
+	parts := extractTextPartsFromEntry(entry)
+	return strings.Join(parts, " ")
+}
+
+// extractTextPartsFromEntry extracts text content parts from a transcript entry
+func extractTextPartsFromEntry(entry *TranscriptEntry) []string {
 	var parts []string
 	for _, content := range entry.Message.Content {
 		if content.Type == "text" && strings.TrimSpace(content.Text) != "" {
 			parts = append(parts, strings.TrimSpace(content.Text))
 		}
 	}
-	return strings.Join(parts, " ")
+	return parts
 }
 
 // findMostRecentToolUseParentUUID scans backwards to find the most recent tool_use and returns its parentUuid
@@ -515,57 +518,10 @@ func hasToolUseContent(content []any) bool {
 	return false
 }
 
-// extractTextContentFromMessage extracts text content from an assistant message entry
-func extractTextContentFromMessage(entry map[string]any) []string {
-	message, ok := entry["message"].(map[string]any)
-	if !ok {
-		return nil
-	}
-
-	content, ok := message["content"].([]any)
-	if !ok {
-		return nil
-	}
-
-	return extractTextFromContent(content)
-}
-
-// extractTextFromContent extracts text items from content array
-func extractTextFromContent(content []any) []string {
-	var contentParts []string
-
-	for _, contentItem := range content {
-		if text := extractTextFromContentItem(contentItem); text != "" {
-			contentParts = append(contentParts, text)
-		}
-	}
-	return contentParts
-}
-
-// extractTextFromContentItem extracts text from a single content item
-func extractTextFromContentItem(contentItem any) string {
-	item, ok := contentItem.(map[string]any)
-	if !ok {
-		return ""
-	}
-
-	itemType, ok := item["type"].(string)
-	if !ok || itemType != "text" {
-		return ""
-	}
-
-	text, ok := item["text"].(string)
-	if !ok || text == "" {
-		return ""
-	}
-
-	return strings.TrimSpace(text)
-}
-
 // FindRecentToolUseAndExtractIntent scans backwards through transcript to find recent tool uses
 // and extracts the associated intent content within a 1-minute time window
-func FindRecentToolUseAndExtractIntent(transcriptPath string) (string, error) {
-	lines, err := readTranscriptLines(transcriptPath)
+func FindRecentToolUseAndExtractIntent(ctx context.Context, transcriptPath string) (string, error) {
+	lines, err := readTranscriptLines(ctx, transcriptPath)
 	if err != nil {
 		return "", err
 	}
@@ -578,7 +534,7 @@ func FindRecentToolUseAndExtractIntent(transcriptPath string) (string, error) {
 
 	if len(allContentParts) > 0 {
 		result := strings.Join(allContentParts, " ")
-		log.Debug().
+		zerolog.Ctx(ctx).Debug().
 			Str("transcript_path", transcriptPath).
 			Int("content_parts_count", len(allContentParts)).
 			Str("extracted_intent", result).
@@ -590,14 +546,16 @@ func FindRecentToolUseAndExtractIntent(transcriptPath string) (string, error) {
 }
 
 // readTranscriptLines reads all lines from the transcript file
-func readTranscriptLines(transcriptPath string) ([]string, error) {
+func readTranscriptLines(ctx context.Context, transcriptPath string) ([]string, error) {
 	file, err := os.Open(transcriptPath) // #nosec G304 - path is validated by caller
 	if err != nil {
 		return nil, fmt.Errorf("failed to open transcript file %s: %w", transcriptPath, err)
 	}
 	defer func() {
 		if closeErr := file.Close(); closeErr != nil {
-			log.Debug().Err(closeErr).Str("transcript_path", transcriptPath).Msg("Failed to close transcript file")
+			zerolog.Ctx(ctx).Debug().Err(closeErr).
+				Str("transcript_path", transcriptPath).
+				Msg("Failed to close transcript file")
 		}
 	}()
 
@@ -607,7 +565,7 @@ func readTranscriptLines(transcriptPath string) ([]string, error) {
 	for {
 		line, err := reader.ReadString('\n')
 		if err != nil && err != io.EOF {
-			return nil, fmt.Errorf("error reading line: %w", err)
+			return nil, fmt.Errorf("failed to read line: %w", err)
 		}
 
 		if line != "" {
@@ -644,44 +602,28 @@ func extractPrioritizedContent(lines []string, mostRecentToolUseParentUUID strin
 
 // extractContentFromLine extracts text content from a single line
 func extractContentFromLine(line string) []string {
-	var entry map[string]any
-	if err := json.Unmarshal([]byte(line), &entry); err != nil {
+	entry, valid := parseTranscriptEntry(line)
+	if !valid || entry.Type != "assistant" {
 		return nil
 	}
 
-	if !isAssistantEntry(entry) {
-		return nil
-	}
-
-	return extractTextContentFromMessage(entry)
+	return extractTextPartsFromEntry(&entry)
 }
 
 // shouldUseContent determines if content should be used and updates collections
 func shouldUseContent(line, parentUUID string, allParts *[]string, contentParts []string, assistantCount *int) bool {
 	if parentUUID != "" {
-		return useSpecificParentContent(line, parentUUID, allParts, contentParts)
-	}
-	return useFallbackContent(allParts, contentParts, assistantCount)
-}
+		// Check if this line has the specific parent UUID we want
+		entry, valid := parseTranscriptEntry(line)
+		if !valid || entry.UUID != parentUUID {
+			return false
+		}
 
-// useSpecificParentContent uses content only from the specific parent UUID
-func useSpecificParentContent(line, parentUUID string, allParts *[]string, contentParts []string) bool {
-	var entry map[string]any
-	if err := json.Unmarshal([]byte(line), &entry); err != nil {
-		return false
+		*allParts = append(*allParts, contentParts...)
+		return true // Found the parent intent message, we're done
 	}
 
-	uuid, ok := entry["uuid"].(string)
-	if !ok || uuid != parentUUID {
-		return false
-	}
-
-	*allParts = append(*allParts, contentParts...)
-	return true // Found the parent intent message, we're done
-}
-
-// useFallbackContent uses content as fallback when no specific parent is found
-func useFallbackContent(allParts *[]string, contentParts []string, assistantCount *int) bool {
+	// Fallback: collect recent assistant messages
 	*allParts = append(contentParts, *allParts...)
 	*assistantCount++
 	return false // Continue collecting

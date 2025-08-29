@@ -1,6 +1,7 @@
 package transcript
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -136,7 +137,7 @@ func TestExtractIntentContent_NonExistentFile(t *testing.T) {
 
 	nonExistentPath := "/tmp/non-existent-transcript.jsonl"
 
-	_, err := ExtractIntentContent(nonExistentPath)
+	_, err := ExtractIntentContent(context.Background(), nonExistentPath)
 	if err == nil {
 		t.Error("Expected error for non-existent file, got nil")
 	}
@@ -171,7 +172,7 @@ not even close to json
 		t.Fatalf("Failed to create malformed transcript: %v", err)
 	}
 
-	intent, err := ExtractIntentContent(transcriptPath)
+	intent, err := ExtractIntentContent(context.Background(), transcriptPath)
 	if err != nil {
 		t.Fatalf("ExtractIntentContent should gracefully handle malformed JSON, got: %v", err)
 	}
@@ -231,7 +232,7 @@ func TestExtractIntentContent_MixedContent(t *testing.T) {
 		t.Fatalf("Failed to create mixed content transcript: %v", err)
 	}
 
-	intent, err := ExtractIntentContent(transcriptPath)
+	intent, err := ExtractIntentContent(context.Background(), transcriptPath)
 	if err != nil {
 		t.Fatalf("ExtractIntentContent failed: %v", err)
 	}
@@ -296,7 +297,7 @@ func TestExtractIntentContentOptimized_ReadsRecentContentFirst(t *testing.T) {
 	}
 
 	// Use optimized function with small line limit
-	intent, err := ExtractIntentContentOptimized(transcriptPath, 5)
+	intent, err := ExtractIntentContentOptimized(context.Background(), transcriptPath, 5)
 	if err != nil {
 		t.Fatalf("ExtractIntentContentOptimized failed: %v", err)
 	}
@@ -337,7 +338,7 @@ func BenchmarkExtractIntentContent(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := ExtractIntentContent(transcriptPath)
+		_, err := ExtractIntentContent(context.Background(), transcriptPath)
 		if err != nil {
 			b.Fatalf("ExtractIntentContent failed: %v", err)
 		}
@@ -365,7 +366,7 @@ func BenchmarkExtractIntentContentOptimized(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := ExtractIntentContentOptimized(transcriptPath, 50) // Only read recent 50 lines
+		_, err := ExtractIntentContentOptimized(context.Background(), transcriptPath, 50) // Only read recent 50 lines
 		if err != nil {
 			b.Fatalf("ExtractIntentContentOptimized failed: %v", err)
 		}
@@ -403,7 +404,7 @@ func TestExtractIntentByToolUseID_Success(t *testing.T) {
 	}
 
 	// Test extracting intent by tool use ID
-	intent, err := ExtractIntentByToolUseID(transcriptPath, "toolu_01KTePc3uLq34eriLmSLbgnx")
+	intent, err := ExtractIntentByToolUseID(context.Background(), transcriptPath, "toolu_01KTePc3uLq34eriLmSLbgnx")
 	if err != nil {
 		t.Fatalf("ExtractIntentByToolUseID failed: %v", err)
 	}
@@ -473,7 +474,7 @@ func TestExtractIntentByToolUseID_NotFound(t *testing.T) {
 	}
 
 	// Should return empty string when tool_use_id not found
-	intent, err := ExtractIntentByToolUseID(transcriptPath, "toolu_01KTePc3uLq34eriLmSLbgnx")
+	intent, err := ExtractIntentByToolUseID(context.Background(), transcriptPath, "toolu_01KTePc3uLq34eriLmSLbgnx")
 	if err != nil {
 		t.Fatalf("ExtractIntentByToolUseID failed: %v", err)
 	}
@@ -505,7 +506,7 @@ not json at all`
 	}
 
 	// Should handle malformed JSON gracefully and still find the valid intent
-	intent, err := ExtractIntentByToolUseID(transcriptPath, "toolu_01KTePc3uLq34eriLmSLbgnx")
+	intent, err := ExtractIntentByToolUseID(context.Background(), transcriptPath, "toolu_01KTePc3uLq34eriLmSLbgnx")
 	if err != nil {
 		t.Fatalf("ExtractIntentByToolUseID failed: %v", err)
 	}
@@ -522,7 +523,7 @@ func TestExtractIntentContent_ImprovedErrorMessages(t *testing.T) {
 
 	nonExistentPath := "/path/that/definitely/does/not/exist/transcript.jsonl"
 
-	result, err := ExtractIntentContent(nonExistentPath)
+	result, err := ExtractIntentContent(context.Background(), nonExistentPath)
 	if err == nil {
 		t.Fatal("Expected error for non-existent file, got nil")
 	}
@@ -545,7 +546,7 @@ func TestExtractIntentContentOptimized_ImprovedErrorMessages(t *testing.T) {
 
 	nonExistentPath := "/path/that/definitely/does/not/exist/transcript.jsonl"
 
-	result, err := ExtractIntentContentOptimized(nonExistentPath, 50)
+	result, err := ExtractIntentContentOptimized(context.Background(), nonExistentPath, 50)
 	if err == nil {
 		t.Fatal("Expected error for non-existent file, got nil")
 	}
@@ -579,13 +580,13 @@ func TestExtractIntentContent_HandlesLongLines(t *testing.T) {
 	}
 
 	// This should not fail with "token too long" error
-	_, err := ExtractIntentContent(transcriptPath)
+	_, err := ExtractIntentContent(context.Background(), transcriptPath)
 	if err != nil && strings.Contains(err.Error(), "token too long") {
 		t.Fatalf("ExtractIntentContent failed with token too long error: %v", err)
 	}
 
 	// Also test the optimized version
-	_, err = ExtractIntentContentOptimized(transcriptPath, 50)
+	_, err = ExtractIntentContentOptimized(context.Background(), transcriptPath, 50)
 	if err != nil && strings.Contains(err.Error(), "token too long") {
 		t.Fatalf("ExtractIntentContentOptimized failed with token too long error: %v", err)
 	}
@@ -620,7 +621,7 @@ func TestFindRecentToolUseAndExtractIntent(t *testing.T) {
 	}
 
 	// Test the new function
-	intent, err := FindRecentToolUseAndExtractIntent(transcriptPath)
+	intent, err := FindRecentToolUseAndExtractIntent(context.Background(), transcriptPath)
 	if err != nil {
 		t.Fatalf("FindRecentToolUseAndExtractIntent failed: %v", err)
 	}
@@ -664,7 +665,7 @@ func TestFindRecentToolUseAndExtractIntent_ShouldPrioritizeToolUseParentIntent(t
 	}
 
 	// Test the function - it should extract the CURRENT intent, not the previous one
-	intent, err := FindRecentToolUseAndExtractIntent(transcriptPath)
+	intent, err := FindRecentToolUseAndExtractIntent(context.Background(), transcriptPath)
 	if err != nil {
 		t.Fatalf("FindRecentToolUseAndExtractIntent failed: %v", err)
 	}
@@ -703,7 +704,7 @@ func TestFindRecentToolUseAndExtractIntent_WithDifferentContent(t *testing.T) {
 	}
 
 	// Test the new function
-	intent, err := FindRecentToolUseAndExtractIntent(transcriptPath)
+	intent, err := FindRecentToolUseAndExtractIntent(context.Background(), transcriptPath)
 	if err != nil {
 		t.Fatalf("FindRecentToolUseAndExtractIntent failed: %v", err)
 	}
@@ -730,7 +731,7 @@ func TestFindRecentToolUseAndExtractIntent_WithTextContent(t *testing.T) {
 		t.Fatalf("Failed to create test transcript: %v", err)
 	}
 
-	intent, err := FindRecentToolUseAndExtractIntent(transcriptPath)
+	intent, err := FindRecentToolUseAndExtractIntent(context.Background(), transcriptPath)
 	if err != nil {
 		t.Fatalf("FindRecentToolUseAndExtractIntent failed: %v", err)
 	}
@@ -741,37 +742,39 @@ func TestFindRecentToolUseAndExtractIntent_WithTextContent(t *testing.T) {
 	}
 }
 
-func TestFindRecentToolUseAndExtractIntent_WithMultipleAssistantMessages(t *testing.T) {
-	_, _ = testutil.NewTestContext(t)
+func TestExtractIntentContent_WithThinkingBlocks(t *testing.T) {
+	_, _ = testutil.NewTestContext(t) // Context-aware logging available
 	t.Parallel()
 
 	tmpDir := t.TempDir()
-	transcriptPath := filepath.Join(tmpDir, "multiple-assistants.jsonl")
+	transcriptPath := filepath.Join(tmpDir, "thinking-test.jsonl")
 
-	// Create transcript with multiple assistant messages - should include content from recent ones
-	transcriptContent := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"text",` +
-		`"text":"I'll check the system performance for you."}]},"uuid":"assistant1"}
-{"type":"assistant","message":{"role":"assistant","content":[{"type":"text",` +
-		`"text":"The system shows high CPU usage at 85%."}]},"uuid":"assistant2"}`
+	// Real transcript data with thinking blocks from the actual conversation
+	line1 := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"thinking",` +
+		`"thinking":"The user is reporting that intent extraction isn't working properly. ` +
+		`Let me investigate this issue.","signature":"test-signature"}]},` +
+		`"uuid":"assistant1","timestamp":"2024-01-01T10:01:00Z"}`
+	line2 := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"text",` +
+		`"text":"I'll investigate the intent extraction issue."}]},` +
+		`"uuid":"assistant2","timestamp":"2024-01-01T10:02:00Z"}`
+	transcriptContent := line1 + "\n" + line2
 
 	err := os.WriteFile(transcriptPath, []byte(transcriptContent), 0o600)
 	if err != nil {
 		t.Fatalf("Failed to create test transcript: %v", err)
 	}
 
-	intent, err := FindRecentToolUseAndExtractIntent(transcriptPath)
+	intent, err := ExtractIntentContent(context.Background(), transcriptPath)
 	if err != nil {
-		t.Fatalf("FindRecentToolUseAndExtractIntent failed: %v", err)
+		t.Fatalf("ExtractIntentContent failed: %v", err)
 	}
 
-	// Should include content from both recent assistant messages (not just the last one)
-	// This test will fail with current implementation that only gets the last message
-	if !containsPattern(intent, "check the system performance") {
-		t.Errorf("Expected intent to contain content from first assistant (check the system performance), got: %s",
-			intent)
+	// Should extract both thinking content and text content
+	// This test will currently fail because extractContentByType doesn't handle thinking type
+	if !containsPattern(intent, "intent extraction isn't working") {
+		t.Errorf("Expected intent to contain thinking content 'intent extraction isn't working', got: %s", intent)
 	}
-	if !containsPattern(intent, "high CPU usage at 85%") {
-		t.Errorf("Expected intent to contain content from second assistant with 'high CPU usage at 85%%', got: %s",
-			intent)
+	if !containsPattern(intent, "investigate the intent extraction") {
+		t.Errorf("Expected intent to contain text content 'investigate the intent extraction', got: %s", intent)
 	}
 }

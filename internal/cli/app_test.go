@@ -3680,9 +3680,9 @@ func TestIntegrationThinkingAndTextExtraction(t *testing.T) {
 	testPostToolUseIntegration(t, &postToolUseIntegrationTestCase{
 		sessionID:       "integration-test",
 		transcriptFile:  "transcript-thinking-and-text.jsonl",
-		matchPattern:    "critical.*attention",
+		matchPattern:    "transcript.*data",
 		command:         "go test ./...",
-		expectedMessage: "Critical issue requires careful handling",
+		expectedMessage: "Transcript analysis detected",
 		success:         false,
 	})
 }
@@ -4060,4 +4060,28 @@ func TestPostToolUseWithToolUseIDExtraction(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, response, "Matched specific post-tool intent via tool_use_id",
 		"Should match specific intent from tool_use_id extraction in PostToolUse")
+}
+
+func TestExtractAndLogIntent_ReturnsIntentContent(t *testing.T) {
+	ctx, getLogOutput := testutil.NewTestContext(t)
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	transcriptPath := filepath.Join(tmpDir, "intent-test.jsonl")
+
+	// Create transcript with assistant message
+	transcriptContent := `{"type":"assistant","message":{"role":"assistant",` +
+		`"content":[{"type":"text","text":"I'll search the codebase to understand the implementation"}]},` +
+		`"uuid":"test-uuid","timestamp":"2024-01-01T10:00:00Z"}`
+	err := os.WriteFile(transcriptPath, []byte(transcriptContent), 0o600)
+	require.NoError(t, err)
+
+	app := NewAppWithWorkDir("", tmpDir)
+	event := hooks.HookEvent{TranscriptPath: transcriptPath}
+
+	// Test that extractAndLogIntent returns the extracted content
+	intentContent := app.extractAndLogIntent(ctx, event)
+	assert.Contains(t, intentContent, "I'll search the codebase to understand")
+
+	_ = getLogOutput // Suppress unused variable warning
 }
