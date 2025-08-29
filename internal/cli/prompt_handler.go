@@ -10,29 +10,34 @@ import (
 	"github.com/wizzomafizzo/bumpers/internal/core/logging"
 	"github.com/wizzomafizzo/bumpers/internal/core/messaging/template"
 	"github.com/wizzomafizzo/bumpers/internal/infrastructure/constants"
+	ai "github.com/wizzomafizzo/bumpers/internal/platform/claude/api"
 )
 
-type UserPromptEvent struct {
-	Prompt string `json:"prompt"`
+// PromptHandler handles user prompt processing and command generation
+type PromptHandler interface {
+	ProcessUserPrompt(ctx context.Context, rawJSON json.RawMessage) (string, error)
 }
 
-type HookSpecificOutput struct {
-	HookEventName     string `json:"hookEventName"`
-	AdditionalContext string `json:"additionalContext"`
+// DefaultPromptHandler implements PromptHandler
+type DefaultPromptHandler struct {
+	aiHelper   *AIHelper
+	configPath string
 }
 
-type HookResponse struct {
-	HookSpecificOutput HookSpecificOutput `json:"hookSpecificOutput"`
+// NewPromptHandler creates a new PromptHandler
+func NewPromptHandler(configPath, projectRoot string) *DefaultPromptHandler {
+	return &DefaultPromptHandler{
+		configPath: configPath,
+		aiHelper:   NewAIHelper(projectRoot, nil, nil),
+	}
 }
 
-type ValidationResult struct {
-	Decision   any    `json:"decision,omitempty"`
-	Reason     string `json:"reason"`
-	StopReason string `json:"stopReason,omitempty"`
-	Continue   bool   `json:"continue,omitempty"`
+// SetMockAIGenerator sets a mock AI generator for testing
+func (p *DefaultPromptHandler) SetMockAIGenerator(generator ai.MessageGenerator) {
+	p.aiHelper.aiGenerator = generator
 }
 
-func (a *App) ProcessUserPrompt(ctx context.Context, rawJSON json.RawMessage) (string, error) {
+func (p *DefaultPromptHandler) ProcessUserPrompt(ctx context.Context, rawJSON json.RawMessage) (string, error) {
 	logger := logging.Get(ctx)
 
 	// Parse the UserPromptSubmit JSON
@@ -62,9 +67,9 @@ func (a *App) ProcessUserPrompt(ctx context.Context, rawJSON json.RawMessage) (s
 		Msg("parsed command arguments")
 
 	// Load config to get commands
-	cfg, err := config.Load(a.configPath)
+	cfg, err := config.Load(p.configPath)
 	if err != nil {
-		logger.Error().Err(err).Str("config_path", a.configPath).Msg("Failed to load config")
+		logger.Error().Err(err).Str("config_path", p.configPath).Msg("Failed to load config")
 		return "", fmt.Errorf("failed to load config: %w", err)
 	}
 
@@ -96,7 +101,7 @@ func (a *App) ProcessUserPrompt(ctx context.Context, rawJSON json.RawMessage) (s
 	}
 
 	// Apply AI generation if configured
-	finalMessage, err := a.processAIGenerationGeneric(ctx, matchedCommand, processedMessage, commandStr)
+	finalMessage, err := p.aiHelper.ProcessAIGenerationGeneric(ctx, matchedCommand, processedMessage, commandStr)
 	if err != nil {
 		// Log error but don't fail the hook - fallback to original message
 		logger.Error().Err(err).Msg("AI generation failed, using original message")

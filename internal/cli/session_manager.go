@@ -1,0 +1,159 @@
+package cli
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"strings"
+
+	"github.com/spf13/afero"
+	"github.com/wizzomafizzo/bumpers/internal/config"
+	"github.com/wizzomafizzo/bumpers/internal/core/logging"
+	"github.com/wizzomafizzo/bumpers/internal/core/messaging/template"
+	"github.com/wizzomafizzo/bumpers/internal/infrastructure/constants"
+	ai "github.com/wizzomafizzo/bumpers/internal/platform/claude/api"
+	"github.com/wizzomafizzo/bumpers/internal/platform/storage"
+)
+
+// SessionManager handles session start events and session-based operations
+type SessionManager interface {
+	ProcessSessionStart(ctx context.Context, rawJSON json.RawMessage) (string, error)
+	ClearSessionCache(ctx context.Context) error
+}
+
+// DefaultSessionManager implements SessionManager
+type DefaultSessionManager struct {
+	fileSystem afero.Fs
+	aiHelper   *AIHelper
+	configPath string
+}
+
+// NewSessionManager creates a new SessionManager
+func NewSessionManager(configPath, projectRoot string, fileSystem afero.Fs) *DefaultSessionManager {
+	return &DefaultSessionManager{
+		configPath: configPath,
+		fileSystem: fileSystem,
+		aiHelper:   NewAIHelper(projectRoot, nil, fileSystem),
+	}
+}
+
+// SetMockAIGenerator sets a mock AI generator for testing
+func (s *DefaultSessionManager) SetMockAIGenerator(generator ai.MessageGenerator) {
+	s.aiHelper.aiGenerator = generator
+}
+
+// getFileSystem returns the filesystem to use - either injected or defaults to OS
+func (s *DefaultSessionManager) getFileSystem() afero.Fs {
+	if s.fileSystem != nil {
+		return s.fileSystem
+	}
+	return afero.NewOsFs()
+}
+
+func (s *DefaultSessionManager) ProcessSessionStart(ctx context.Context, rawJSON json.RawMessage) (string, error) {
+	logger := logging.Get(ctx)
+	logger.Debug().Msg("processing SessionStart hook")
+
+	// Parse the SessionStart JSON
+	var event SessionStartEvent
+	if err := json.Unmarshal(rawJSON, &event); err != nil {
+		return "", fmt.Errorf("failed to parse SessionStart event: %w", err)
+	}
+
+	// Only process startup and clear sources
+	if event.Source != constants.SessionSourceStartup && event.Source != constants.SessionSourceClear {
+		return "", nil
+	}
+
+	// Clear session-based cache entries when a new session starts
+	if cacheErr := s.ClearSessionCache(ctx); cacheErr != nil {
+		// Log error but don't fail the hook - cache clearing is non-critical
+		logger.Warn().Err(cacheErr).Msg("failed to clear session cache")
+	}
+
+	// Load config to get notes
+	cfg, err := config.Load(s.configPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to load config: %w", err)
+	}
+
+	// If no notes, return empty
+	if len(cfg.Session) == 0 {
+		return "", nil
+	}
+
+	// Process and concatenate all note messages
+	messages := make([]string, 0, len(cfg.Session))
+	for _, note := range cfg.Session {
+		// Process template with note context including shared variables
+		processedMessage, templateErr := template.ExecuteNoteTemplate(note.Add)
+		if templateErr != nil {
+			return "", fmt.Errorf("failed to process note template: %w", templateErr)
+		}
+
+		// Apply AI generation if configured
+		finalMessage, genErr := s.aiHelper.ProcessAIGenerationGeneric(ctx, &note, processedMessage, "")
+		if genErr != nil {
+			// Log error but don't fail the hook - fallback to original message
+			logger.Error().Err(genErr).Msg("AI generation failed, using original message")
+			finalMessage = processedMessage
+		}
+
+		messages = append(messages, finalMessage)
+	}
+
+	additionalContext := strings.Join(messages, "\n")
+
+	// Create hook response that adds context
+	response := HookSpecificOutput{
+		HookEventName:     constants.SessionStartEvent,
+		AdditionalContext: additionalContext,
+	}
+
+	// Wrap in hookSpecificOutput structure
+	responseWrapper := map[string]any{
+		"hookSpecificOutput": response,
+	}
+
+	// Convert to JSON
+	responseJSON, err := json.Marshal(responseWrapper)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal response: %w", err)
+	}
+
+	return string(responseJSON), nil
+}
+
+// ClearSessionCache clears all session-based cached AI generation entries
+func (s *DefaultSessionManager) ClearSessionCache(ctx context.Context) error {
+	// Use XDG-compliant cache path
+	storageManager := storage.New(s.getFileSystem())
+	cachePath, err := storageManager.GetCachePath()
+	if err != nil {
+		return fmt.Errorf("failed to get cache path: %w", err)
+	}
+
+	// Create cache instance with project context
+	cache, err := ai.NewCacheWithProject(cachePath, s.aiHelper.projectRoot)
+	if err != nil {
+		return fmt.Errorf("failed to create cache: %w", err)
+	}
+	defer func() {
+		if closeErr := cache.Close(); closeErr != nil {
+			// Log error but don't fail the function - cache close is non-critical
+			_ = closeErr
+		}
+	}()
+
+	// Clear session cache entries
+	err = cache.ClearSessionCache()
+	if err != nil {
+		return fmt.Errorf("failed to clear session cache: %w", err)
+	}
+
+	logging.Get(ctx).Debug().
+		Str("project_root", s.aiHelper.projectRoot).
+		Msg("session cache cleared on session start")
+
+	return nil
+}

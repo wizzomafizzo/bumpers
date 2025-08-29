@@ -12,12 +12,45 @@ import (
 	"github.com/wizzomafizzo/bumpers/internal/platform/claude/settings"
 )
 
+// InstallManager handles installation, setup, and Claude hooks management
+type InstallManager interface {
+	Initialize() error
+	Status() (string, error)
+	InstallClaudeHooks() error
+}
+
+// DefaultInstallManager implements InstallManager
+type DefaultInstallManager struct {
+	fileSystem  afero.Fs
+	configPath  string
+	workDir     string
+	projectRoot string
+}
+
+// NewInstallManager creates a new InstallManager
+func NewInstallManager(configPath, workDir, projectRoot string, fileSystem afero.Fs) *DefaultInstallManager {
+	return &DefaultInstallManager{
+		configPath:  configPath,
+		workDir:     workDir,
+		projectRoot: projectRoot,
+		fileSystem:  fileSystem,
+	}
+}
+
+// getFileSystem returns the filesystem to use - either injected or defaults to OS
+func (i *DefaultInstallManager) getFileSystem() afero.Fs {
+	if i.fileSystem != nil {
+		return i.fileSystem
+	}
+	return afero.NewOsFs()
+}
+
 // Initialize sets up bumpers configuration and installs Claude hooks.
-func (a *App) Initialize() error {
+func (i *DefaultInstallManager) Initialize() error {
 	// Get working directory for logger initialization - prefer project root
-	workingDir := a.projectRoot
+	workingDir := i.projectRoot
 	if workingDir == "" {
-		workingDir = a.workDir
+		workingDir = i.workDir
 	}
 	if workingDir == "" {
 		var err error
@@ -28,23 +61,23 @@ func (a *App) Initialize() error {
 	}
 
 	// Get filesystem to use (either injected or default)
-	fs := a.getFileSystem()
+	fs := i.getFileSystem()
 
 	// Create config file if it doesn't exist
-	if _, statErr := fs.Stat(a.configPath); os.IsNotExist(statErr) {
+	if _, statErr := fs.Stat(i.configPath); os.IsNotExist(statErr) {
 		defaultConfigBytes, configErr := config.DefaultConfigYAML()
 		if configErr != nil {
 			return fmt.Errorf("failed to generate default config: %w", configErr)
 		}
 
-		writeErr := afero.WriteFile(fs, a.configPath, defaultConfigBytes, 0o600)
+		writeErr := afero.WriteFile(fs, i.configPath, defaultConfigBytes, 0o600)
 		if writeErr != nil {
-			return fmt.Errorf("failed to write config file to %s: %w", a.configPath, writeErr)
+			return fmt.Errorf("failed to write config file to %s: %w", i.configPath, writeErr)
 		}
 	}
 
 	// Install Claude hooks
-	installErr := a.installClaudeHooks()
+	installErr := i.InstallClaudeHooks()
 	if installErr != nil {
 		return installErr
 	}
@@ -53,7 +86,7 @@ func (a *App) Initialize() error {
 }
 
 // Status returns the current status of bumpers configuration.
-func (a *App) Status() (string, error) {
+func (i *DefaultInstallManager) Status() (string, error) {
 	var status strings.Builder
 
 	// strings.Builder.WriteString never returns error, but satisfying linter
@@ -65,25 +98,25 @@ func (a *App) Status() (string, error) {
 	writeString("===============\n\n")
 
 	// Check config file
-	fs := a.getFileSystem()
-	if _, err := fs.Stat(a.configPath); os.IsNotExist(err) {
+	fs := i.getFileSystem()
+	if _, err := fs.Stat(i.configPath); os.IsNotExist(err) {
 		writeString("Config file: NOT FOUND\n")
-		writeString(fmt.Sprintf("   Expected: %s\n", a.configPath))
+		writeString(fmt.Sprintf("   Expected: %s\n", i.configPath))
 	} else {
 		writeString("Config file: EXISTS\n")
-		writeString(fmt.Sprintf("   Location: %s\n", a.configPath))
+		writeString(fmt.Sprintf("   Location: %s\n", i.configPath))
 	}
 
 	return status.String(), nil
 }
 
 // setupClaudeDirectory ensures .claude directory exists and returns settings
-func (a *App) setupClaudeDirectory(workingDir string) (*settings.Settings, string, error) {
+func (i *DefaultInstallManager) setupClaudeDirectory(workingDir string) (*settings.Settings, string, error) {
 	claudeDir := filepath.Join(workingDir, constants.ClaudeDir)
 	localPath := filepath.Join(claudeDir, constants.SettingsFilename)
 
 	// Get filesystem to use (either injected or default)
-	fs := a.getFileSystem()
+	fs := i.getFileSystem()
 
 	// Ensure .claude directory exists
 	err := fs.MkdirAll(claudeDir, 0o750)
@@ -112,7 +145,7 @@ func (a *App) setupClaudeDirectory(workingDir string) (*settings.Settings, strin
 }
 
 // validateBumpersPath checks if bumpers binary exists (skips in test env and PATH commands)
-func (a *App) validateBumpersPath(workingDir, bumpersPath string) error {
+func (i *DefaultInstallManager) validateBumpersPath(workingDir, bumpersPath string) error {
 	// Skip check if working dir looks like Go test temp dir
 	if strings.HasPrefix(filepath.Base(workingDir), "Test") || strings.Contains(workingDir, "/tmp/Test") {
 		return nil
@@ -124,7 +157,7 @@ func (a *App) validateBumpersPath(workingDir, bumpersPath string) error {
 	}
 
 	// Get filesystem to use (either injected or default)
-	fs := a.getFileSystem()
+	fs := i.getFileSystem()
 
 	if _, statErr := fs.Stat(bumpersPath); os.IsNotExist(statErr) {
 		return fmt.Errorf("bumpers binary not found at %s. Please run 'just build' first", bumpersPath)
@@ -134,11 +167,11 @@ func (a *App) validateBumpersPath(workingDir, bumpersPath string) error {
 }
 
 // createHookCommand creates the hook command configuration using dynamic path detection
-func (a *App) createHookCommand(workingDir string) (settings.HookCommand, error) {
-	bumpersCommand := determineBumpersCommand(workingDir)
+func (i *DefaultInstallManager) createHookCommand(workingDir string) (settings.HookCommand, error) {
+	bumpersCommand := i.determineBumpersCommand(workingDir)
 
 	// Validate the command exists (skip in test environments)
-	if err := a.validateBumpersPath(workingDir, bumpersCommand); err != nil {
+	if err := i.validateBumpersPath(workingDir, bumpersCommand); err != nil {
 		return settings.HookCommand{}, err
 	}
 
@@ -149,7 +182,7 @@ func (a *App) createHookCommand(workingDir string) (settings.HookCommand, error)
 }
 
 // determineBumpersCommand determines which bumpers command to use based on context
-func determineBumpersCommand(workingDir string) string {
+func (i *DefaultInstallManager) determineBumpersCommand(workingDir string) string {
 	// Check if we're in test environment by looking at os.Args[0]
 	isTestEnv := strings.Contains(os.Args[0], ".test") || strings.HasSuffix(os.Args[0], ".test")
 
@@ -158,11 +191,11 @@ func determineBumpersCommand(workingDir string) string {
 		return filepath.Join(workingDir, "bin", "bumpers")
 	}
 
-	return resolveBumpersPath(os.Args[0])
+	return i.resolveBumpersPath(os.Args[0])
 }
 
 // resolveBumpersPath resolves the bumpers command path based on how it was invoked
-func resolveBumpersPath(originalCommand string) string {
+func (*DefaultInstallManager) resolveBumpersPath(originalCommand string) string {
 	// If it's just "bumpers" without path separators, it was run from PATH
 	baseName := filepath.Base(originalCommand)
 	hasPathSep := strings.Contains(originalCommand, string(filepath.Separator))
@@ -185,12 +218,12 @@ func resolveBumpersPath(originalCommand string) string {
 	return originalCommand
 }
 
-// installClaudeHooks installs bumpers as a PreToolUse hook in Claude settings.
-func (a *App) installClaudeHooks() error {
+// InstallClaudeHooks installs bumpers as a PreToolUse hook in Claude settings.
+func (i *DefaultInstallManager) InstallClaudeHooks() error {
 	// Get working directory - prefer project root
-	workingDir := a.projectRoot
+	workingDir := i.projectRoot
 	if workingDir == "" {
-		workingDir = a.workDir
+		workingDir = i.workDir
 	}
 	if workingDir == "" {
 		var err error
@@ -200,12 +233,12 @@ func (a *App) installClaudeHooks() error {
 		}
 	}
 
-	claudeSettings, localPath, err := a.setupClaudeDirectory(workingDir)
+	claudeSettings, localPath, err := i.setupClaudeDirectory(workingDir)
 	if err != nil {
 		return err
 	}
 
-	hookCmd, err := a.createHookCommand(workingDir)
+	hookCmd, err := i.createHookCommand(workingDir)
 	if err != nil {
 		return err
 	}
@@ -236,7 +269,7 @@ func (a *App) installClaudeHooks() error {
 	}
 
 	// Save settings using injected filesystem
-	fs := a.getFileSystem()
+	fs := i.getFileSystem()
 	err = settings.SaveToFileWithFS(fs, claudeSettings, localPath)
 	if err != nil {
 		return fmt.Errorf("failed to save Claude settings to %s: %w", localPath, err)

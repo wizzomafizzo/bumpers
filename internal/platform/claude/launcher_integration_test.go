@@ -3,7 +3,6 @@
 package claude
 
 import (
-	"context"
 	"testing"
 
 	"github.com/wizzomafizzo/bumpers/internal/testing"
