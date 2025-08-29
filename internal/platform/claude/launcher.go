@@ -14,6 +14,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 	"github.com/wizzomafizzo/bumpers/internal/config"
+	"github.com/wizzomafizzo/bumpers/internal/infrastructure/project"
 )
 
 // Launcher handles Claude binary discovery and execution
@@ -97,6 +98,18 @@ func (l *Launcher) ExecuteWithInput(input string) ([]byte, error) {
 
 	cmd := exec.CommandContext(ctx, claudePath, cmdArgs...) //nolint:gosec // claudePath is validated via GetClaudePath
 	cmd.Env = append(os.Environ(), "BUMPERS_SKIP=1")
+
+	// Set working directory to project root to ensure Claude runs from there
+	if projectRoot, findErr := project.FindRoot(); findErr == nil {
+		cmd.Dir = projectRoot
+		log.Debug().
+			Str("project_root", projectRoot).
+			Msg("setting Claude working directory to project root")
+	} else {
+		log.Warn().
+			Err(findErr).
+			Msg("failed to find project root, Claude will use current working directory")
+	}
 
 	log.Debug().
 		Str("claude_path", claudePath).

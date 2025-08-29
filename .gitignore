@@ -22,6 +22,8 @@ go.work.sum
 .idea/
 .vscode/
 .claude/
+.codanna*
+.fastembed_cache/
 
 bin/
 /bumpers

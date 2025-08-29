@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/wizzomafizzo/bumpers/internal/config"
+	"github.com/wizzomafizzo/bumpers/internal/infrastructure/project"
 	"github.com/wizzomafizzo/bumpers/internal/testing"
 )
 
@@ -303,4 +304,73 @@ func ExampleNewLauncher() {
 
 	// Output:
 	// Claude launcher created successfully
+}
+
+func TestExecuteWithInput_WorkingDirectory(t *testing.T) {
+	_, _ = testutil.NewTestContext(t) // Context-aware logging available
+	t.Parallel()
+
+	// Create a temporary directory structure to simulate a project
+	tmpDir := t.TempDir()
+
+	// Create a subdirectory to test from
+	subDir := filepath.Join(tmpDir, "subdir")
+	err := os.MkdirAll(subDir, 0o750)
+	require.NoError(t, err)
+
+	// Create a go.mod file in the root to mark it as project root
+	goModPath := filepath.Join(tmpDir, "go.mod")
+	err = os.WriteFile(goModPath, []byte("module test\n"), 0o600)
+	require.NoError(t, err)
+
+	// Create a mock Claude script that prints its working directory
+	claudeScript := filepath.Join(tmpDir, "claude")
+	scriptContent := `#!/bin/bash
+# Mock Claude script that handles arguments and outputs working directory
+echo '{"type":"result","subtype":"success","is_error":false,'\
+'"result":"Working directory: '$(pwd)'","session_id":"test",'\
+'"usage":{"input_tokens":0,"output_tokens":0},"duration_ms":0,"num_turns":1,"uuid":"test"}'
+`
+	//nolint:gosec // Script needs to be executable for testing
+	err = os.WriteFile(claudeScript, []byte(scriptContent), 0o700)
+	require.NoError(t, err)
+
+	// Change to subdirectory (simulating Claude being called from subdirectory)
+	originalDir, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(originalDir) }()
+
+	err = os.Chdir(subDir)
+	require.NoError(t, err)
+
+	// Override HOME to prevent finding the real Claude installation
+	oldHome := os.Getenv("HOME")
+	defer func() { _ = os.Setenv("HOME", oldHome) }()
+	_ = os.Setenv("HOME", "/nonexistent")
+
+	// Override the PATH to use our mock Claude
+	oldPath := os.Getenv("PATH")
+	defer func() { _ = os.Setenv("PATH", oldPath) }()
+	_ = os.Setenv("PATH", tmpDir+":"+oldPath)
+
+	// Create a launcher that will use our mock script
+	launcher := &Launcher{config: nil}
+
+	// Test that Claude executes from project root, not current directory
+	output, err := launcher.ExecuteWithInput("test prompt")
+	require.NoError(t, err, "ExecuteWithInput should succeed")
+
+	// Parse the JSON response to get the result
+	var response CLIResponse
+	err = json.Unmarshal(output, &response)
+	require.NoError(t, err, "Should parse Claude response JSON")
+
+	// The result should contain the working directory from our mock script
+	projectRoot, findErr := project.FindRoot()
+	require.NoError(t, findErr)
+
+	// Check that Claude was executed from the project root directory
+	expectedOutput := fmt.Sprintf("Working directory: %s", projectRoot)
+	assert.Contains(t, response.Result, expectedOutput,
+		"Claude should execute from project root, not current directory")
 }
