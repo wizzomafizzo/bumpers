@@ -306,9 +306,11 @@ func ExampleNewLauncher() {
 	// Claude launcher created successfully
 }
 
+// TestExecuteWithInput_WorkingDirectory tests command execution with working directory changes
+//
+//nolint:paralleltest // modifies global environment variables
 func TestExecuteWithInput_WorkingDirectory(t *testing.T) {
 	ctx, _ := testutil.NewTestContext(t) // Context-aware logging available
-	t.Parallel()
 
 	// Create a temporary directory structure to simulate a project
 	tmpDir := t.TempDir()
