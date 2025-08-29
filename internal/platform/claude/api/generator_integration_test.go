@@ -18,10 +18,11 @@ func TestMessageGeneratorBasicContract(t *testing.T) {
 	t.Run("MockLauncher", func(t *testing.T) {
 		t.Parallel()
 
+		ctx, _ := testutil.NewTestContext(t)
 		mock := claude.NewMockLauncher()
 		prompt := "Generate a helpful message about version control."
 
-		response, err := mock.GenerateMessage(prompt)
+		response, err := mock.GenerateMessage(ctx, prompt)
 
 		if err != nil {
 			t.Errorf("Mock GenerateMessage should succeed, got error: %v", err)
@@ -35,6 +36,7 @@ func TestMessageGeneratorBasicContract(t *testing.T) {
 	t.Run("RealLauncher", func(t *testing.T) {
 		t.Parallel()
 
+		ctx, _ := testutil.NewTestContext(t)
 		launcher := claude.NewLauncher(nil)
 		if _, err := launcher.GetClaudePath(); err != nil {
 			t.Skip("Claude binary not available, skipping real launcher test")
@@ -42,7 +44,7 @@ func TestMessageGeneratorBasicContract(t *testing.T) {
 
 		prompt := "Generate a helpful message about version control."
 
-		response, err := launcher.GenerateMessage(prompt)
+		response, err := launcher.GenerateMessage(ctx, prompt)
 
 		if err != nil {
 			t.Logf("Real launcher failed (may be acceptable in test env): %v", err)

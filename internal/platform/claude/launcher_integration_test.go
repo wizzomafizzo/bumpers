@@ -3,6 +3,7 @@
 package claude
 
 import (
+	"context"
 	"testing"
 
 	"github.com/wizzomafizzo/bumpers/internal/testing"
@@ -11,17 +12,17 @@ import (
 // TestLauncherBasicContract tests that both mock and real launcher implementations
 // satisfy the basic MessageGenerator contract
 func TestLauncherBasicContract(t *testing.T) {
-	_, _ = testutil.NewTestContext(t) // Context-aware logging available
 	t.Parallel()
 
 	t.Run("MockLauncher", func(t *testing.T) {
 		t.Parallel()
 
+		ctx, _ := testutil.NewTestContext(t)
 		mock := NewMockLauncher()
 		mock.SetResponseForPattern(".*", "Mock response for contract test")
 		prompt := "Test prompt for contract validation"
 
-		response, err := mock.GenerateMessage(prompt)
+		response, err := mock.GenerateMessage(ctx, prompt)
 
 		if err != nil {
 			t.Errorf("Mock launcher should succeed with valid prompt, got error: %v", err)
@@ -40,6 +41,7 @@ func TestLauncherBasicContract(t *testing.T) {
 	t.Run("RealLauncher", func(t *testing.T) {
 		t.Parallel()
 
+		ctx, _ := testutil.NewTestContext(t)
 		launcher := NewLauncher(nil)
 		if _, err := launcher.GetClaudePath(); err != nil {
 			t.Skip("Claude binary not available, skipping real launcher contract test")
@@ -47,7 +49,7 @@ func TestLauncherBasicContract(t *testing.T) {
 
 		prompt := "Test prompt for real Claude validation"
 
-		response, err := launcher.GenerateMessage(prompt)
+		response, err := launcher.GenerateMessage(ctx, prompt)
 
 		if err != nil {
 			t.Logf("Real launcher failed (may be acceptable in test env): %v", err)
