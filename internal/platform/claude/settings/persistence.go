@@ -4,17 +4,17 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/wizzomafizzo/bumpers/internal/platform/filesystem"
+	"github.com/spf13/afero"
 )
 
 // LoadFromFile loads Claude settings from a JSON file.
 func LoadFromFile(filename string) (*Settings, error) {
-	return LoadFromFileWithFS(filesystem.NewOSFileSystem(), filename)
+	return LoadFromFileWithFS(afero.NewOsFs(), filename)
 }
 
 // LoadFromFileWithFS loads Claude settings from a JSON file using the provided filesystem.
-func LoadFromFileWithFS(fs filesystem.FileSystem, filename string) (*Settings, error) {
-	data, err := fs.ReadFile(filename)
+func LoadFromFileWithFS(fs afero.Fs, filename string) (*Settings, error) {
+	data, err := afero.ReadFile(fs, filename)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read settings file %s: %w", filename, err)
 	}
@@ -30,17 +30,17 @@ func LoadFromFileWithFS(fs filesystem.FileSystem, filename string) (*Settings, e
 
 // SaveToFile saves Claude settings to a JSON file.
 func SaveToFile(settings *Settings, filename string) error {
-	return SaveToFileWithFS(filesystem.NewOSFileSystem(), settings, filename)
+	return SaveToFileWithFS(afero.NewOsFs(), settings, filename)
 }
 
 // SaveToFileWithFS saves Claude settings to a JSON file using the provided filesystem.
-func SaveToFileWithFS(fs filesystem.FileSystem, settings *Settings, filename string) error {
+func SaveToFileWithFS(fs afero.Fs, settings *Settings, filename string) error {
 	data, err := json.MarshalIndent(settings, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal settings to JSON: %w", err)
 	}
 
-	err = fs.WriteFile(filename, data, 0o600)
+	err = afero.WriteFile(fs, filename, data, 0o600)
 	if err != nil {
 		return fmt.Errorf("failed to write settings to file %s: %w", filename, err)
 	}
@@ -49,21 +49,21 @@ func SaveToFileWithFS(fs filesystem.FileSystem, settings *Settings, filename str
 
 // CreateBackup creates a simple .bak backup of the settings file.
 func CreateBackup(filename string) (string, error) {
-	return CreateBackupWithFS(filesystem.NewOSFileSystem(), filename)
+	return CreateBackupWithFS(afero.NewOsFs(), filename)
 }
 
 // CreateBackupWithFS creates a simple .bak backup of the settings file using the provided filesystem.
-func CreateBackupWithFS(fs filesystem.FileSystem, filename string) (string, error) {
+func CreateBackupWithFS(fs afero.Fs, filename string) (string, error) {
 	backupPath := filename + ".bak"
 
 	// Read original file
-	data, err := fs.ReadFile(filename)
+	data, err := afero.ReadFile(fs, filename)
 	if err != nil {
 		return "", fmt.Errorf("failed to read original file: %w", err)
 	}
 
 	// Write backup file
-	err = fs.WriteFile(backupPath, data, 0o600)
+	err = afero.WriteFile(fs, backupPath, data, 0o600)
 	if err != nil {
 		return "", fmt.Errorf("failed to write backup file: %w", err)
 	}
@@ -73,11 +73,11 @@ func CreateBackupWithFS(fs filesystem.FileSystem, filename string) (string, erro
 
 // HasBackup checks if a .bak backup exists for the given settings file.
 func HasBackup(filename string) bool {
-	return HasBackupWithFS(filesystem.NewOSFileSystem(), filename)
+	return HasBackupWithFS(afero.NewOsFs(), filename)
 }
 
 // HasBackupWithFS checks if a .bak backup exists for the given settings file using the provided filesystem.
-func HasBackupWithFS(fs filesystem.FileSystem, filename string) bool {
+func HasBackupWithFS(fs afero.Fs, filename string) bool {
 	backupPath := filename + ".bak"
 	_, err := fs.Stat(backupPath)
 	return err == nil
@@ -90,19 +90,19 @@ func GetBackupPath(filename string) string {
 
 // RestoreFromBackup restores settings from a backup file.
 func RestoreFromBackup(backupPath, targetPath string) error {
-	return RestoreFromBackupWithFS(filesystem.NewOSFileSystem(), backupPath, targetPath)
+	return RestoreFromBackupWithFS(afero.NewOsFs(), backupPath, targetPath)
 }
 
 // RestoreFromBackupWithFS restores settings from a backup file using the provided filesystem.
-func RestoreFromBackupWithFS(fs filesystem.FileSystem, backupPath, targetPath string) error {
+func RestoreFromBackupWithFS(fs afero.Fs, backupPath, targetPath string) error {
 	// Read backup file
-	data, err := fs.ReadFile(backupPath)
+	data, err := afero.ReadFile(fs, backupPath)
 	if err != nil {
 		return fmt.Errorf("failed to read backup file: %w", err)
 	}
 
 	// Write to target file
-	err = fs.WriteFile(targetPath, data, 0o600)
+	err = afero.WriteFile(fs, targetPath, data, 0o600)
 	if err != nil {
 		return fmt.Errorf("failed to write target file: %w", err)
 	}

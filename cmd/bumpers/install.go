@@ -13,7 +13,7 @@ func createInstallCommand() *cobra.Command {
 		Short: "Install bumpers configuration and Claude hooks",
 		Long:  "Install bumpers configuration and Claude hooks",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			app, err := createAppFromCommand(cmd.Parent())
+			app, err := createAppFromCommand(cmd.Context(), cmd.Parent())
 			if err != nil {
 				return err
 			}

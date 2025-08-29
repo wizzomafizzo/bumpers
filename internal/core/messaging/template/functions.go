@@ -8,12 +8,12 @@ import (
 	"text/template"
 	"unicode/utf8"
 
+	"github.com/spf13/afero"
 	"github.com/wizzomafizzo/bumpers/internal/infrastructure/project"
-	"github.com/wizzomafizzo/bumpers/internal/platform/filesystem"
 )
 
 // createFuncMap creates a function map with custom template functions
-func createFuncMap(fs filesystem.FileSystem, commandCtx *CommandContext) template.FuncMap {
+func createFuncMap(fs afero.Fs, commandCtx *CommandContext) template.FuncMap {
 	return template.FuncMap{
 		"readFile": func(filename string) string {
 			return readFile(fs, filename)
@@ -33,7 +33,7 @@ func createFuncMap(fs filesystem.FileSystem, commandCtx *CommandContext) templat
 // readFile securely reads a file from within the project root
 // Returns empty string if file doesn't exist, is outside project, or on error
 // Text files returned as-is, binary files returned as base64 data URI
-func readFile(fs filesystem.FileSystem, filename string) string {
+func readFile(fs afero.Fs, filename string) string {
 	// Get project root
 	projectRoot, err := project.FindRoot()
 	if err != nil {
@@ -65,7 +65,7 @@ func readFile(fs filesystem.FileSystem, filename string) string {
 	}
 
 	// Read the file
-	content, err := fs.ReadFile(resolvedPath)
+	content, err := afero.ReadFile(fs, resolvedPath)
 	if err != nil {
 		return ""
 	}
@@ -82,7 +82,7 @@ func readFile(fs filesystem.FileSystem, filename string) string {
 
 // testPath securely checks if a file or directory exists within the project root
 // Returns false if file doesn't exist, is outside project, or on error
-func testPath(fs filesystem.FileSystem, filename string) bool {
+func testPath(fs afero.Fs, filename string) bool {
 	// Get project root
 	projectRoot, err := project.FindRoot()
 	if err != nil {

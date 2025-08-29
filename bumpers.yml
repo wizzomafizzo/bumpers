@@ -22,7 +22,7 @@ rules:
     - match: fieldalignment
       send: Fix field alignment issues by adding names to struct fields and running "just lint fix".
     - match: find\s+.*-exec\s+(rm(\s+-\w+)*|sed\s+-i|>\s*\S+)\s+
-      send: Don't use dangerous exec in find commands.
+      send: Don't use dangerous exec in find commands. Stick to manual edits.
     - match: BUMPERS_SKIP=1
       send: Bumpers should not be skipped.
     - match: ^bumpers\.yml^

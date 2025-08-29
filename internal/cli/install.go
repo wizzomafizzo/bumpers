@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/spf13/afero"
 	"github.com/wizzomafizzo/bumpers/internal/config"
 	"github.com/wizzomafizzo/bumpers/internal/infrastructure/constants"
 	"github.com/wizzomafizzo/bumpers/internal/platform/claude/settings"
@@ -36,7 +37,7 @@ func (a *App) Initialize() error {
 			return fmt.Errorf("failed to generate default config: %w", configErr)
 		}
 
-		writeErr := fs.WriteFile(a.configPath, defaultConfigBytes, 0o600)
+		writeErr := afero.WriteFile(fs, a.configPath, defaultConfigBytes, 0o600)
 		if writeErr != nil {
 			return fmt.Errorf("failed to write config file to %s: %w", a.configPath, writeErr)
 		}

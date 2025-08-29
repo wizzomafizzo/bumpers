@@ -48,6 +48,7 @@ linters:
     - containedctx
     - contextcheck
     - iface
+    - depguard
   settings:
     govet:
       enable:
@@ -167,6 +168,45 @@ linters:
     wrapcheck:
       extra-ignore-sigs:
         - .Err(
+    depguard:
+      rules:
+        main:
+          deny:
+            - pkg: "github.com/rs/zerolog"
+              desc: "Use internal/core/logging instead"
+            - pkg: "github.com/rs/zerolog/log"
+              desc: "Use internal/core/logging instead"
+    forbidigo:
+      forbid:
+        # Prevent direct use of global log functions - only match actual function calls
+        - p: '^log\.(Debug|Info|Warn|Error|Panic|Fatal)(f|ln)?\('
+          msg: "Use logging.Get(ctx) from internal/core/logging instead of the global log package"
+        # Prevent direct use of zerolog context functions
+        - p: '^zerolog\.Ctx\('
+          msg: "Use logging.Get(ctx) from internal/core/logging instead"
+        # Prevent using background context for logging (defeats the purpose)
+        - p: '^logging\.Get\(context\.Background\(\)\)'
+          msg: "Don't use context.Background() for logging - pass proper context through the call chain"
+      exclude-godoc-examples: false
+      analyze-types: true
+
+issues:
+  exclude-rules:
+    - path: internal/core/logging/
+      linters:
+        - depguard
+    - path: internal/testing/
+      linters:
+        - depguard
+    - path: ^internal/core/engine/
+      linters:
+        - forbidigo
+    - path: ^internal/infrastructure/
+      linters:
+        - forbidigo
+    - path: ^cmd/bumpers/
+      linters:
+        - forbidigo
 
 formatters:
   enable:

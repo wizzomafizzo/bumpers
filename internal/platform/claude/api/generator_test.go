@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"context"
 	"path/filepath"
 	"testing"
 
@@ -9,14 +10,15 @@ import (
 )
 
 // setupTest initializes test logger to prevent race conditions
-func setupTest(t *testing.T) {
+func setupTest(t *testing.T) context.Context {
 	t.Helper()
-	_, _ = testutil.NewTestContext(t) // Context-aware logging available
+	ctx, _ := testutil.NewTestContext(t) // Context-aware logging available
+	return ctx
 }
 
 func TestGeneratorGenerateMessage(t *testing.T) {
 	t.Parallel()
-	setupTest(t)
+	ctx := setupTest(t)
 	// Create temporary directory for test database
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "test.db")
@@ -42,7 +44,7 @@ func TestGeneratorGenerateMessage(t *testing.T) {
 		Pattern:         "^go test",
 	}
 
-	result, err := generator.GenerateMessage(req)
+	result, err := generator.GenerateMessage(ctx, req)
 	if err != nil {
 		t.Fatalf("GenerateMessage failed: %v", err)
 	}
@@ -56,7 +58,7 @@ func TestGeneratorGenerateMessage(t *testing.T) {
 
 func TestGeneratorCaching(t *testing.T) {
 	t.Parallel()
-	setupTest(t)
+	ctx := setupTest(t)
 	// Create temporary directory for test database
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "test.db")
@@ -83,7 +85,7 @@ func TestGeneratorCaching(t *testing.T) {
 	}
 
 	// First call should generate the response
-	result1, err1 := generator.GenerateMessage(req)
+	result1, err1 := generator.GenerateMessage(ctx, req)
 	if err1 != nil {
 		t.Fatalf("First GenerateMessage failed: %v", err1)
 	}
@@ -94,7 +96,7 @@ func TestGeneratorCaching(t *testing.T) {
 	}
 
 	// Second call with same request should use cache for "once" mode
-	result2, err2 := generator.GenerateMessage(req)
+	result2, err2 := generator.GenerateMessage(ctx, req)
 	if err2 != nil {
 		t.Fatalf("Second GenerateMessage failed: %v", err2)
 	}
@@ -107,7 +109,7 @@ func TestGeneratorCaching(t *testing.T) {
 
 func TestGeneratorShouldUseCache(t *testing.T) {
 	t.Parallel()
-	setupTest(t)
+	ctx := setupTest(t)
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "test.db")
 
@@ -133,7 +135,7 @@ func TestGeneratorShouldUseCache(t *testing.T) {
 	}
 
 	// Should return the mocked response, demonstrating actual integration
-	result1, err := generator.GenerateMessage(req)
+	result1, err := generator.GenerateMessage(ctx, req)
 	if err != nil {
 		t.Fatalf("GenerateMessage failed: %v", err)
 	}
@@ -152,7 +154,7 @@ func TestGeneratorShouldUseCache(t *testing.T) {
 
 func TestGeneratorCachingWithMock(t *testing.T) {
 	t.Parallel()
-	setupTest(t)
+	ctx := setupTest(t)
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "test.db")
 
@@ -178,13 +180,13 @@ func TestGeneratorCachingWithMock(t *testing.T) {
 	}
 
 	// First call should get "Mock AI response A"
-	result1, err := generator.GenerateMessage(req)
+	result1, err := generator.GenerateMessage(ctx, req)
 	if err != nil {
 		t.Fatalf("First GenerateMessage failed: %v", err)
 	}
 
 	// Second call should return cached result, NOT "Mock AI response B"
-	result2, err := generator.GenerateMessage(req)
+	result2, err := generator.GenerateMessage(ctx, req)
 	if err != nil {
 		t.Fatalf("Second GenerateMessage failed: %v", err)
 	}
@@ -200,7 +202,7 @@ func TestGeneratorCachingWithMock(t *testing.T) {
 
 func TestGeneratorLogsCache(t *testing.T) {
 	t.Parallel()
-	setupTest(t)
+	ctx := setupTest(t)
 
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "test.db")
@@ -227,13 +229,13 @@ func TestGeneratorLogsCache(t *testing.T) {
 	}
 
 	// First call should log cache miss and AI generation
-	_, err = generator.GenerateMessage(req)
+	_, err = generator.GenerateMessage(ctx, req)
 	if err != nil {
 		t.Fatalf("First GenerateMessage failed: %v", err)
 	}
 
 	// Second call should log cache hit
-	_, err = generator.GenerateMessage(req)
+	_, err = generator.GenerateMessage(ctx, req)
 	if err != nil {
 		t.Fatalf("Second GenerateMessage failed: %v", err)
 	}

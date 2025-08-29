@@ -1,5 +1,7 @@
 package claude
 
+import "context"
+
 // MockCall represents a single call to the mock launcher
 type MockCall struct {
 	Prompt string
@@ -37,7 +39,7 @@ func (m *MockLauncher) SetResponseForPattern(_, response string) {
 }
 
 // GenerateMessage implements MessageGenerator interface
-func (m *MockLauncher) GenerateMessage(prompt string) (string, error) {
+func (m *MockLauncher) GenerateMessage(_ context.Context, prompt string) (string, error) {
 	m.Calls = append(m.Calls, MockCall{Prompt: prompt})
 	if m.Response != "" {
 		return m.Response, nil

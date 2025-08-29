@@ -5,14 +5,14 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/spf13/afero"
 	"github.com/wizzomafizzo/bumpers/internal/infrastructure/project"
-	"github.com/wizzomafizzo/bumpers/internal/platform/filesystem"
 )
 
 func TestReadFile_TextFile_ReturnsContent(t *testing.T) {
 	t.Parallel()
 	// Use the real filesystem for simplicity
-	fs := filesystem.NewOSFileSystem()
+	fs := afero.NewOsFs()
 	testContent := "Hello, World!"
 
 	// Get project root and create test file there
@@ -40,7 +40,7 @@ func TestReadFile_TextFile_ReturnsContent(t *testing.T) {
 
 func TestReadFile_FileNotFound_ReturnsEmpty(t *testing.T) {
 	t.Parallel()
-	fs := filesystem.NewMemoryFileSystem()
+	fs := afero.NewMemMapFs()
 
 	// Test reading a file that doesn't exist
 	result := readFile(fs, "nonexistent.txt")
@@ -51,7 +51,7 @@ func TestReadFile_FileNotFound_ReturnsEmpty(t *testing.T) {
 
 func TestReadFile_BinaryFile_ReturnsBase64(t *testing.T) {
 	t.Parallel()
-	fs := filesystem.NewOSFileSystem()
+	fs := afero.NewOsFs()
 
 	// Get project root and create binary file there
 	projectRoot, err := project.FindRoot()
@@ -83,7 +83,7 @@ func TestReadFile_BinaryFile_ReturnsBase64(t *testing.T) {
 //nolint:paralleltest // changes working directory
 func TestReadFile_DirectoryTraversal_WithRealFS_ReturnsEmpty(t *testing.T) {
 	// This test uses the real filesystem to test security
-	fs := filesystem.NewOSFileSystem()
+	fs := afero.NewOsFs()
 
 	// Create a temporary directory to simulate project root
 	tempDir, err := os.MkdirTemp("", "bumpers-test")
@@ -128,12 +128,12 @@ func TestReadFile_DirectoryTraversal_WithRealFS_ReturnsEmpty(t *testing.T) {
 	}
 }
 
-func setupMemoryFS(_ *testing.T) (fs filesystem.FileSystem, cleanup func()) {
-	return filesystem.NewMemoryFileSystem(), func() {}
+func setupMemoryFS(_ *testing.T) (fs afero.Fs, cleanup func()) {
+	return afero.NewMemMapFs(), func() {}
 }
 
-func setupFileExistsFS(t *testing.T) (fs filesystem.FileSystem, cleanup func()) {
-	fs = filesystem.NewOSFileSystem()
+func setupFileExistsFS(t *testing.T) (fs afero.Fs, cleanup func()) {
+	fs = afero.NewOsFs()
 	projectRoot, err := project.FindRoot()
 	if err != nil {
 		t.Fatalf("Failed to find project root: %v", err)
@@ -149,8 +149,8 @@ func setupFileExistsFS(t *testing.T) (fs filesystem.FileSystem, cleanup func()) 
 	return fs, cleanup
 }
 
-func setupDirectoryExistsFS(t *testing.T) (fs filesystem.FileSystem, cleanup func()) {
-	fs = filesystem.NewOSFileSystem()
+func setupDirectoryExistsFS(t *testing.T) (fs afero.Fs, cleanup func()) {
+	fs = afero.NewOsFs()
 	projectRoot, err := project.FindRoot()
 	if err != nil {
 		t.Fatalf("Failed to find project root: %v", err)
@@ -171,7 +171,7 @@ func TestTestPath(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		setupFS  func(t *testing.T) (filesystem.FileSystem, func())
+		setupFS  func(t *testing.T) (afero.Fs, func())
 		path     string
 		expected bool
 	}{
@@ -213,7 +213,7 @@ func TestTestPath(t *testing.T) {
 //nolint:paralleltest // changes working directory
 func TestTestPath_DirectoryTraversal_WithRealFS_ReturnsFalse(t *testing.T) {
 	// This test uses the real filesystem to test security
-	fs := filesystem.NewOSFileSystem()
+	fs := afero.NewOsFs()
 
 	// Create a temporary directory to simulate project root
 	tempDir, err := os.MkdirTemp("", "bumpers-test")

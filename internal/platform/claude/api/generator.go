@@ -1,17 +1,18 @@
 package ai
 
 import (
+	"context"
 	"crypto/sha256"
 	"fmt"
 	"time"
 
-	"github.com/rs/zerolog/log"
+	"github.com/wizzomafizzo/bumpers/internal/core/logging"
 	"github.com/wizzomafizzo/bumpers/internal/platform/claude"
 )
 
 // MessageGenerator interface for Claude launcher
 type MessageGenerator interface {
-	GenerateMessage(prompt string) (string, error)
+	GenerateMessage(ctx context.Context, prompt string) (string, error)
 }
 
 // Generator handles AI message generation with caching
@@ -52,7 +53,7 @@ func (g *Generator) Close() error {
 }
 
 // GenerateMessage generates an AI-enhanced message or returns original on error
-func (g *Generator) GenerateMessage(req *GenerateRequest) (string, error) {
+func (g *Generator) GenerateMessage(ctx context.Context, req *GenerateRequest) (string, error) {
 	// Skip if generation is off
 	if req.GenerateMode == "off" || req.GenerateMode == "" {
 		return req.OriginalMessage, nil
@@ -65,7 +66,7 @@ func (g *Generator) GenerateMessage(req *GenerateRequest) (string, error) {
 	if req.GenerateMode != "always" {
 		if cached, err := g.cache.Get(cacheKey); err == nil && cached != nil {
 			if !cached.IsExpired() {
-				log.Debug().
+				logging.Get(ctx).Debug().
 					Str("mode", req.GenerateMode).
 					Str("original", req.OriginalMessage).
 					Msg("AI generation from cache")
@@ -80,13 +81,13 @@ func (g *Generator) GenerateMessage(req *GenerateRequest) (string, error) {
 		prompt = req.CustomPrompt + "\n\nMessage: " + req.OriginalMessage
 	}
 
-	result, err := g.launcher.GenerateMessage(prompt)
+	result, err := g.launcher.GenerateMessage(ctx, prompt)
 	if err != nil {
 		// Return original message with error for caller to handle
 		return req.OriginalMessage, fmt.Errorf("claude generation failed: %w", err)
 	}
 
-	log.Debug().
+	logging.Get(ctx).Debug().
 		Str("mode", req.GenerateMode).
 		Str("original", req.OriginalMessage).
 		Msg("AI generation from fresh Claude call")

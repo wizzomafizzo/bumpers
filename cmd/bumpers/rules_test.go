@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -121,7 +122,7 @@ type mockClaudeGenerator struct {
 	shouldFail bool
 }
 
-func (m *mockClaudeGenerator) GenerateMessage(_ string) (string, error) {
+func (m *mockClaudeGenerator) GenerateMessage(_ context.Context, _ string) (string, error) {
 	if m.shouldFail {
 		return "", m.err
 	}

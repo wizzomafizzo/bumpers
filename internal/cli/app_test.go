@@ -11,13 +11,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/wizzomafizzo/bumpers/internal/core/engine/hooks"
 	"github.com/wizzomafizzo/bumpers/internal/infrastructure/constants"
 	"github.com/wizzomafizzo/bumpers/internal/platform/claude"
 	"github.com/wizzomafizzo/bumpers/internal/platform/claude/api"
-	"github.com/wizzomafizzo/bumpers/internal/platform/filesystem"
 	"github.com/wizzomafizzo/bumpers/internal/platform/storage"
 	testutil "github.com/wizzomafizzo/bumpers/internal/testing"
 )
@@ -39,8 +39,8 @@ rules: []
 `
 	configPath := createTempConfig(t, configContent)
 
-	// Create app
-	app := NewApp(configPath)
+	// Create app with same context
+	app := NewApp(ctx, configPath)
 
 	// Create a simple hook input - UserPromptSubmit with no matching rules
 	input := `{"hook_event":"user_prompt_submit","intent":"echo hello"}`
@@ -70,7 +70,7 @@ commands:
     send: "Test command executed"
 `
 	configFile := createTempConfig(t, configContent)
-	app := NewApp(configFile)
+	app := NewApp(ctx, configFile)
 
 	// Create UserPromptSubmit event with command
 	promptJSON := `{"prompt": "$test"}`
@@ -96,7 +96,7 @@ session:
   - add: "Session started with test context"
 `
 	configFile := createTempConfig(t, configContent)
-	app := NewApp(configFile)
+	app := NewApp(ctx, configFile)
 
 	// Create SessionStart event
 	sessionJSON := `{"session_id": "test123", "hook_event_name": "SessionStart", "source": "startup"}`
@@ -125,7 +125,7 @@ rules:
     send: "Post tool use message"
 `
 	configFile := createTempConfig(t, configContent)
-	app := NewApp(configFile)
+	app := NewApp(ctx, configFile)
 
 	// Create PostToolUse event
 	postToolJSON := `{
@@ -199,7 +199,7 @@ func TestCustomConfigPathLoading(t *testing.T) {
 	assert.Contains(t, result, "Configuration is valid")
 
 	// Test that the rule from custom config works
-	response, err := app.TestCommand("test-pattern should match")
+	response, err := app.TestCommand(context.Background(), "test-pattern should match")
 	require.NoError(t, err)
 	assert.Contains(t, response, "Custom config loaded!")
 }
@@ -209,13 +209,13 @@ func TestAppWithMemoryFileSystem(t *testing.T) {
 	t.Parallel()
 
 	// Setup in-memory filesystem with test config
-	fs := filesystem.NewMemoryFileSystem()
+	fs := afero.NewMemMapFs()
 	configContent := []byte(`rules:
   - match: "rm -rf"
     send: "Use safer alternatives"`)
 	configPath := "/test/bumpers.yml"
 
-	err := fs.WriteFile(configPath, configContent, 0o600)
+	err := afero.WriteFile(fs, configPath, configContent, 0o600)
 	if err != nil {
 		t.Fatalf("Failed to setup test config: %v", err)
 	}
@@ -233,7 +233,7 @@ func TestAppWithMemoryFileSystem(t *testing.T) {
 	}
 
 	// Test that config file is accessible via injected filesystem
-	content, err := app.fileSystem.ReadFile(configPath)
+	content, err := afero.ReadFile(app.fileSystem, configPath)
 	if err != nil {
 		t.Errorf("Failed to read config via injected filesystem: %v", err)
 	}
@@ -248,20 +248,20 @@ func TestAppInitializeWithMemoryFileSystem(t *testing.T) {
 	t.Parallel()
 
 	// Setup in-memory filesystem with test config
-	fs := filesystem.NewMemoryFileSystem()
+	fs := afero.NewMemMapFs()
 	configContent := []byte(`rules:
   - match: "rm -rf"
     send: "Use safer alternatives"`)
 	configPath := "/test/bumpers.yml"
 
-	err := fs.WriteFile(configPath, configContent, 0o600)
+	err := afero.WriteFile(fs, configPath, configContent, 0o600)
 	if err != nil {
 		t.Fatalf("Failed to setup test config: %v", err)
 	}
 
 	// Add bumpers binary to memory filesystem (needed for validateBumpersPath)
 	bumpersPath := "/test/workdir/bin/bumpers"
-	err = fs.WriteFile(bumpersPath, []byte("fake bumpers binary"), 0o755)
+	err = afero.WriteFile(fs, bumpersPath, []byte("fake bumpers binary"), 0o755)
 	if err != nil {
 		t.Fatalf("Failed to setup fake bumpers binary: %v", err)
 	}
@@ -276,7 +276,7 @@ func TestAppInitializeWithMemoryFileSystem(t *testing.T) {
 	}
 
 	// Verify config can still be loaded after Initialize
-	content, err := app.fileSystem.ReadFile(configPath)
+	content, err := afero.ReadFile(app.fileSystem, configPath)
 	if err != nil {
 		t.Errorf("Failed to read config after Initialize: %v", err)
 	}
@@ -334,7 +334,7 @@ func TestProcessHook(t *testing.T) {
     generate: "off"`
 
 	configPath := createTempConfig(t, configContent)
-	app := NewApp(configPath)
+	app := NewApp(ctx, configPath)
 
 	hookInput := `{
 		"tool_input": {
@@ -368,7 +368,7 @@ func TestProcessHookAllowed(t *testing.T) {
     send: "Use just test instead for better TDD integration"`
 
 	configPath := createTempConfig(t, configContent)
-	app := NewApp(configPath)
+	app := NewApp(ctx, configPath)
 
 	hookInput := `{
 		"tool_input": {
@@ -403,7 +403,7 @@ func TestProcessHookDangerousCommand(t *testing.T) {
       prompt: "Explain why this rm command is dangerous and suggest safer alternatives"`
 
 	configPath := createTempConfig(t, configContent)
-	app := NewApp(configPath)
+	app := NewApp(ctx, configPath)
 
 	// Set up mock launcher for AI generation
 	mock := claude.SetupMockLauncherWithDefaults()
@@ -442,7 +442,7 @@ func TestProcessHookPatternMatching(t *testing.T) {
     generate: "off"`
 
 	configPath := createTempConfig(t, configContent)
-	app := NewApp(configPath)
+	app := NewApp(ctx, configPath)
 
 	hookInput := `{
 		"tool_input": {
@@ -479,7 +479,7 @@ func TestConfigurationIsUsed(t *testing.T) {
     generate: "off"`
 
 	configPath := createTempConfig(t, configContent)
-	app := NewApp(configPath)
+	app := NewApp(ctx, configPath)
 
 	hookInput := `{
 		"tool_input": {
@@ -508,9 +508,9 @@ func TestTestCommand(t *testing.T) {
     send: "Use just test instead for better TDD integration"`
 
 	configPath := createTempConfig(t, configContent)
-	app := NewApp(configPath)
+	app := NewApp(context.Background(), configPath)
 
-	result, err := app.TestCommand("go test ./...")
+	result, err := app.TestCommand(context.Background(), "go test ./...")
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -555,6 +555,7 @@ func TestInitialize(t *testing.T) {
 
 func TestStatus(t *testing.T) {
 	t.Parallel()
+	ctx, _ := setupTestWithContext(t)
 
 	configContent := `rules:
   - match: "go test"
@@ -562,7 +563,7 @@ func TestStatus(t *testing.T) {
     generate: "off"`
 
 	configPath := createTempConfig(t, configContent)
-	app := NewApp(configPath)
+	app := NewApp(ctx, configPath)
 
 	status, err := app.Status()
 	if err != nil {
@@ -795,10 +796,10 @@ func TestInstallCreatesBothHooks(t *testing.T) {
 	}
 
 	// Create memory filesystem for proper test isolation
-	fs := filesystem.NewMemoryFileSystem()
+	fs := afero.NewMemMapFs()
 
 	// Write the bumpers binary to the memory filesystem as well
-	err = fs.WriteFile(bumpersPath, []byte("#!/bin/bash\necho test"), 0o750)
+	err = afero.WriteFile(fs, bumpersPath, []byte("#!/bin/bash\necho test"), 0o750)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -814,7 +815,7 @@ func TestInstallCreatesBothHooks(t *testing.T) {
 	// Check that both PreToolUse and UserPromptSubmit hooks were added
 	claudeDir := filepath.Join(tempDir, ".claude")
 	localSettingsPath := filepath.Join(claudeDir, "settings.local.json")
-	content, err := fs.ReadFile(localSettingsPath) // Use filesystem interface
+	content, err := afero.ReadFile(fs, localSettingsPath) // Use filesystem interface
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -856,6 +857,7 @@ func TestInstallCreatesBothHooks(t *testing.T) {
 
 func TestProcessHookSimplifiedSchemaAlwaysDenies(t *testing.T) {
 	t.Parallel()
+	ctx, _ := setupTestWithContext(t)
 
 	// Setup test config with simplified schema (no name or action fields)
 	// Any pattern match should result in denial
@@ -869,7 +871,7 @@ func TestProcessHookSimplifiedSchemaAlwaysDenies(t *testing.T) {
 `
 
 	configPath := createTempConfig(t, configContent)
-	app := NewApp(configPath)
+	app := NewApp(ctx, configPath)
 
 	// Test first rule - should be blocked because it matches (no action field needed)
 	hookInput1 := `{
@@ -921,6 +923,7 @@ func TestProcessHookSimplifiedSchemaAlwaysDenies(t *testing.T) {
 
 func TestCommandWithoutBlockedPrefix(t *testing.T) {
 	t.Parallel()
+	ctx, _ := setupTestWithContext(t)
 
 	// Test that TestCommand doesn't add "Command blocked:" prefix
 	configContent := `rules:
@@ -930,9 +933,9 @@ func TestCommandWithoutBlockedPrefix(t *testing.T) {
 `
 
 	configPath := createTempConfig(t, configContent)
-	app := NewApp(configPath)
+	app := NewApp(ctx, configPath)
 
-	result, err := app.TestCommand("go test ./...")
+	result, err := app.TestCommand(ctx, "go test ./...")
 	if err != nil {
 		t.Fatalf("TestCommand failed: %v", err)
 	}
@@ -1089,6 +1092,7 @@ func TestInitializeInitializesLogger(t *testing.T) {
 
 func TestValidateConfig(t *testing.T) {
 	t.Parallel()
+	ctx, _ := setupTestWithContext(t)
 
 	configContent := `rules:
   - match: "^go test"
@@ -1099,7 +1103,7 @@ func TestValidateConfig(t *testing.T) {
     generate: "off"`
 
 	configPath := createTempConfig(t, configContent)
-	app := NewApp(configPath)
+	app := NewApp(ctx, configPath)
 
 	result, err := app.ValidateConfig()
 	if err != nil {
@@ -1367,6 +1371,7 @@ func TestNewApp_AutoFindsJsonConfigFile(t *testing.T) {
 
 func TestNewApp_ConfigPrecedenceOrder(t *testing.T) {
 	t.Parallel()
+	ctx, _ := setupTestWithContext(t)
 
 	projectDir, subDir := setupPrecedenceTestDir(t)
 	createPrecedenceConfigFiles(t, projectDir)
@@ -1374,7 +1379,7 @@ func TestNewApp_ConfigPrecedenceOrder(t *testing.T) {
 	app := createAppWithPrecedenceConfig(projectDir, subDir)
 
 	// Test the YAML-specific command to ensure YAML was loaded
-	result, err := app.TestCommand("yaml-test")
+	result, err := app.TestCommand(ctx, "yaml-test")
 	if err != nil {
 		t.Fatalf("TestCommand failed: %v", err)
 	}
@@ -1465,6 +1470,7 @@ func createAppWithPrecedenceConfig(projectDir, subDir string) *App {
 
 func TestProcessHookRoutesUserPromptSubmit(t *testing.T) {
 	t.Parallel()
+	ctx, _ := setupTestWithContext(t)
 
 	configContent := `rules:
   - match: "go test"
@@ -1479,7 +1485,7 @@ commands:
     generate: "off"`
 
 	configPath := createTempConfig(t, configContent)
-	app := NewApp(configPath)
+	app := NewApp(ctx, configPath)
 
 	// Test UserPromptSubmit hook routing
 	userPromptInput := `{
@@ -1500,6 +1506,7 @@ commands:
 
 func TestProcessUserPrompt(t *testing.T) {
 	t.Parallel()
+	ctx, _ := setupTestWithContext(t)
 
 	configContent := `rules:
   - match: "go test"
@@ -1514,7 +1521,7 @@ commands:
     generate: "off"`
 
 	configPath := createTempConfig(t, configContent)
-	app := NewApp(configPath)
+	app := NewApp(ctx, configPath)
 
 	tests := []struct {
 		name    string
@@ -1578,6 +1585,7 @@ commands:
 
 func TestProcessUserPromptValidationResult(t *testing.T) {
 	t.Parallel()
+	ctx, _ := setupTestWithContext(t)
 
 	// Create temporary config with named commands
 	configContent := `
@@ -1588,7 +1596,7 @@ commands:
 `
 
 	configPath := createTempConfig(t, configContent)
-	app := NewApp(configPath)
+	app := NewApp(ctx, configPath)
 
 	// Test that named command prompts work
 	promptJSON := `{"prompt": "$test"}`
@@ -1606,6 +1614,7 @@ commands:
 
 func TestProcessUserPromptWithCommandGeneration(t *testing.T) {
 	t.Parallel()
+	ctx, _ := setupTestWithContext(t)
 
 	configContent := `commands:
   - name: "help"
@@ -1613,7 +1622,7 @@ func TestProcessUserPromptWithCommandGeneration(t *testing.T) {
     generate: "always"`
 
 	configPath := createTempConfig(t, configContent)
-	app := NewApp(configPath)
+	app := NewApp(ctx, configPath)
 
 	// Set up mock launcher
 	mockLauncher := claude.SetupMockLauncherWithDefaults()
@@ -1640,6 +1649,7 @@ func TestProcessUserPromptWithCommandGeneration(t *testing.T) {
 
 func TestCommandPrefixConfiguration(t *testing.T) {
 	t.Parallel()
+	ctx, _ := setupTestWithContext(t)
 
 	configContent := `
 commands:
@@ -1649,7 +1659,7 @@ commands:
 `
 
 	configPath := createTempConfig(t, configContent)
-	app := NewApp(configPath)
+	app := NewApp(ctx, configPath)
 
 	// Test that % prefix no longer works
 	oldPrefixJSON := `{"prompt": "%test"}`
@@ -1686,7 +1696,7 @@ func TestProcessUserPromptWithTemplate(t *testing.T) {
     generate: "off"`
 
 	configPath := createTempConfig(t, configContent)
-	app := NewApp(configPath)
+	app := NewApp(ctx, configPath)
 
 	promptJSON := `{"prompt": "$hello"}`
 	result, err := app.ProcessUserPrompt(ctx, json.RawMessage(promptJSON))
@@ -1820,13 +1830,14 @@ func TestInstallPreservesExistingHooks(t *testing.T) {
 
 func TestProcessHookWorks(t *testing.T) {
 	t.Parallel()
+	ctx, _ := setupTestWithContext(t)
 
 	configContent := `rules:
   - match: "go test"
     send: "Use just test instead"`
 
 	configPath := createTempConfig(t, configContent)
-	app := NewApp(configPath)
+	app := NewApp(ctx, configPath)
 
 	hookInput := `{
 		"hookEventName": "PreToolUse",
@@ -1842,6 +1853,7 @@ func TestProcessHookWorks(t *testing.T) {
 
 func TestProcessHookPreToolUseMatchesCommand(t *testing.T) {
 	t.Parallel()
+	ctx, _ := setupTestWithContext(t)
 
 	configContent := `rules:
   - match: "ls"
@@ -1849,7 +1861,7 @@ func TestProcessHookPreToolUseMatchesCommand(t *testing.T) {
     generate: "off"`
 
 	configPath := createTempConfig(t, configContent)
-	app := NewApp(configPath)
+	app := NewApp(ctx, configPath)
 
 	hookInput := `{
 		"hookEventName": "PreToolUse",
@@ -1865,6 +1877,7 @@ func TestProcessHookPreToolUseMatchesCommand(t *testing.T) {
 
 func TestProcessHookPreToolUseRespectsEventField(t *testing.T) {
 	t.Parallel()
+	ctx, _ := setupTestWithContext(t)
 
 	// Rule with event: "post" should NOT match PreToolUse hooks
 	configContent := `rules:
@@ -1875,7 +1888,7 @@ func TestProcessHookPreToolUseRespectsEventField(t *testing.T) {
     generate: "off"`
 
 	configPath := createTempConfig(t, configContent)
-	app := NewApp(configPath)
+	app := NewApp(ctx, configPath)
 
 	hookInput := `{
 		"hookEventName": "PreToolUse",
@@ -1890,6 +1903,7 @@ func TestProcessHookPreToolUseRespectsEventField(t *testing.T) {
 
 func TestProcessHookPreToolUseSourcesFiltering(t *testing.T) {
 	t.Parallel()
+	ctx, _ := setupTestWithContext(t)
 
 	// Rule with sources=[command] should not match description field
 	configContent := `rules:
@@ -1900,7 +1914,7 @@ func TestProcessHookPreToolUseSourcesFiltering(t *testing.T) {
     generate: "off"`
 
 	configPath := createTempConfig(t, configContent)
-	app := NewApp(configPath)
+	app := NewApp(ctx, configPath)
 
 	hookInput := `{
 		"hookEventName": "PreToolUse",
@@ -1915,6 +1929,7 @@ func TestProcessHookPreToolUseSourcesFiltering(t *testing.T) {
 
 func TestProcessHookRoutesSessionStart(t *testing.T) {
 	t.Parallel()
+	ctx, _ := setupTestWithContext(t)
 
 	configContent := `rules:
   - match: "go test"
@@ -1927,7 +1942,7 @@ session:
     generate: "off"`
 
 	configPath := createTempConfig(t, configContent)
-	app := NewApp(configPath)
+	app := NewApp(ctx, configPath)
 
 	// Test SessionStart hook routing with startup source
 	sessionStartInput := `{
@@ -1950,6 +1965,7 @@ session:
 
 func TestProcessSessionStartWithDifferentNotes(t *testing.T) {
 	t.Parallel()
+	ctx, _ := setupTestWithContext(t)
 
 	configContent := `rules:
   - match: "go test"
@@ -1960,7 +1976,7 @@ session:
     generate: "off"`
 
 	configPath := createTempConfig(t, configContent)
-	app := NewApp(configPath)
+	app := NewApp(ctx, configPath)
 
 	sessionStartInput := `{
 		"session_id": "abc123",
@@ -1982,12 +1998,13 @@ session:
 
 func TestProcessSessionStartIgnoresResume(t *testing.T) {
 	t.Parallel()
+	ctx, _ := setupTestWithContext(t)
 
 	configContent := `session:
   - add: "Should not appear"`
 
 	configPath := createTempConfig(t, configContent)
-	app := NewApp(configPath)
+	app := NewApp(ctx, configPath)
 
 	sessionStartInput := `{
 		"session_id": "abc123",
@@ -2008,13 +2025,14 @@ func TestProcessSessionStartIgnoresResume(t *testing.T) {
 
 func TestProcessSessionStartWorksWithClear(t *testing.T) {
 	t.Parallel()
+	ctx, _ := setupTestWithContext(t)
 
 	configContent := `session:
   - add: "Clear message"
     generate: "off"`
 
 	configPath := createTempConfig(t, configContent)
-	app := NewApp(configPath)
+	app := NewApp(ctx, configPath)
 
 	sessionStartInput := `{
 		"session_id": "abc123",
@@ -2036,13 +2054,14 @@ func TestProcessSessionStartWorksWithClear(t *testing.T) {
 
 func TestProcessSessionStartWithTemplate(t *testing.T) {
 	t.Parallel()
+	ctx, _ := setupTestWithContext(t)
 
 	configContent := `session:
   - add: "Hello from template!"
     generate: "off"`
 
 	configPath := createTempConfig(t, configContent)
-	app := NewApp(configPath)
+	app := NewApp(ctx, configPath)
 
 	sessionStartInput := `{
 		"session_id": "abc123",
@@ -2065,6 +2084,7 @@ func TestProcessSessionStartWithTemplate(t *testing.T) {
 
 func TestProcessHookWithTemplate(t *testing.T) {
 	t.Parallel()
+	ctx, _ := setupTestWithContext(t)
 
 	configContent := `rules:
   - match: "go test"
@@ -2072,7 +2092,7 @@ func TestProcessHookWithTemplate(t *testing.T) {
     generate: "off"`
 
 	configPath := createTempConfig(t, configContent)
-	app := NewApp(configPath)
+	app := NewApp(ctx, configPath)
 
 	hookInput := `{
 		"tool_input": {
@@ -2147,6 +2167,7 @@ func TestProcessHookWithTemplatePattern(t *testing.T) {
 
 func TestProcessHookWithTodayVariable(t *testing.T) {
 	t.Parallel()
+	ctx, _ := setupTestWithContext(t)
 
 	configContent := `rules:
   - match: "go test"
@@ -2154,7 +2175,7 @@ func TestProcessHookWithTodayVariable(t *testing.T) {
     generate: "off"`
 
 	configPath := createTempConfig(t, configContent)
-	app := NewApp(configPath)
+	app := NewApp(ctx, configPath)
 
 	hookInput := `{
 		"tool_input": {
@@ -2178,6 +2199,7 @@ func TestProcessHookWithTodayVariable(t *testing.T) {
 
 func TestTestCommandWithTodayVariable(t *testing.T) {
 	t.Parallel()
+	ctx, _ := setupTestWithContext(t)
 
 	configContent := `rules:
   - match: "go test"
@@ -2185,9 +2207,9 @@ func TestTestCommandWithTodayVariable(t *testing.T) {
     generate: "off"`
 
 	configPath := createTempConfig(t, configContent)
-	app := NewApp(configPath)
+	app := NewApp(ctx, configPath)
 
-	response, err := app.TestCommand("go test ./...")
+	response, err := app.TestCommand(ctx, "go test ./...")
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -2209,7 +2231,7 @@ func TestProcessUserPromptWithTodayVariable(t *testing.T) {
     generate: "off"`
 
 	configPath := createTempConfig(t, configContent)
-	app := NewApp(configPath)
+	app := NewApp(ctx, configPath)
 
 	promptJSON := `{"prompt": "$hello"}`
 	result, err := app.ProcessUserPrompt(ctx, json.RawMessage(promptJSON))
@@ -2249,7 +2271,7 @@ func TestProcessSessionStartWithTodayVariable(t *testing.T) {
     generate: "off"`
 
 	configPath := createTempConfig(t, configContent)
-	app := NewApp(configPath)
+	app := NewApp(ctx, configPath)
 
 	sessionStartInput := `{
 		"session_id": "abc123",
@@ -2308,6 +2330,7 @@ func TestProcessSessionStartClearsSessionCache(t *testing.T) { //nolint:parallel
 
 func setupSessionCacheTest(t *testing.T) (app *App, cachePath, tempDir string) {
 	t.Helper()
+	ctx, _ := setupTestWithContext(t)
 	tempDir = t.TempDir()
 
 	// Set XDG_DATA_HOME to use temp directory for cache - this works with t.Parallel()
@@ -2316,11 +2339,11 @@ func setupSessionCacheTest(t *testing.T) (app *App, cachePath, tempDir string) {
 
 	configPath := createTempConfig(t, `session:
   - add: "Session started"`)
-	app = NewApp(configPath)
+	app = NewApp(ctx, configPath)
 	app.projectRoot = tempDir
 
 	// Get the actual cache path that the app will use
-	storageManager := storage.New(filesystem.NewOSFileSystem())
+	storageManager := storage.New(afero.NewOsFs())
 	var err error
 	cachePath, err = storageManager.GetCachePath()
 	if err != nil {
@@ -2389,7 +2412,7 @@ func TestProcessSessionStartWithAIGeneration(t *testing.T) {
     generate: "always"`
 
 	configPath := createTempConfig(t, configContent)
-	app := NewApp(configPath)
+	app := NewApp(ctx, configPath)
 
 	// Set up mock launcher
 	mockLauncher := claude.SetupMockLauncherWithDefaults()
@@ -2454,7 +2477,7 @@ rules:
 		t.Fatalf("Failed to write test config: %v", err)
 	}
 
-	fs := filesystem.NewMemoryFileSystem()
+	fs := afero.NewMemMapFs()
 	return NewAppWithFileSystem(configPath, tempDir, fs)
 }
 
@@ -2575,7 +2598,7 @@ rules:
 		t.Fatalf("Failed to write test config: %v", err)
 	}
 
-	fs := filesystem.NewMemoryFileSystem()
+	fs := afero.NewMemMapFs()
 	app := NewAppWithFileSystem(configPath, tempDir, fs)
 
 	// Test case 1: Hook input with empty tool_name (should NOT be treated as Bash)
@@ -2643,7 +2666,7 @@ func TestProcessHookWithAIGeneration(t *testing.T) {
 	t.Logf("DEBUG: mockLauncher type: %T, value: %+v", app.mockLauncher, app.mockLauncher != nil)
 
 	// Test the mock directly to ensure it works
-	testResponse, testErr := mock.GenerateMessage("test prompt")
+	testResponse, testErr := mock.GenerateMessage(ctx, "test prompt")
 	if testErr != nil {
 		t.Fatalf("Mock launcher test failed: %v", testErr)
 	}
@@ -2744,6 +2767,7 @@ func TestProcessHookAIGenerationRequired(t *testing.T) {
 
 func TestProcessHookWithPartiallyInvalidConfig(t *testing.T) {
 	t.Parallel()
+	ctx, _ := setupTestWithContext(t)
 
 	// Create config with some valid and some invalid rules
 	configContent := `rules:
@@ -2762,7 +2786,7 @@ func TestProcessHookWithPartiallyInvalidConfig(t *testing.T) {
 `
 
 	configPath := createTempConfig(t, configContent)
-	app := NewApp(configPath)
+	app := NewApp(ctx, configPath)
 
 	// Test that hook processing works with valid rules even when some are invalid
 	hookInput := `{
@@ -2822,6 +2846,7 @@ func TestProcessHookWithPartiallyInvalidConfig(t *testing.T) {
 
 func TestValidateConfigWithPartiallyInvalidConfig(t *testing.T) {
 	t.Parallel()
+	ctx, _ := setupTestWithContext(t)
 
 	// Create config with some valid and some invalid rules
 	configContent := `rules:
@@ -2837,7 +2862,7 @@ func TestValidateConfigWithPartiallyInvalidConfig(t *testing.T) {
 `
 
 	configPath := createTempConfig(t, configContent)
-	app := NewApp(configPath)
+	app := NewApp(ctx, configPath)
 
 	// Test that ValidateConfig provides useful feedback for partial configs
 	result, err := app.ValidateConfig()
@@ -2865,6 +2890,7 @@ func TestValidateConfigWithPartiallyInvalidConfig(t *testing.T) {
 
 func TestProcessHookWithAllInvalidRules(t *testing.T) {
 	t.Parallel()
+	ctx, _ := setupTestWithContext(t)
 
 	// Create config with only invalid rules
 	configContent := `rules:
@@ -2877,7 +2903,7 @@ func TestProcessHookWithAllInvalidRules(t *testing.T) {
 `
 
 	configPath := createTempConfig(t, configContent)
-	app := NewApp(configPath)
+	app := NewApp(ctx, configPath)
 
 	// Test that hook processing still works (should allow all commands)
 	hookInput := `{
@@ -3026,6 +3052,7 @@ func TestWriteToolNoMatching(t *testing.T) {
 
 func TestFindMatchingRule(t *testing.T) {
 	t.Parallel()
+	ctx, _ := setupTestWithContext(t)
 
 	configContent := `rules:
   - match: "secrets"
@@ -3036,7 +3063,7 @@ func TestFindMatchingRule(t *testing.T) {
 	configPath := createTempConfig(t, configContent)
 	app := NewAppWithWorkDir(configPath, "")
 
-	_, ruleMatcher, err := app.loadConfigAndMatcher()
+	_, ruleMatcher, err := app.loadConfigAndMatcher(ctx)
 	if err != nil {
 		t.Fatalf("Failed to load config: %v", err)
 	}
@@ -3066,6 +3093,7 @@ func TestFindMatchingRule(t *testing.T) {
 // TestProcessHookRoutesPostToolUse tests that PostToolUse hooks are properly routed
 func TestProcessHookRoutesPostToolUse(t *testing.T) {
 	t.Parallel()
+	ctx, _ := setupTestWithContext(t)
 
 	configContent := `rules:
   # Post-tool-use rule matching output (TODO: implement tool_response support)
@@ -3082,7 +3110,7 @@ func TestProcessHookRoutesPostToolUse(t *testing.T) {
     send: "AI claiming unrelated - please verify"`
 
 	configPath := createTempConfig(t, configContent)
-	app := NewApp(configPath)
+	app := NewApp(ctx, configPath)
 
 	// Use static testdata transcript
 	testdataDir := "../../testdata"
@@ -3124,6 +3152,7 @@ func TestProcessHookRoutesPostToolUse(t *testing.T) {
 // TestPostToolUseWithDifferentTranscript tests that PostToolUse reads actual transcript content
 func TestPostToolUseWithDifferentTranscript(t *testing.T) {
 	t.Parallel()
+	ctx, _ := setupTestWithContext(t)
 
 	configContent := `rules:
   - match:
@@ -3133,7 +3162,7 @@ func TestPostToolUseWithDifferentTranscript(t *testing.T) {
     send: "File permission error detected"`
 
 	configPath := createTempConfig(t, configContent)
-	app := NewApp(configPath)
+	app := NewApp(ctx, configPath)
 
 	// Use static testdata transcript with permission denied content
 	testdataDir := "../../testdata"
@@ -3175,6 +3204,7 @@ func TestPostToolUseWithDifferentTranscript(t *testing.T) {
 // TestPostToolUseRuleNotMatching tests that PostToolUse returns empty when no rules match
 func TestPostToolUseRuleNotMatching(t *testing.T) {
 	t.Parallel()
+	ctx, _ := setupTestWithContext(t)
 
 	configContent := `rules:
   - match:
@@ -3184,7 +3214,7 @@ func TestPostToolUseRuleNotMatching(t *testing.T) {
     send: "Check the file path"`
 
 	configPath := createTempConfig(t, configContent)
-	app := NewApp(configPath)
+	app := NewApp(ctx, configPath)
 
 	// Use transcript that won't match the "file not found" pattern
 	testdataDir := "../../testdata"
@@ -3218,6 +3248,7 @@ func TestPostToolUseRuleNotMatching(t *testing.T) {
 // TestPostToolUseWithCustomPattern tests rule system integration with custom patterns
 func TestPostToolUseWithCustomPattern(t *testing.T) {
 	t.Parallel()
+	ctx, _ := setupTestWithContext(t)
 
 	// Create a config with a custom pattern that doesn't match hardcoded patterns
 	configContent := `rules:
@@ -3228,7 +3259,7 @@ func TestPostToolUseWithCustomPattern(t *testing.T) {
     send: "Operation timed out - check network connection"`
 
 	configPath := createTempConfig(t, configContent)
-	app := NewApp(configPath)
+	app := NewApp(ctx, configPath)
 
 	// Create a temporary transcript file with the custom pattern
 	tmpDir := t.TempDir()
@@ -3266,6 +3297,7 @@ func TestPostToolUseWithCustomPattern(t *testing.T) {
 // TestPostToolUseWithToolOutputMatching tests tool_response field matching
 func TestPostToolUseWithToolOutputMatching(t *testing.T) {
 	t.Parallel()
+	ctx, _ := setupTestWithContext(t)
 
 	configContent := `rules:
   - match:
@@ -3275,7 +3307,7 @@ func TestPostToolUseWithToolOutputMatching(t *testing.T) {
     send: "Tool execution failed"`
 
 	configPath := createTempConfig(t, configContent)
-	app := NewApp(configPath)
+	app := NewApp(ctx, configPath)
 
 	// Create mock JSON with tool_response containing error
 	jsonData := `{
@@ -3297,6 +3329,7 @@ func TestPostToolUseWithToolOutputMatching(t *testing.T) {
 // TestPostToolUseWithMultipleFieldMatching tests multiple field matching in a single rule
 func TestPostToolUseWithMultipleFieldMatching(t *testing.T) {
 	t.Parallel()
+	ctx, _ := setupTestWithContext(t)
 
 	configContent := `rules:
   - match:
@@ -3306,7 +3339,7 @@ func TestPostToolUseWithMultipleFieldMatching(t *testing.T) {
     send: "Operation issue detected"`
 
 	configPath := createTempConfig(t, configContent)
-	app := NewApp(configPath)
+	app := NewApp(ctx, configPath)
 
 	// Generate unique session IDs to avoid cross-test interference
 	sessionID1 := fmt.Sprintf("test-%d-1", time.Now().UnixNano())
@@ -3370,6 +3403,7 @@ func TestPostToolUseWithMultipleFieldMatching(t *testing.T) {
 // TestPostToolUseWithThinkingAndTextBlocks tests extraction of both thinking blocks and text content
 func TestPostToolUseWithThinkingAndTextBlocks(t *testing.T) {
 	t.Parallel()
+	ctx, _ := setupTestWithContext(t)
 
 	configContent := `rules:
   - match:
@@ -3379,7 +3413,7 @@ func TestPostToolUseWithThinkingAndTextBlocks(t *testing.T) {
     send: "Performance analysis detected"`
 
 	configPath := createTempConfig(t, configContent)
-	app := NewApp(configPath)
+	app := NewApp(ctx, configPath)
 
 	// Create transcript with text content and proper tool_use structure
 	tmpDir := t.TempDir()
@@ -3437,7 +3471,7 @@ func TestProcessUserPromptWithCommandArguments(t *testing.T) {
     generate: "off"`
 
 	configPath := createTempConfig(t, configContent)
-	app := NewApp(configPath)
+	app := NewApp(ctx, configPath)
 
 	promptJSON := `{"prompt": "$test arg1 arg2"}`
 	result, err := app.ProcessUserPrompt(ctx, json.RawMessage(promptJSON))
@@ -3477,7 +3511,7 @@ func TestProcessUserPromptWithNoArguments(t *testing.T) {
     generate: "off"`
 
 	configPath := createTempConfig(t, configContent)
-	app := NewApp(configPath)
+	app := NewApp(ctx, configPath)
 
 	promptJSON := `{"prompt": "$test"}`
 	result, err := app.ProcessUserPrompt(ctx, json.RawMessage(promptJSON))
@@ -3518,6 +3552,7 @@ type preToolUseIntentTestCase struct {
 // Helper function to test PreToolUse intent matching with different scenarios
 func testPreToolUseIntentMatching(t *testing.T, tc *preToolUseIntentTestCase) {
 	t.Helper()
+	ctx, _ := setupTestWithContext(t)
 
 	tmpDir := t.TempDir()
 	transcriptPath := filepath.Join(tmpDir, tc.testName+"-transcript.jsonl")
@@ -3536,7 +3571,7 @@ func testPreToolUseIntentMatching(t *testing.T, tc *preToolUseIntentTestCase) {
     generate: "off"`, tc.matchPattern, tc.expectedMessage)
 
 	configPath := createTempConfig(t, configContent)
-	app := NewApp(configPath)
+	app := NewApp(ctx, configPath)
 
 	hookInput := fmt.Sprintf(`{
 		"transcript_path": "%s",
@@ -3591,6 +3626,7 @@ func TestPreToolUseIntentWithTextOnlyContent(t *testing.T) {
 // TestPreToolUseIntentWithMissingTranscript tests graceful handling when transcript doesn't exist
 func TestPreToolUseIntentWithMissingTranscript(t *testing.T) {
 	t.Parallel()
+	ctx, _ := setupTestWithContext(t)
 
 	configContent := `rules:
   - match:
@@ -3601,7 +3637,7 @@ func TestPreToolUseIntentWithMissingTranscript(t *testing.T) {
     generate: "off"`
 
 	configPath := createTempConfig(t, configContent)
-	app := NewApp(configPath)
+	app := NewApp(ctx, configPath)
 
 	hookInput := `{
 		"transcript_path": "/non/existent/transcript.jsonl",
@@ -3635,6 +3671,7 @@ type postToolUseIntegrationTestCase struct {
 // Helper function for PostToolUse integration tests
 func testPostToolUseIntegration(t *testing.T, tc *postToolUseIntegrationTestCase) {
 	t.Helper()
+	ctx, _ := setupTestWithContext(t)
 
 	testdataDir := "../../testdata"
 	transcriptPath := filepath.Join(testdataDir, tc.transcriptFile)
@@ -3652,7 +3689,7 @@ func testPostToolUseIntegration(t *testing.T, tc *postToolUseIntegrationTestCase
     generate: "off"`, tc.matchPattern, tc.expectedMessage)
 
 	configPath := createTempConfig(t, configContent)
-	app := NewApp(configPath)
+	app := NewApp(ctx, configPath)
 
 	postToolUseInput := fmt.Sprintf(`{
 		"session_id": "%s",
@@ -3703,6 +3740,7 @@ func TestIntegrationPerformanceAnalysisDetection(t *testing.T) {
 // TestPostToolUseStructuredToolResponseFields tests matching against specific fields in structured tool responses
 func TestPostToolUseStructuredToolResponseFields(t *testing.T) {
 	t.Parallel()
+	ctx, _ := setupTestWithContext(t)
 
 	// Test that rules can match against specific tool output fields by name
 	configContent := `rules:
@@ -3713,7 +3751,7 @@ func TestPostToolUseStructuredToolResponseFields(t *testing.T) {
     send: "Configuration file contains sensitive data"`
 
 	configPath := createTempConfig(t, configContent)
-	app := NewApp(configPath)
+	app := NewApp(ctx, configPath)
 
 	// Test matching against "content" field
 	jsonWithContent := `{
@@ -3745,7 +3783,7 @@ func TestPostToolUseDebugOutputShowsIntentFields(t *testing.T) {
     send: "Found test pattern in intent"`
 
 	configPath := createTempConfig(t, configContent)
-	app := NewApp(configPath)
+	app := NewApp(ctx, configPath)
 
 	// Set up mock launcher to avoid real Claude calls
 	mockLauncher := claude.SetupMockLauncherWithDefaults()
@@ -3786,7 +3824,7 @@ func TestExtractAndLogIntentCalledForAllPreToolUseEvents(t *testing.T) {
 	// Create a simple config (no specific rules needed - intent should be extracted regardless)
 	configContent := `rules: []`
 	configPath := createTempConfig(t, configContent)
-	app := NewApp(configPath)
+	app := NewApp(ctx, configPath)
 
 	// Create a transcript with intent content
 	transcriptContent := `{"type":"assistant","uuid":"parent-uuid","message":{"role":"assistant",` +
@@ -3824,7 +3862,7 @@ func TestPreToolUseDebugOutputShowsIntentFields(t *testing.T) {
     send: "Found test pattern in intent"`
 
 	configPath := createTempConfig(t, configContent)
-	app := NewApp(configPath)
+	app := NewApp(ctx, configPath)
 
 	// Set up mock launcher to avoid real Claude calls
 	mockLauncher := claude.SetupMockLauncherWithDefaults()
@@ -3861,13 +3899,14 @@ func TestPreToolUseDebugOutputShowsIntentFields(t *testing.T) {
 
 // Test helper for creating tool use transcript test scenarios
 func createToolUseTestScenario(t *testing.T, transcriptContent, configContent string) (string, *App) {
+	ctx, _ := setupTestWithContext(t)
 	tempDir := t.TempDir()
 	transcriptPath := filepath.Join(tempDir, "transcript.jsonl")
 	err := os.WriteFile(transcriptPath, []byte(transcriptContent), 0o600)
 	require.NoError(t, err)
 
 	configPath := createTempConfig(t, configContent)
-	app := NewApp(configPath)
+	app := NewApp(ctx, configPath)
 
 	return transcriptPath, app
 }
@@ -3906,6 +3945,7 @@ func TestPreToolUseWithToolUseIDExtraction(t *testing.T) {
 
 func TestPreToolUseWithoutToolUseIDNeedsNewReliableMethod(t *testing.T) {
 	t.Parallel()
+	ctx, _ := setupTestWithContext(t)
 
 	// Create a transcript where old method would match wrong pattern due to noise
 	// Old method concatenates ALL assistant text, new method gets most recent intent
@@ -3938,7 +3978,7 @@ func TestPreToolUseWithoutToolUseIDNeedsNewReliableMethod(t *testing.T) {
     generate: "off"`
 
 	configPath := createTempConfig(t, configContent)
-	app := NewApp(configPath)
+	app := NewApp(ctx, configPath)
 
 	// Hook input WITHOUT tool_use_id - old method would include dangerous pattern
 	hookInput := fmt.Sprintf(`{
@@ -3961,6 +4001,7 @@ func TestPreToolUseWithoutToolUseIDNeedsNewReliableMethod(t *testing.T) {
 
 func TestPreToolUseWithoutToolUseIDUsesOldMethod(t *testing.T) {
 	t.Parallel()
+	ctx, _ := setupTestWithContext(t)
 
 	// Create a transcript that only works with the OLD method (no parent-child relationship)
 	transcriptContent := `{"type":"assistant","message":{"role":"assistant",` +
@@ -3979,7 +4020,7 @@ func TestPreToolUseWithoutToolUseIDUsesOldMethod(t *testing.T) {
     generate: "off"`
 
 	configPath := createTempConfig(t, configContent)
-	app := NewApp(configPath)
+	app := NewApp(ctx, configPath)
 
 	// Hook input WITHOUT tool_use_id - should fall back to old method
 	hookInput := fmt.Sprintf(`{

@@ -7,6 +7,7 @@ require (
 	github.com/fatih/color v1.16.0
 	github.com/peterh/liner v1.2.2
 	github.com/rs/zerolog v1.34.0
+	github.com/spf13/afero v1.14.0
 	github.com/spf13/cobra v1.9.1
 	github.com/stretchr/testify v1.11.0
 	go.etcd.io/bbolt v1.4.3
@@ -25,5 +26,6 @@ require (
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/spf13/pflag v1.0.7 // indirect
 	golang.org/x/sys v0.29.0 // indirect
+	golang.org/x/text v0.23.0 // indirect
 	gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15 // indirect
 )

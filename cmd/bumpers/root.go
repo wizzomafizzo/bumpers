@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -34,12 +35,12 @@ func createNewRootCommand() *cobra.Command {
 }
 
 // createAppFromCommand extracts config path and creates a CLI app
-func createAppFromCommand(cmd *cobra.Command) (*cli.App, error) {
+func createAppFromCommand(ctx context.Context, cmd *cobra.Command) (*cli.App, error) {
 	configPath, err := cmd.Flags().GetString("config")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get config flag: %w", err)
 	}
 
-	app := cli.NewApp(configPath)
+	app := cli.NewApp(ctx, configPath)
 	return app, nil
 }

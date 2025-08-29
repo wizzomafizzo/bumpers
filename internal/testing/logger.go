@@ -5,21 +5,26 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/rs/zerolog"
+	"github.com/rs/zerolog" //nolint:depguard // Test utilities need direct zerolog access
+	"github.com/wizzomafizzo/bumpers/internal/core/logging"
 )
 
-// NewTestContext creates a context with a logger that captures output for a single test.
-// Returns the context and a function to get captured output.
-// Safe for parallel tests - no global state modification.
+// NewTestContext creates a context with logger for race-safe testing
+// Returns a context with logger attached and a function to retrieve log output
 func NewTestContext(t *testing.T) (ctx context.Context, getLogOutput func() string) {
 	t.Helper()
+
 	var logOutput strings.Builder
 	syncWriter := zerolog.SyncWriter(&logOutput)
-	logger := zerolog.New(syncWriter).Level(zerolog.DebugLevel)
 
-	ctx = logger.WithContext(context.Background())
-
-	return ctx, func() string { //nolint:gocritic // unlambda: closure needed for deferred string capture
-		return logOutput.String()
+	ctx, err := logging.New(context.Background(), nil, logging.Config{
+		ProjectID: "test-project",
+		Writer:    syncWriter,
+		Level:     zerolog.DebugLevel,
+	})
+	if err != nil {
+		t.Fatalf("Failed to create test logger: %v", err)
 	}
+
+	return ctx, logOutput.String
 }

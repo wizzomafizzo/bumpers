@@ -10,7 +10,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/rs/zerolog"
+	"github.com/wizzomafizzo/bumpers/internal/core/logging"
 )
 
 func ExtractReasoningContent(transcriptPath string) (string, error) {
@@ -101,7 +101,7 @@ func ExtractIntentContent(ctx context.Context, transcriptPath string) (string, e
 	}
 	defer func() {
 		if closeErr := file.Close(); closeErr != nil {
-			zerolog.Ctx(ctx).Debug().Err(closeErr).
+			logging.Get(ctx).Debug().Err(closeErr).
 				Str("transcript_path", transcriptPath).
 				Msg("Failed to close transcript file")
 		}
@@ -156,7 +156,7 @@ func processIntentLine(line string) []string {
 
 // logExtractedIntent logs the extraction results for debugging
 func logExtractedIntent(ctx context.Context, transcriptPath string, intentParts []string, result string) {
-	zerolog.Ctx(ctx).Debug().
+	logging.Get(ctx).Debug().
 		Str("transcript_path", transcriptPath).
 		Int("intent_parts_count", len(intentParts)).
 		Str("extracted_intent", result).
@@ -209,7 +209,7 @@ func ExtractIntentContentOptimized(ctx context.Context, transcriptPath string, m
 	}
 	defer func() {
 		if closeErr := file.Close(); closeErr != nil {
-			zerolog.Ctx(ctx).Debug().Err(closeErr).
+			logging.Get(ctx).Debug().Err(closeErr).
 				Str("transcript_path", transcriptPath).
 				Msg("Failed to close transcript file")
 		}
@@ -346,7 +346,7 @@ func ExtractIntentByToolUseIDWithContext(ctx context.Context, transcriptPath, to
 	}
 	defer func() {
 		if closeErr := file.Close(); closeErr != nil {
-			zerolog.Ctx(ctx).Debug().Err(closeErr).
+			logging.Get(ctx).Debug().Err(closeErr).
 				Str("transcript_path", transcriptPath).
 				Msg("Failed to close transcript file")
 		}
@@ -354,7 +354,7 @@ func ExtractIntentByToolUseIDWithContext(ctx context.Context, transcriptPath, to
 
 	result, err := findIntentByToolUseID(file, toolUseID)
 	if err == nil {
-		zerolog.Ctx(ctx).Debug().
+		logging.Get(ctx).Debug().
 			Str("transcript_path", transcriptPath).
 			Str("tool_use_id", toolUseID).
 			Str("extracted_intent", result).
@@ -534,7 +534,7 @@ func FindRecentToolUseAndExtractIntent(ctx context.Context, transcriptPath strin
 
 	if len(allContentParts) > 0 {
 		result := strings.Join(allContentParts, " ")
-		zerolog.Ctx(ctx).Debug().
+		logging.Get(ctx).Debug().
 			Str("transcript_path", transcriptPath).
 			Int("content_parts_count", len(allContentParts)).
 			Str("extracted_intent", result).
@@ -553,7 +553,7 @@ func readTranscriptLines(ctx context.Context, transcriptPath string) ([]string, 
 	}
 	defer func() {
 		if closeErr := file.Close(); closeErr != nil {
-			zerolog.Ctx(ctx).Debug().Err(closeErr).
+			logging.Get(ctx).Debug().Err(closeErr).
 				Str("transcript_path", transcriptPath).
 				Msg("Failed to close transcript file")
 		}

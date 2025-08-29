@@ -5,7 +5,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/wizzomafizzo/bumpers/internal/platform/filesystem"
+	"github.com/spf13/afero"
 )
 
 func Execute(templateStr string, data any) (string, error) {
@@ -13,7 +13,7 @@ func Execute(templateStr string, data any) (string, error) {
 		return "", err
 	}
 
-	tmpl, err := template.New("message").Funcs(createFuncMap(filesystem.NewOSFileSystem(), nil)).Parse(templateStr)
+	tmpl, err := template.New("message").Funcs(createFuncMap(afero.NewOsFs(), nil)).Parse(templateStr)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse template: %w", err)
 	}
@@ -34,7 +34,7 @@ func ExecuteWithCommandContext(templateStr string, data any, commandCtx *Command
 	}
 
 	tmpl, err := template.New("message").
-		Funcs(createFuncMap(filesystem.NewOSFileSystem(), commandCtx)).
+		Funcs(createFuncMap(afero.NewOsFs(), commandCtx)).
 		Parse(templateStr)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse template: %w", err)

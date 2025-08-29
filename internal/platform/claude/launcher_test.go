@@ -307,7 +307,7 @@ func ExampleNewLauncher() {
 }
 
 func TestExecuteWithInput_WorkingDirectory(t *testing.T) {
-	_, _ = testutil.NewTestContext(t) // Context-aware logging available
+	ctx, _ := testutil.NewTestContext(t) // Context-aware logging available
 	t.Parallel()
 
 	// Create a temporary directory structure to simulate a project
@@ -357,7 +357,7 @@ echo '{"type":"result","subtype":"success","is_error":false,'\
 	launcher := &Launcher{config: nil}
 
 	// Test that Claude executes from project root, not current directory
-	output, err := launcher.ExecuteWithInput("test prompt")
+	output, err := launcher.ExecuteWithInput(ctx, "test prompt")
 	require.NoError(t, err, "ExecuteWithInput should succeed")
 
 	// Parse the JSON response to get the result

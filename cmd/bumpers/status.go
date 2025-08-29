@@ -13,7 +13,7 @@ func createStatusCommand() *cobra.Command {
 		Short: "Check hook status",
 		Long:  "Check hook status",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			app, err := createAppFromCommand(cmd.Parent())
+			app, err := createAppFromCommand(cmd.Context(), cmd.Parent())
 			if err != nil {
 				return err
 			}

@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/adrg/xdg"
+	"github.com/spf13/afero"
 	"github.com/wizzomafizzo/bumpers/internal/infrastructure/constants"
-	"github.com/wizzomafizzo/bumpers/internal/platform/filesystem"
 )
 
 func TestStorageManagerPaths(t *testing.T) {
@@ -50,8 +50,7 @@ func TestStorageManagerPaths(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			fs := filesystem.NewMemoryFileSystem()
-			manager := New(fs)
+			manager := New(afero.NewMemMapFs())
 
 			actualPath, err := tt.methodCall(manager)
 			if err != nil {

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"strings"
 	"testing"
 
@@ -135,7 +136,7 @@ func TestCreateAppFromCommand(t *testing.T) {
 		t.Fatalf("Failed to parse flags: %v", err)
 	}
 
-	app, err := createAppFromCommand(cmd)
+	app, err := createAppFromCommand(context.Background(), cmd)
 	if err != nil {
 		t.Fatalf("Expected createAppFromCommand to succeed, got error: %v", err)
 	}

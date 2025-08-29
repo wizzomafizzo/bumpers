@@ -11,20 +11,19 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
+	"github.com/spf13/afero"
 	"github.com/wizzomafizzo/bumpers/internal/config"
 	"github.com/wizzomafizzo/bumpers/internal/core/engine/hooks"
 	"github.com/wizzomafizzo/bumpers/internal/core/engine/matcher"
+	"github.com/wizzomafizzo/bumpers/internal/core/logging"
 	"github.com/wizzomafizzo/bumpers/internal/core/messaging/template"
 	"github.com/wizzomafizzo/bumpers/internal/infrastructure/project"
 	ai "github.com/wizzomafizzo/bumpers/internal/platform/claude/api"
 	"github.com/wizzomafizzo/bumpers/internal/platform/claude/transcript"
-	"github.com/wizzomafizzo/bumpers/internal/platform/filesystem"
 	"github.com/wizzomafizzo/bumpers/internal/platform/storage"
 )
 
-func NewApp(configPath string) *App {
+func NewApp(ctx context.Context, configPath string) *App {
 	// Detect project root
 	projectRoot, err := project.FindRoot()
 	if err != nil {
@@ -51,7 +50,7 @@ func NewApp(configPath string) *App {
 		projectRoot: projectRoot,
 	}
 
-	log.Debug().
+	logging.Get(ctx).Debug().
 		Str("original_config_path", configPath).
 		Str("resolved_config_path", resolvedConfigPath).
 		Str("project_root", projectRoot).
@@ -79,7 +78,7 @@ func NewAppWithWorkDir(configPath, workDir string) *App {
 
 // NewAppWithFileSystem creates a new App instance with injectable filesystem.
 // This enables parallel testing by using in-memory filesystem instead of real I/O.
-func NewAppWithFileSystem(configPath, workDir string, fs filesystem.FileSystem) *App {
+func NewAppWithFileSystem(configPath, workDir string, fs afero.Fs) *App {
 	return &App{
 		configPath: configPath,
 		workDir:    workDir,
@@ -88,7 +87,7 @@ func NewAppWithFileSystem(configPath, workDir string, fs filesystem.FileSystem) 
 }
 
 type App struct {
-	fileSystem   filesystem.FileSystem
+	fileSystem   afero.Fs
 	mockLauncher ai.MessageGenerator
 	configPath   string
 	workDir      string
@@ -96,9 +95,8 @@ type App struct {
 }
 
 // loadConfigAndMatcher loads configuration and creates a rule matcher
-func (a *App) loadConfigAndMatcher() (*config.Config, *matcher.RuleMatcher, error) {
-	// Read config file content
-	log.Debug().Str("config_path", a.configPath).Msg("loading config file")
+func (a *App) loadConfigAndMatcher(ctx context.Context) (*config.Config, *matcher.RuleMatcher, error) {
+	logging.Get(ctx).Debug().Str("config_path", a.configPath).Msg("loading config file")
 	data, err := os.ReadFile(a.configPath)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to read config from %s: %w", a.configPath, err)
@@ -113,7 +111,7 @@ func (a *App) loadConfigAndMatcher() (*config.Config, *matcher.RuleMatcher, erro
 	// Log warnings for invalid rules
 	for i := range partialCfg.ValidationWarnings {
 		warning := &partialCfg.ValidationWarnings[i]
-		log.Warn().
+		logging.Get(ctx).Warn().
 			Int("rule_index", warning.RuleIndex).
 			Str("pattern", warning.Rule.GetMatch().Pattern).
 			Err(warning.Error).
@@ -162,7 +160,7 @@ func (a *App) ProcessHook(ctx context.Context, input io.Reader) (string, error) 
 }
 
 func (a *App) processHookWithContext(ctx context.Context, input io.Reader) (string, error) {
-	logger := zerolog.Ctx(ctx)
+	logger := logging.Get(ctx)
 
 	if os.Getenv("BUMPERS_SKIP") == "1" {
 		logger.Debug().Msg("BUMPERS_SKIP is set, skipping hook processing")
@@ -198,7 +196,7 @@ func (a *App) processHookWithContext(ctx context.Context, input io.Reader) (stri
 
 // processPreToolUse handles PreToolUse hook events
 func (a *App) processPreToolUse(ctx context.Context, rawJSON json.RawMessage) (string, error) {
-	logger := zerolog.Ctx(ctx)
+	logger := logging.Get(ctx)
 	logger.Debug().Msg("processing PreToolUse hook")
 
 	var event hooks.HookEvent
@@ -221,7 +219,7 @@ func (a *App) processPreToolUse(ctx context.Context, rawJSON json.RawMessage) (s
 		Msg("Hook processing summary - sources available for rule matching")
 
 	// Load config and create matcher
-	cfg, _, err := a.loadConfigAndMatcher()
+	cfg, _, err := a.loadConfigAndMatcher(ctx)
 	if err != nil {
 		return "", fmt.Errorf("failed to load config: %w", err)
 	}
@@ -240,7 +238,7 @@ func (a *App) processPreToolUse(ctx context.Context, rawJSON json.RawMessage) (s
 	}
 
 	// Process and return response
-	return a.processMatchedRule(matchedRule, matchedValue)
+	return a.processMatchedRule(ctx, matchedRule, matchedValue)
 }
 
 // filterPreEventRules filters rules for pre events
@@ -266,13 +264,13 @@ func (*App) extractAndLogIntent(ctx context.Context, event hooks.HookEvent) stri
 
 	intentContent, err := transcript.FindRecentToolUseAndExtractIntent(ctx, event.TranscriptPath)
 	if err != nil {
-		zerolog.Ctx(ctx).Debug().Err(err).
+		logging.Get(ctx).Debug().Err(err).
 			Str("transcript_path", event.TranscriptPath).
 			Msg("Failed to extract intent from transcript")
 		return ""
 	}
 
-	zerolog.Ctx(ctx).Debug().
+	logging.Get(ctx).Debug().
 		Str("transcript_path", event.TranscriptPath).
 		Str("extracted_intent", intentContent).
 		Msg("Intent extracted from transcript for hook processing")
@@ -406,7 +404,7 @@ func (a *App) checkOriginalBehavior(rule *config.Rule, event hooks.HookEvent) (
 }
 
 // processMatchedRule processes template and AI generation for matched rule
-func (a *App) processMatchedRule(matchedRule *config.Rule, matchedValue string) (string, error) {
+func (a *App) processMatchedRule(ctx context.Context, matchedRule *config.Rule, matchedValue string) (string, error) {
 	// Process template with rule context including shared variables
 	processedMessage, err := template.ExecuteRuleTemplate(matchedRule.Send, matchedValue)
 	if err != nil {
@@ -414,10 +412,10 @@ func (a *App) processMatchedRule(matchedRule *config.Rule, matchedValue string) 
 	}
 
 	// Apply AI generation if configured
-	finalMessage, err := a.processAIGeneration(matchedRule, processedMessage, matchedValue)
+	finalMessage, err := a.processAIGeneration(ctx, matchedRule, processedMessage, matchedValue)
 	if err != nil {
 		// Log error but don't fail the hook - fallback to original message
-		log.Error().Err(err).Msg("AI generation failed, using original message")
+		logging.Get(ctx).Error().Err(err).Msg("AI generation failed, using original message")
 		return processedMessage, nil
 	}
 
@@ -432,7 +430,7 @@ type postToolContent struct {
 }
 
 func (*App) extractPostToolContent(ctx context.Context, rawJSON json.RawMessage) (*postToolContent, error) {
-	logger := zerolog.Ctx(ctx)
+	logger := logging.Get(ctx)
 
 	// Parse the JSON to get transcript path and tool info
 	var event map[string]any
@@ -564,11 +562,11 @@ func findMatchingToolOutputField(sources []string, toolOutputMap map[string]any)
 }
 
 func (a *App) ProcessPostToolUse(ctx context.Context, rawJSON json.RawMessage) (string, error) {
-	logger := zerolog.Ctx(ctx)
+	logger := logging.Get(ctx)
 	logger.Debug().Msg("processing PostToolUse hook")
 
 	// Load config for rule matching
-	cfg, _, err := a.loadConfigAndMatcher()
+	cfg, _, err := a.loadConfigAndMatcher(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -607,7 +605,7 @@ func (a *App) ProcessPostToolUse(ctx context.Context, rawJSON json.RawMessage) (
 		}
 
 		// Check if pattern matches the selected content
-		if matched, err := a.matchRulePattern(rule, contentToMatch, content.toolName); err == nil && matched {
+		if matched, err := a.matchRulePattern(ctx, rule, contentToMatch, content.toolName); err == nil && matched {
 			// Process and return the rule's message using existing template system
 			return template.ExecuteRuleTemplate(rule.Send, contentToMatch) //nolint:wrapcheck // preserve behavior
 		}
@@ -617,13 +615,13 @@ func (a *App) ProcessPostToolUse(ctx context.Context, rawJSON json.RawMessage) (
 }
 
 // matchRulePattern checks if a rule's pattern matches the given content
-func (*App) matchRulePattern(rule *config.Rule, content, toolName string) (bool, error) {
+func (*App) matchRulePattern(ctx context.Context, rule *config.Rule, content, toolName string) (bool, error) {
 	// Check tool pattern if specified (similar to existing matcher logic)
 	toolPattern := rule.Tool
 	if toolPattern != "" {
 		toolRe, err := regexp.Compile("(?i)" + toolPattern)
 		if err != nil {
-			log.Debug().Err(err).Str("pattern", toolPattern).Msg("Invalid tool pattern")
+			logging.Get(ctx).Debug().Err(err).Str("pattern", toolPattern).Msg("invalid tool pattern")
 			return false, err //nolint:wrapcheck // preserving existing behavior
 		}
 		if !toolRe.MatchString(toolName) {
@@ -635,16 +633,16 @@ func (*App) matchRulePattern(rule *config.Rule, content, toolName string) (bool,
 	match := rule.GetMatch()
 	contentRe, err := regexp.Compile(match.Pattern)
 	if err != nil {
-		log.Debug().Err(err).Str("pattern", match.Pattern).Msg("Invalid content pattern")
+		logging.Get(ctx).Debug().Err(err).Str("pattern", match.Pattern).Msg("invalid content pattern")
 		return false, err //nolint:wrapcheck // preserving existing behavior
 	}
 
 	return contentRe.MatchString(content), nil
 }
 
-func (a *App) TestCommand(command string) (string, error) {
+func (a *App) TestCommand(ctx context.Context, command string) (string, error) {
 	// Load config and match rules
-	_, ruleMatcher, err := a.loadConfigAndMatcher()
+	_, ruleMatcher, err := a.loadConfigAndMatcher(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -721,11 +719,11 @@ func (a *App) ValidateConfig() (string, error) {
 }
 
 // getFileSystem returns the filesystem to use - either injected or defaults to OS
-func (a *App) getFileSystem() filesystem.FileSystem {
+func (a *App) getFileSystem() afero.Fs {
 	if a.fileSystem != nil {
 		return a.fileSystem
 	}
-	return filesystem.NewOSFileSystem()
+	return afero.NewOsFs()
 }
 
 // SetMockLauncher sets the mock launcher for testing
@@ -734,7 +732,7 @@ func (a *App) SetMockLauncher(launcher ai.MessageGenerator) {
 }
 
 // clearSessionCache clears all session-based cached AI generation entries
-func (a *App) clearSessionCache() error {
+func (a *App) clearSessionCache(ctx context.Context) error {
 	// Use XDG-compliant cache path
 	storageManager := storage.New(a.getFileSystem())
 	cachePath, err := storageManager.GetCachePath()
@@ -760,15 +758,15 @@ func (a *App) clearSessionCache() error {
 		return fmt.Errorf("failed to clear session cache: %w", err)
 	}
 
-	log.Debug().
+	logging.Get(ctx).Debug().
 		Str("project_root", a.projectRoot).
-		Msg("Session cache cleared on session start")
+		Msg("session cache cleared on session start")
 
 	return nil
 }
 
 // processAIGeneration applies AI generation to a message if configured
-func (a *App) processAIGeneration(rule *config.Rule, message, _ string) (string, error) {
+func (a *App) processAIGeneration(ctx context.Context, rule *config.Rule, message, _ string) (string, error) {
 	generate := rule.GetGenerate()
 	// Skip if generation mode is "off"
 	if generate.Mode == "off" {
@@ -809,7 +807,7 @@ func (a *App) processAIGeneration(rule *config.Rule, message, _ string) (string,
 	}
 
 	// Generate message
-	result, err := generator.GenerateMessage(req)
+	result, err := generator.GenerateMessage(ctx, req)
 	if err != nil {
 		return message, fmt.Errorf("failed to generate AI message: %w", err)
 	}
@@ -823,7 +821,11 @@ type GenerateConfig interface {
 }
 
 // processAIGenerationGeneric method that accepts any type with GetGenerate()
-func (a *App) processAIGenerationGeneric(generateConfig GenerateConfig, message, pattern string) (string, error) {
+func (a *App) processAIGenerationGeneric(
+	ctx context.Context,
+	generateConfig GenerateConfig,
+	message, pattern string,
+) (string, error) {
 	generate := generateConfig.GetGenerate()
 	// Skip if generation mode is "off"
 	if generate.Mode == "off" {
@@ -863,7 +865,7 @@ func (a *App) processAIGenerationGeneric(generateConfig GenerateConfig, message,
 	}
 
 	// Generate message
-	result, err := generator.GenerateMessage(req)
+	result, err := generator.GenerateMessage(ctx, req)
 	if err != nil {
 		return message, fmt.Errorf("failed to generate AI message: %w", err)
 	}

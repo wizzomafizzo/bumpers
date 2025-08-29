@@ -77,7 +77,7 @@ func createRulesGenerateCommandWithLauncher(launcher ai.MessageGenerator) *cobra
 			// Try Claude generation first
 			if launcher != nil {
 				regexPrompt := ai.BuildRegexGenerationPrompt(input)
-				if pattern, err := launcher.GenerateMessage(regexPrompt); err == nil {
+				if pattern, err := launcher.GenerateMessage(cmd.Context(), regexPrompt); err == nil {
 					// Clean up the pattern in case Claude added extra text
 					cleanPattern := strings.TrimSpace(pattern)
 					_, _ = fmt.Fprintln(cmd.OutOrStdout(), cleanPattern)

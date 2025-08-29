@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/rs/zerolog/log"
 	"github.com/wizzomafizzo/bumpers/internal/config"
+	"github.com/wizzomafizzo/bumpers/internal/core/logging"
 	"github.com/wizzomafizzo/bumpers/internal/infrastructure/project"
 )
 
@@ -77,13 +77,13 @@ func (*Launcher) GetClaudePath() (string, error) {
 }
 
 // ExecuteWithInput runs Claude with the given input and arguments using pipes like the working SDK
-func (l *Launcher) ExecuteWithInput(input string) ([]byte, error) {
+func (l *Launcher) ExecuteWithInput(ctx context.Context, input string) ([]byte, error) {
 	claudePath, err := l.GetClaudePath()
 	if err != nil {
 		return nil, fmt.Errorf("failed to locate Claude binary: %w", err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	execCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
 	cmdArgs := []string{
@@ -96,22 +96,22 @@ func (l *Launcher) ExecuteWithInput(input string) ([]byte, error) {
 		input,
 	}
 
-	cmd := exec.CommandContext(ctx, claudePath, cmdArgs...) //nolint:gosec // claudePath is validated via GetClaudePath
+	cmd := exec.CommandContext(execCtx, claudePath, cmdArgs...) //nolint:gosec // claudePath validated
 	cmd.Env = append(os.Environ(), "BUMPERS_SKIP=1")
 
 	// Set working directory to project root to ensure Claude runs from there
 	if projectRoot, findErr := project.FindRoot(); findErr == nil {
 		cmd.Dir = projectRoot
-		log.Debug().
+		logging.Get(ctx).Debug().
 			Str("project_root", projectRoot).
 			Msg("setting Claude working directory to project root")
 	} else {
-		log.Warn().
+		logging.Get(ctx).Warn().
 			Err(findErr).
 			Msg("failed to find project root, Claude will use current working directory")
 	}
 
-	log.Debug().
+	logging.Get(ctx).Debug().
 		Str("claude_path", claudePath).
 		Strs("args", cmdArgs).
 		Int("input_length", len(input)).
@@ -145,8 +145,8 @@ type CLIResponse struct {
 }
 
 // GenerateMessage uses Claude to generate an AI response for the given prompt
-func (l *Launcher) GenerateMessage(prompt string) (string, error) {
-	output, err := l.ExecuteWithInput(prompt)
+func (l *Launcher) GenerateMessage(ctx context.Context, prompt string) (string, error) {
+	output, err := l.ExecuteWithInput(ctx, prompt)
 	if err != nil {
 		return "", err
 	}

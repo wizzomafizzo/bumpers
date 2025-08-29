@@ -6,11 +6,10 @@ import (
 	"io"
 	"strings"
 
-	"github.com/rs/zerolog/log"
+	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 	"github.com/wizzomafizzo/bumpers/internal/cli"
-	msgcontext "github.com/wizzomafizzo/bumpers/internal/core/messaging/context"
-	"github.com/wizzomafizzo/bumpers/internal/infrastructure/logging"
+	"github.com/wizzomafizzo/bumpers/internal/core/logging"
 	"github.com/wizzomafizzo/bumpers/internal/infrastructure/project"
 )
 
@@ -33,25 +32,27 @@ func findWorkingDir() (string, error) {
 	return root, nil
 }
 
-// initLogging initializes logging for hook commands
-func initLogging(workingDir string) error {
-	projectCtx := msgcontext.New(workingDir)
-	if err := logger.InitWithProjectContext(projectCtx); err != nil {
-		return fmt.Errorf("failed to initialize logger: %w", err)
+// initLogging initializes logging for hook commands and returns context with logger
+func initLogging(workingDir string) (context.Context, error) {
+	fs := afero.NewOsFs()
+	ctx, err := logging.New(context.Background(), fs, logging.Config{
+		ProjectID: workingDir,
+		Level:     logging.DebugLevel,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize logger: %w", err)
 	}
-	return nil
+	return ctx, nil
 }
 
 // processHookCommand processes hook input and returns exit code and error message
-func processHookCommand(app *cli.App, input io.Reader, _ io.Writer) (code int, response string) {
+func processHookCommand(ctx context.Context, app *cli.App, input io.Reader, _ io.Writer) (code int, response string) {
 	// Read input for processing
 	inputBytes, err := io.ReadAll(input)
 	if err != nil {
 		return 1, fmt.Sprintf("Error reading input: %v", err)
 	}
 
-	// Create context with the initialized global logger attached
-	ctx := log.Logger.WithContext(context.Background())
 	response, err = app.ProcessHook(ctx, strings.NewReader(string(inputBytes)))
 	if err != nil {
 		return 1, fmt.Sprintf("Error: %v", err)
@@ -83,16 +84,17 @@ func createHookCommand() *cobra.Command {
 				return fmt.Errorf("failed to find project root: %w", err)
 			}
 
-			if initErr := initLogging(workingDir); initErr != nil {
-				return fmt.Errorf("logger init failed: %w", initErr)
+			ctx, err := initLogging(workingDir)
+			if err != nil {
+				return fmt.Errorf("logger init failed: %w", err)
 			}
 
-			app, err := createAppFromCommand(cmd.Parent())
+			app, err := createAppFromCommand(ctx, cmd.Parent())
 			if err != nil {
 				return err
 			}
 
-			exitCode, message := processHookCommand(app, cmd.InOrStdin(), cmd.ErrOrStderr())
+			exitCode, message := processHookCommand(ctx, app, cmd.InOrStdin(), cmd.ErrOrStderr())
 
 			if message != "" && exitCode == 0 {
 				// Only output non-blocking messages (hookSpecificOutput)

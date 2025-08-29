@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/rs/zerolog"
 	"github.com/wizzomafizzo/bumpers/internal/config"
+	"github.com/wizzomafizzo/bumpers/internal/core/logging"
 	"github.com/wizzomafizzo/bumpers/internal/core/messaging/template"
 	"github.com/wizzomafizzo/bumpers/internal/infrastructure/constants"
 )
@@ -33,7 +33,7 @@ type ValidationResult struct {
 }
 
 func (a *App) ProcessUserPrompt(ctx context.Context, rawJSON json.RawMessage) (string, error) {
-	logger := zerolog.Ctx(ctx)
+	logger := logging.Get(ctx)
 
 	// Parse the UserPromptSubmit JSON
 	var event UserPromptEvent
@@ -96,7 +96,7 @@ func (a *App) ProcessUserPrompt(ctx context.Context, rawJSON json.RawMessage) (s
 	}
 
 	// Apply AI generation if configured
-	finalMessage, err := a.processAIGenerationGeneric(matchedCommand, processedMessage, commandStr)
+	finalMessage, err := a.processAIGenerationGeneric(ctx, matchedCommand, processedMessage, commandStr)
 	if err != nil {
 		// Log error but don't fail the hook - fallback to original message
 		logger.Error().Err(err).Msg("AI generation failed, using original message")

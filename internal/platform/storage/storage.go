@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 
 	"github.com/adrg/xdg"
+	"github.com/spf13/afero"
 	"github.com/wizzomafizzo/bumpers/internal/infrastructure/constants"
-	"github.com/wizzomafizzo/bumpers/internal/platform/filesystem"
 )
 
 const (
@@ -17,11 +17,11 @@ const (
 
 // Manager handles storage operations with filesystem abstraction
 type Manager struct {
-	fs filesystem.FileSystem
+	fs afero.Fs
 }
 
 // New creates a new storage manager with the given filesystem
-func New(fs filesystem.FileSystem) *Manager {
+func New(fs afero.Fs) *Manager {
 	return &Manager{fs: fs}
 }
 
