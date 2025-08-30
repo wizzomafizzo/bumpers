@@ -3,11 +3,13 @@ package cli
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/wizzomafizzo/bumpers/internal/infrastructure/constants"
 	"github.com/wizzomafizzo/bumpers/internal/platform/claude"
 )
 
@@ -25,7 +27,7 @@ commands:
 	app := NewApp(ctx, configFile)
 
 	// Create UserPromptSubmit event with command
-	promptJSON := `{"prompt": "$test"}`
+	promptJSON := `{"prompt": "` + constants.CommandPrefix + `test"}`
 
 	// Test that ProcessUserPrompt works with context - this will fail until we add context parameter
 	result, err := app.ProcessUserPrompt(ctx, json.RawMessage(promptJSON))
@@ -41,17 +43,17 @@ func TestProcessUserPrompt(t *testing.T) {
 	t.Parallel()
 	ctx, _ := setupTestWithContext(t)
 
-	configContent := `rules:
+	configContent := fmt.Sprintf(`rules:
   - match: "go test"
     send: "Use just test instead"
     generate: "off"
 commands:
   - name: "help"
-    send: "Available commands:\\n$help - Show this help\\n$status - Show project status"
+    send: "Available commands:\\n%shelp - Show this help\\n%sstatus - Show project status"
     generate: "off"
   - name: "status"
     send: "Project Status: All systems operational"
-    generate: "off"`
+    generate: "off"`, constants.CommandPrefix, constants.CommandPrefix)
 
 	configPath := createTempConfig(t, configContent)
 	app := NewApp(ctx, configPath)
@@ -63,19 +65,23 @@ commands:
 		wantErr bool
 	}{
 		{
-			name: "Help command ($help)",
-			input: `{
-				"prompt": "$help"
-			}`,
-			want: `{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit",` +
-				`"additionalContext":"Available commands:\\n$help - Show this help\\n$status - Show project status"}}`,
+			name: fmt.Sprintf("Help command (%shelp)", constants.CommandPrefix),
+			input: fmt.Sprintf(`{
+				"prompt": "%shelp"
+			}`, constants.CommandPrefix),
+			want: fmt.Sprintf(
+				`{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit",`+
+					`"additionalContext":"Available commands:\\n%shelp - Show this help\\n`+
+					`%sstatus - Show project status"}}`,
+				constants.CommandPrefix,
+				constants.CommandPrefix),
 			wantErr: false,
 		},
 		{
-			name: "Status command ($status)",
-			input: `{
-				"prompt": "$status"
-			}`,
+			name: fmt.Sprintf("Status command (%sstatus)", constants.CommandPrefix),
+			input: fmt.Sprintf(`{
+				"prompt": "%sstatus"
+			}`, constants.CommandPrefix),
 			want: `{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit",` +
 				`"additionalContext":"Project Status: All systems operational"}}`,
 			wantErr: false,
@@ -89,10 +95,10 @@ commands:
 			wantErr: false,
 		},
 		{
-			name: "Invalid command index ($5)",
-			input: `{
-				"prompt": "$5"
-			}`,
+			name: fmt.Sprintf("Invalid command index (%s5)", constants.CommandPrefix),
+			input: fmt.Sprintf(`{
+				"prompt": "%s5"
+			}`, constants.CommandPrefix),
 			want:    "",
 			wantErr: false,
 		},
@@ -132,7 +138,7 @@ commands:
 	app := NewApp(ctx, configPath)
 
 	// Test that named command prompts work
-	promptJSON := `{"prompt": "$test"}`
+	promptJSON := `{"prompt": "` + constants.CommandPrefix + `test"}`
 	result, err := app.ProcessUserPrompt(context.Background(), json.RawMessage(promptJSON))
 	if err != nil {
 		t.Fatalf("ProcessUserPrompt failed: %v", err)
@@ -162,7 +168,7 @@ func TestProcessUserPromptWithCommandGeneration(t *testing.T) {
 	mockLauncher.SetResponseForPattern("", "Enhanced help message from AI")
 	app.SetMockLauncher(mockLauncher)
 
-	promptJSON := `{"prompt": "$help"}`
+	promptJSON := `{"prompt": "` + constants.CommandPrefix + `help"}`
 	result, err := app.ProcessUserPrompt(context.Background(), json.RawMessage(promptJSON))
 	if err != nil {
 		t.Fatalf("ProcessUserPrompt failed: %v", err)
@@ -192,7 +198,7 @@ func TestProcessUserPromptWithTemplate(t *testing.T) {
 	configPath := createTempConfig(t, configContent)
 	app := NewApp(ctx, configPath)
 
-	promptJSON := `{"prompt": "$hello"}`
+	promptJSON := `{"prompt": "` + constants.CommandPrefix + `hello"}`
 	result, err := app.ProcessUserPrompt(ctx, json.RawMessage(promptJSON))
 	if err != nil {
 		t.Fatalf("ProcessUserPrompt failed: %v", err)
@@ -217,7 +223,7 @@ func TestProcessUserPromptWithTodayVariable(t *testing.T) {
 	configPath := createTempConfig(t, configContent)
 	app := NewApp(ctx, configPath)
 
-	promptJSON := `{"prompt": "$hello"}`
+	promptJSON := `{"prompt": "` + constants.CommandPrefix + `hello"}`
 	result, err := app.ProcessUserPrompt(ctx, json.RawMessage(promptJSON))
 	if err != nil {
 		t.Fatalf("ProcessUserPrompt failed: %v", err)
@@ -258,7 +264,7 @@ func TestProcessUserPromptWithCommandArguments(t *testing.T) {
 	configPath := createTempConfig(t, configContent)
 	app := NewApp(ctx, configPath)
 
-	promptJSON := `{"prompt": "$test arg1 arg2"}`
+	promptJSON := `{"prompt": "` + constants.CommandPrefix + `test arg1 arg2"}`
 	result, err := app.ProcessUserPrompt(ctx, json.RawMessage(promptJSON))
 	if err != nil {
 		t.Fatalf("ProcessUserPrompt failed: %v", err)
@@ -298,7 +304,7 @@ func TestProcessUserPromptWithNoArguments(t *testing.T) {
 	configPath := createTempConfig(t, configContent)
 	app := NewApp(ctx, configPath)
 
-	promptJSON := `{"prompt": "$test"}`
+	promptJSON := `{"prompt": "` + constants.CommandPrefix + `test"}`
 	result, err := app.ProcessUserPrompt(ctx, json.RawMessage(promptJSON))
 	if err != nil {
 		t.Fatalf("ProcessUserPrompt failed: %v", err)
