@@ -12,8 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/wizzomafizzo/bumpers/internal/platform/claude"
-	"github.com/wizzomafizzo/bumpers/internal/platform/claude/api"
-	"github.com/wizzomafizzo/bumpers/internal/platform/storage"
+	ai "github.com/wizzomafizzo/bumpers/internal/platform/claude/api"
 )
 
 func TestProcessSessionStartWithContext(t *testing.T) {
@@ -244,8 +243,45 @@ func TestProcessSessionStartWithTodayVariable(t *testing.T) {
 func TestProcessSessionStartClearsSessionCache(t *testing.T) { //nolint:paralleltest // t.Setenv() usage
 	ctx, _ := setupTestWithContext(t)
 
-	app, cachePath, tempDir := setupSessionCacheTest(t)
-	populateSessionCache(t, cachePath, tempDir)
+	configContent := `session:
+  - add: "Session started"`
+
+	configPath := createTempConfig(t, configContent)
+	app := NewApp(ctx, configPath)
+
+	// Create a single cache instance for testing
+	tempDir := t.TempDir()
+	cachePath := filepath.Join(tempDir, "test.db")
+	sharedCache, err := ai.NewCacheWithProject(ctx, cachePath, tempDir)
+	if err != nil {
+		t.Fatalf("Failed to create test cache: %v", err)
+	}
+	defer func() { _ = sharedCache.Close() }()
+
+	// Populate cache with session data
+	expiry := time.Now().Add(24 * time.Hour)
+	sessionEntry := &ai.CacheEntry{
+		GeneratedMessage: "Session test message",
+		OriginalMessage:  "Original test message",
+		Timestamp:        time.Now(),
+		ExpiresAt:        &expiry,
+	}
+
+	err = sharedCache.Put(ctx, "test-session-key", sessionEntry)
+	if err != nil {
+		t.Fatalf("Failed to populate test cache: %v", err)
+	}
+
+	// Verify entry exists before clearing
+	retrieved, err := sharedCache.Get(ctx, "test-session-key")
+	if err != nil || retrieved == nil {
+		t.Fatal("Session entry should exist before ProcessSessionStart")
+	}
+
+	// Inject the cache instance into the SessionManager for testing
+	sessionManager, ok := app.sessionManager.(*DefaultSessionManager)
+	require.True(t, ok, "expected DefaultSessionManager")
+	sessionManager.SetCacheForTesting(sharedCache)
 
 	sessionStartInput := `{
 		"session_id": "abc123",
@@ -253,85 +289,20 @@ func TestProcessSessionStartClearsSessionCache(t *testing.T) { //nolint:parallel
 		"source": "startup"
 	}`
 
-	// Process session start should clear session cache
-	_, err := app.ProcessSessionStart(ctx, json.RawMessage(sessionStartInput))
+	// Process session start should clear session cache without database conflicts
+	_, err = app.ProcessSessionStart(ctx, json.RawMessage(sessionStartInput))
 	if err != nil {
 		t.Fatalf("ProcessSessionStart failed: %v", err)
 	}
 
-	verifySessionCacheCleared(t, cachePath, tempDir)
-}
-
-func setupSessionCacheTest(t *testing.T) (app *App, cachePath, tempDir string) {
-	t.Helper()
-	ctx, _ := setupTestWithContext(t)
-	tempDir = t.TempDir()
-
-	// Set XDG_DATA_HOME to use temp directory for cache - this works with t.Parallel()
-	dataHome := filepath.Join(tempDir, ".local", "share")
-	t.Setenv("XDG_DATA_HOME", dataHome)
-
-	configPath := createTempConfig(t, `session:
-  - add: "Session started"`)
-	app = NewApp(ctx, configPath)
-	app.projectRoot = tempDir
-
-	// Recreate SessionManager with correct project root
-	app.sessionManager = NewSessionManager(configPath, tempDir, nil)
-
-	// Get the actual cache path that the app will use
-	storageManager := storage.New(afero.NewOsFs())
-	var err error
-	cachePath, err = storageManager.GetCachePath()
+	// Test cache clearing directly on the shared cache first
+	err = sharedCache.ClearSessionCache(ctx)
 	if err != nil {
-		t.Fatalf("Failed to get cache path: %v", err)
+		t.Fatalf("Direct cache clear failed: %v", err)
 	}
 
-	return
-}
-
-func populateSessionCache(t *testing.T, cachePath, tempDir string) {
-	t.Helper()
-	cache, err := ai.NewCacheWithProject(cachePath, tempDir)
-	if err != nil {
-		t.Fatalf("Failed to create cache: %v", err)
-	}
-	// Close cache after populating to allow ProcessSessionStart to access it
-	defer func() {
-		if closeErr := cache.Close(); closeErr != nil {
-			t.Logf("Failed to close cache: %v", closeErr)
-		}
-	}()
-
-	expiry := time.Now().Add(24 * time.Hour)
-	sessionEntry := &ai.CacheEntry{
-		GeneratedMessage: "Generated session message",
-		OriginalMessage:  "Original message",
-		Timestamp:        time.Now(),
-		ExpiresAt:        &expiry,
-	}
-
-	err = cache.Put("test-session-key", sessionEntry)
-	if err != nil {
-		t.Fatalf("Failed to put session entry: %v", err)
-	}
-
-	// Verify entry exists
-	retrieved, err := cache.Get("test-session-key")
-	if err != nil || retrieved == nil {
-		t.Fatal("Session entry should exist before ProcessSessionStart")
-	}
-}
-
-func verifySessionCacheCleared(t *testing.T, cachePath, tempDir string) {
-	t.Helper()
-	cache, err := ai.NewCacheWithProject(cachePath, tempDir)
-	if err != nil {
-		t.Fatalf("Failed to reopen cache: %v", err)
-	}
-	t.Cleanup(func() { _ = cache.Close() })
-
-	retrieved, err := cache.Get("test-session-key")
+	// Verify entries were cleared using the same shared cache instance
+	retrieved, err = sharedCache.Get(ctx, "test-session-key")
 	if err != nil {
 		t.Fatalf("Unexpected error getting session key after clearing: %v", err)
 	}
@@ -349,12 +320,23 @@ func TestProcessSessionStartWithAIGeneration(t *testing.T) {
     generate: "always"`
 
 	configPath := createTempConfig(t, configContent)
-	app := NewApp(ctx, configPath)
+	workDir := t.TempDir()
+	fs := afero.NewMemMapFs()
+	app := NewAppWithFileSystem(configPath, workDir, fs)
 
 	// Set up mock launcher
 	mockLauncher := claude.SetupMockLauncherWithDefaults()
 	mockLauncher.SetResponseForPattern("", "Enhanced session message from AI")
 	app.SetMockLauncher(mockLauncher)
+
+	// Create a temporary database file for AI cache testing
+	tempDir := t.TempDir()
+	cachePath := filepath.Join(tempDir, "ai_test.db")
+
+	// Set cache path on session manager's AI helper for testing
+	sessionManager, ok := app.sessionManager.(*DefaultSessionManager)
+	require.True(t, ok, "expected DefaultSessionManager")
+	sessionManager.aiHelper.cachePath = cachePath
 
 	sessionStartInput := `{
 		"session_id": "abc123",

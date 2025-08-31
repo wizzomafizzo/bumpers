@@ -1,25 +1,17 @@
 rules:
     - match: ' /tmp'
       send: Use a "tmp" directory in the project root instead.
-    - match: 'go test '
+    - match: '^go test'
       send: |
-        **Direct replacement:** Simply replace `go test` with `just test-unit`:
-        - `go test -v ./internal/cli -run TestName` → `just test-unit -v ./internal/cli -run TestName`
-        - `go test ./...` → `just test-unit ./...`
-        - `go test -timeout 10s ./pkg` → `just test-unit -timeout 10s ./pkg`
-        
-        **Other test commands:**
-        - `just test` - Full test suite (recommended for commits)
-        - `just test-integration` - Tests with dependencies  
-        - `just test-e2e` - Complete system validation
-        
-        **Why this helps:** The `just` commands ensure consistent test execution across the team and integrate seamlessly with our TDD practices and coverage requirements.
+        This project uses "just test" for TDD integration. Simply replace
+        your "go" with "just" in the command to use this integration, it's
+        a simple wrapper of "go test" and supports the same arguments.
     - match: ^(gci|go vet|goimports|gofumpt|go *fmt|golangci-lint)
       send: Use "just lint fix" instead to resolve lint/formatting issues.
     - match: git commit --no-verify|LEFTHOOK=0
       send: Pre-commit hooks must not be skipped.
     - match: fieldalignment
-      send: Fix field alignment issues by adding names to struct fields and running "just lint fix".
+      send: Fix field alignment by adding names to fields and run "just lint fix".
     - match: find\s+.*-exec\s+(rm(\s+-\w+)*|sed\s+-i|>\s*\S+)\s+
       send: Don't use dangerous exec in find commands. Stick to manual edits.
     - match: BUMPERS_SKIP=1
@@ -31,11 +23,11 @@ rules:
       send: Use Write tool instead of cat heredoc redirection to create files.
 commands:
     - name: test
-      send: Run "just test" to run all tests and fix ALL failing tests if any.
+      send: Run "just test-all" to run all tests and fix ALL failing tests if any.
     - name: lint
       send: Run "just lint fix" and fix ALL linting issues if any.
     - name: check
-      send: Run "just lint fix" and "just test" and fix ALL issues if any.
+      send: Run "just lint fix" and "just test-all" and fix ALL issues if any.
     - name: commit
       send: Commit ALL modified files.
     - name: logs

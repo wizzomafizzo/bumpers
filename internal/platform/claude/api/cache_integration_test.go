@@ -3,6 +3,7 @@
 package ai
 
 import (
+	"context"
 	"path/filepath"
 	"testing"
 	"time"
@@ -10,11 +11,12 @@ import (
 
 func TestCacheBasicOperations(t *testing.T) {
 	t.Parallel()
+	ctx := context.Background()
 	// Create temporary directory for test database
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "test.db")
 
-	cache, err := NewCacheWithProject(dbPath, "test-project")
+	cache, err := NewCacheWithProject(ctx, dbPath, "test-project")
 	if err != nil {
 		t.Fatalf("Failed to create cache: %v", err)
 	}
@@ -33,13 +35,13 @@ func TestCacheBasicOperations(t *testing.T) {
 	}
 
 	// Test Put
-	err = cache.Put(key, entry)
+	err = cache.Put(ctx, key, entry)
 	if err != nil {
 		t.Fatalf("Failed to put entry: %v", err)
 	}
 
 	// Test Get
-	retrieved, err := cache.Get(key)
+	retrieved, err := cache.Get(ctx, key)
 	if err != nil {
 		t.Fatalf("Failed to get entry: %v", err)
 	}
@@ -51,7 +53,7 @@ func TestCacheBasicOperations(t *testing.T) {
 	}
 
 	// Test Get non-existent key
-	nonExistent, err := cache.Get("non-existent")
+	nonExistent, err := cache.Get(ctx, "non-existent")
 	if err != nil {
 		t.Fatalf("Get non-existent key should not error: %v", err)
 	}
@@ -62,6 +64,7 @@ func TestCacheBasicOperations(t *testing.T) {
 
 func TestCachePersistenceBetweenSessions(t *testing.T) {
 	t.Parallel()
+	ctx := context.Background()
 	// Create temporary directory for test database
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "test.db")
@@ -75,12 +78,12 @@ func TestCachePersistenceBetweenSessions(t *testing.T) {
 	}
 
 	// First session: create cache and store entry
-	cache1, err := NewCacheWithProject(dbPath, "test-project")
+	cache1, err := NewCacheWithProject(ctx, dbPath, "test-project")
 	if err != nil {
 		t.Fatalf("Failed to create cache: %v", err)
 	}
 
-	err = cache1.Put(key, entry)
+	err = cache1.Put(ctx, key, entry)
 	if err != nil {
 		t.Fatalf("Failed to put entry: %v", err)
 	}
@@ -90,7 +93,7 @@ func TestCachePersistenceBetweenSessions(t *testing.T) {
 	}
 
 	// Second session: reopen cache and retrieve entry
-	cache2, err := NewCacheWithProject(dbPath, "test-project")
+	cache2, err := NewCacheWithProject(ctx, dbPath, "test-project")
 	if err != nil {
 		t.Fatalf("Failed to reopen cache: %v", err)
 	}
@@ -100,7 +103,7 @@ func TestCachePersistenceBetweenSessions(t *testing.T) {
 		}
 	})
 
-	retrieved, err := cache2.Get(key)
+	retrieved, err := cache2.Get(ctx, key)
 	if err != nil {
 		t.Fatalf("Failed to get entry: %v", err)
 	}
@@ -114,12 +117,13 @@ func TestCachePersistenceBetweenSessions(t *testing.T) {
 
 func TestCacheWithProjectContext(t *testing.T) {
 	t.Parallel()
+	ctx := context.Background()
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "test.db")
 
 	// Create cache with project context
 	projectID := "test-a1b2"
-	cache, err := NewCacheWithProject(dbPath, projectID)
+	cache, err := NewCacheWithProject(ctx, dbPath, projectID)
 	if err != nil {
 		t.Fatalf("Failed to create cache with project: %v", err)
 	}
@@ -137,13 +141,13 @@ func TestCacheWithProjectContext(t *testing.T) {
 		Timestamp:        time.Now(),
 	}
 
-	err = cache.Put(key, entry)
+	err = cache.Put(ctx, key, entry)
 	if err != nil {
 		t.Fatalf("Failed to put entry: %v", err)
 	}
 
 	// Retrieve entry
-	retrieved, err := cache.Get(key)
+	retrieved, err := cache.Get(ctx, key)
 	if err != nil {
 		t.Fatalf("Failed to get entry: %v", err)
 	}
@@ -159,10 +163,11 @@ func TestCacheWithProjectContext(t *testing.T) {
 
 func TestCacheClearSessionCache(t *testing.T) {
 	t.Parallel()
+	ctx := context.Background()
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "test.db")
 
-	cache, err := NewCacheWithProject(dbPath, "test-project")
+	cache, err := NewCacheWithProject(ctx, dbPath, "test-project")
 	if err != nil {
 		t.Fatalf("Failed to create cache: %v", err)
 	}
@@ -176,7 +181,7 @@ func TestCacheClearSessionCache(t *testing.T) {
 	setupClearSessionCacheTest(t, cache)
 
 	// Clear session cache
-	err = cache.ClearSessionCache()
+	err = cache.ClearSessionCache(ctx)
 	if err != nil {
 		t.Fatalf("Failed to clear session cache: %v", err)
 	}
@@ -187,6 +192,7 @@ func TestCacheClearSessionCache(t *testing.T) {
 
 func setupClearSessionCacheTest(t *testing.T, cache *Cache) {
 	t.Helper()
+	ctx := context.Background()
 
 	now := time.Now()
 	sessionExpiry := now.Add(24 * time.Hour)
@@ -213,7 +219,7 @@ func setupClearSessionCacheTest(t *testing.T, cache *Cache) {
 	}
 
 	for key, entry := range entries {
-		err := cache.Put(key, entry)
+		err := cache.Put(ctx, key, entry)
 		if err != nil {
 			t.Fatalf("Failed to put %s: %v", key, err)
 		}
@@ -221,7 +227,7 @@ func setupClearSessionCacheTest(t *testing.T, cache *Cache) {
 
 	// Verify all entries exist
 	for key := range entries {
-		retrieved, err := cache.Get(key)
+		retrieved, err := cache.Get(ctx, key)
 		if err != nil || retrieved == nil {
 			t.Fatalf("%s should exist before clearing", key)
 		}
@@ -230,11 +236,12 @@ func setupClearSessionCacheTest(t *testing.T, cache *Cache) {
 
 func verifyClearSessionCacheResults(t *testing.T, cache *Cache) {
 	t.Helper()
+	ctx := context.Background()
 
 	// Verify session entries are gone
 	sessionKeys := []string{"session-key-1", "session-key-2"}
 	for _, key := range sessionKeys {
-		retrieved, err := cache.Get(key)
+		retrieved, err := cache.Get(ctx, key)
 		if err != nil {
 			t.Fatalf("Unexpected error getting %s: %v", key, err)
 		}
@@ -244,7 +251,7 @@ func verifyClearSessionCacheResults(t *testing.T, cache *Cache) {
 	}
 
 	// Verify once entry still exists
-	retrieved, err := cache.Get("once-key")
+	retrieved, err := cache.Get(ctx, "once-key")
 	if err != nil {
 		t.Fatalf("Unexpected error getting once key: %v", err)
 	}
@@ -255,12 +262,13 @@ func verifyClearSessionCacheResults(t *testing.T, cache *Cache) {
 
 func TestCacheShouldNotStoreGenerateMode(t *testing.T) {
 	t.Parallel()
+	ctx := context.Background()
 	// This test demonstrates that cache entries should not store generate mode
 	// Cache invalidation should be based on live config, not stored mode
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "test.db")
 
-	cache, err := NewCacheWithProject(dbPath, "test-project")
+	cache, err := NewCacheWithProject(ctx, dbPath, "test-project")
 	if err != nil {
 		t.Fatalf("Failed to create cache: %v", err)
 	}
@@ -280,13 +288,13 @@ func TestCacheShouldNotStoreGenerateMode(t *testing.T) {
 
 	// Store the entry
 	key := "test-key"
-	err = cache.Put(key, entry)
+	err = cache.Put(ctx, key, entry)
 	if err != nil {
 		t.Fatalf("Failed to put entry: %v", err)
 	}
 
 	// Retrieve and verify GenerateMode is not stored
-	retrieved, err := cache.Get(key)
+	retrieved, err := cache.Get(ctx, key)
 	if err != nil {
 		t.Fatalf("Failed to get entry: %v", err)
 	}
@@ -302,11 +310,12 @@ func TestCacheShouldNotStoreGenerateMode(t *testing.T) {
 
 func TestCacheClearByCurrentMode(t *testing.T) {
 	t.Parallel()
+	ctx := context.Background()
 	// Test that cache clearing uses current config mode, not stored mode
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "test.db")
 
-	cache, err := NewCacheWithProject(dbPath, "test-project")
+	cache, err := NewCacheWithProject(ctx, dbPath, "test-project")
 	if err != nil {
 		t.Fatalf("Failed to create cache: %v", err)
 	}
@@ -337,21 +346,21 @@ func TestCacheClearByCurrentMode(t *testing.T) {
 
 	// Store entries
 	for key, entry := range entries {
-		if putErr := cache.Put(key, entry); putErr != nil {
+		if putErr := cache.Put(ctx, key, entry); putErr != nil {
 			t.Fatalf("Failed to put %s: %v", key, putErr)
 		}
 	}
 
 	// Test clearing with current mode "session" - should clear session entries
 	// Currently using old method signature, but we want to pass currentMode parameter
-	err = cache.ClearSessionCache()
+	err = cache.ClearSessionCache(ctx)
 	if err != nil {
 		t.Fatalf("Failed to clear cache with current mode: %v", err)
 	}
 
 	// Verify appropriate entries were cleared based on current mode
-	entry1, _ := cache.Get("entry1")
-	entry2, _ := cache.Get("entry2")
+	entry1, _ := cache.Get(ctx, "entry1")
+	entry2, _ := cache.Get(ctx, "entry2")
 
 	if entry1 != nil {
 		t.Error("Entry with session-like expiry should be cleared when current mode is session")
@@ -363,10 +372,11 @@ func TestCacheClearByCurrentMode(t *testing.T) {
 
 // Benchmark tests for cache performance
 func BenchmarkCachePut(b *testing.B) {
+	ctx := context.Background()
 	tempDir := b.TempDir()
 	dbPath := filepath.Join(tempDir, "bench.db")
 
-	cache, err := NewCacheWithProject(dbPath, "bench-project")
+	cache, err := NewCacheWithProject(ctx, dbPath, "bench-project")
 	if err != nil {
 		b.Fatalf("Failed to create cache: %v", err)
 	}
@@ -382,15 +392,16 @@ func BenchmarkCachePut(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		key := "bench-key-" + string(rune(i))
-		_ = cache.Put(key, entry)
+		_ = cache.Put(ctx, key, entry)
 	}
 }
 
 func BenchmarkCacheGet(b *testing.B) {
+	ctx := context.Background()
 	tempDir := b.TempDir()
 	dbPath := filepath.Join(tempDir, "bench.db")
 
-	cache, err := NewCacheWithProject(dbPath, "bench-project")
+	cache, err := NewCacheWithProject(ctx, dbPath, "bench-project")
 	if err != nil {
 		b.Fatalf("Failed to create cache: %v", err)
 	}
@@ -408,12 +419,12 @@ func BenchmarkCacheGet(b *testing.B) {
 	for i := 0; i < 100; i++ {
 		key := "get-bench-key-" + string(rune(i))
 		keys[i] = key
-		_ = cache.Put(key, entry)
+		_ = cache.Put(ctx, key, entry)
 	}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		key := keys[i%len(keys)]
-		_, _ = cache.Get(key)
+		_, _ = cache.Get(ctx, key)
 	}
 }

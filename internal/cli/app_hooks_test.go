@@ -2,12 +2,14 @@ package cli
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/wizzomafizzo/bumpers/internal/platform/claude"
+	"github.com/wizzomafizzo/bumpers/internal/platform/state"
 )
 
 func TestProcessHookWithContext(t *testing.T) {
@@ -378,4 +380,284 @@ func TestProcessHookSimplifiedSchemaAlwaysDenies(t *testing.T) {
 	if result3.Message != "" {
 		t.Errorf("Expected empty result for allowed command, got %q", result3.Message)
 	}
+}
+
+func TestProcessHookRespectsDisabledState(t *testing.T) {
+	t.Parallel()
+	ctx, _ := setupTestWithContext(t)
+
+	// Create config with rule that should be matched
+	configContent := `rules:
+  - match: "go test"
+    send: "Use just test instead"
+    generate: "off"`
+
+	configPath := createTempConfig(t, configContent)
+	app := NewApp(ctx, configPath)
+
+	// Input that would normally match the rule
+	hookInput := `{
+		"hookEventName": "PreToolUse",
+		"tool_input": {
+			"command": "go test ./...",
+			"description": "Run tests"
+		},
+		"tool_name": "Bash"
+	}`
+
+	// First, rules are enabled by default - should block
+	result1, err := app.ProcessHook(ctx, strings.NewReader(hookInput))
+	require.NoError(t, err)
+	assert.NotEmpty(t, result1.Message, "Should block command when rules enabled")
+
+	// Create a hook processor with a state manager that has rules disabled
+	stateManager, err := createTestStateManagerWithDisabledRules(t)
+	require.NoError(t, err)
+	defer func() {
+		if closeErr := stateManager.Close(); closeErr != nil {
+			t.Errorf("Failed to close state manager: %v", closeErr)
+		}
+	}()
+
+	hookProcessorWithState := NewHookProcessor(app.configValidator, app.projectRoot, stateManager)
+
+	// With disabled rules, the same command should be allowed
+	result2, err := hookProcessorWithState.ProcessPreToolUse(ctx, []byte(hookInput))
+	require.NoError(t, err)
+	assert.Empty(t, result2, "Should allow command when rules disabled")
+}
+
+func TestStateManagerChecksBehaveIdentically(t *testing.T) {
+	t.Parallel()
+	ctx, _ := setupTestWithContext(t)
+
+	// Test data for both PreToolUse and PostToolUse
+	preToolInput := `{
+		"hookEventName": "PreToolUse",
+		"tool_input": {
+			"command": "go test ./...",
+			"description": "Run tests"
+		},
+		"tool_name": "Bash"
+	}`
+
+	postToolInput := `{
+		"hookEventName": "PostToolUse",
+		"tool_name": "Bash",
+		"tool_input": {
+			"command": "go test",
+			"description": "Run tests"
+		},
+		"tool_response": {
+			"output": "test output"
+		}
+	}`
+
+	configContent := `rules:
+  - match: "go test"
+    send: "Use just test instead"
+    generate: "off"
+  - event: "post"
+    match: "test output"
+    send: "Post-tool message"
+    generate: "off"`
+
+	configPath := createTempConfig(t, configContent)
+	validator := NewConfigValidator(configPath, t.TempDir())
+
+	// Test with disabled rules - both should behave identically (return empty)
+	stateManager, err := createTestStateManagerWithDisabledRules(t)
+	require.NoError(t, err)
+	defer func() { _ = stateManager.Close() }()
+
+	hookProcessor := NewHookProcessor(validator, configPath, stateManager)
+
+	preResult, err := hookProcessor.ProcessPreToolUse(ctx, []byte(preToolInput))
+	require.NoError(t, err)
+
+	postResult, err := hookProcessor.ProcessPostToolUse(ctx, []byte(postToolInput))
+	require.NoError(t, err)
+
+	// Both should return empty string when rules are disabled
+	assert.Empty(t, preResult, "PreToolUse should allow command when rules disabled")
+	assert.Empty(t, postResult, "PostToolUse should allow command when rules disabled")
+
+	// Test with skip flag - both should behave identically
+	stateManager2, err := createTestStateManagerWithSkipFlag(t)
+	require.NoError(t, err)
+	defer func() { _ = stateManager2.Close() }()
+
+	hookProcessor2 := NewHookProcessor(validator, configPath, stateManager2)
+
+	preSkipResult, err := hookProcessor2.ProcessPreToolUse(ctx, []byte(preToolInput))
+	require.NoError(t, err)
+
+	postSkipResult, err := hookProcessor2.ProcessPostToolUse(ctx, []byte(postToolInput))
+	require.NoError(t, err)
+
+	// Both should return empty string when skip flag is set
+	assert.Empty(t, preSkipResult, "PreToolUse should allow command when skip flag set")
+	assert.Empty(t, postSkipResult, "PostToolUse should allow command when skip flag set")
+}
+
+func TestShouldSkipProcessingMethodExists(t *testing.T) {
+	t.Parallel()
+	ctx, _ := setupTestWithContext(t)
+
+	// This test ensures the shouldSkipProcessing method exists and works correctly
+	// to eliminate code duplication between ProcessPreToolUse and ProcessPostToolUse
+	configPath := createTempConfig(t, "rules: []")
+	validator := NewConfigValidator(configPath, t.TempDir())
+
+	// Test with no state manager
+	hookProcessor1 := NewHookProcessor(validator, configPath, nil)
+	shouldSkip1 := hookProcessor1.shouldSkipProcessing(ctx)
+	assert.False(t, shouldSkip1, "Should not skip when no state manager")
+
+	// Test with rules disabled
+	stateManager, err := createTestStateManagerWithDisabledRules(t)
+	require.NoError(t, err)
+	defer func() { _ = stateManager.Close() }()
+
+	hookProcessor2 := NewHookProcessor(validator, configPath, stateManager)
+	shouldSkip2 := hookProcessor2.shouldSkipProcessing(ctx)
+	assert.True(t, shouldSkip2, "Should skip when rules disabled")
+}
+
+// createTestStateManagerWithDisabledRules creates a state manager for testing with rules disabled
+func createTestStateManagerWithDisabledRules(t *testing.T) (*state.Manager, error) {
+	ctx := context.Background()
+	// Create temporary database file
+	tempFile := t.TempDir() + "/test-state.db"
+
+	// Create state manager
+	stateManager, err := state.NewManager(tempFile, "test-project")
+	if err != nil {
+		return nil, fmt.Errorf("failed to create state manager: %w", err)
+	}
+
+	// Disable rules
+	err = stateManager.SetRulesEnabled(ctx, false)
+	if err != nil {
+		if closeErr := stateManager.Close(); closeErr != nil {
+			t.Errorf("Failed to close state manager during cleanup: %v", closeErr)
+		}
+		return nil, fmt.Errorf("failed to disable rules: %w", err)
+	}
+
+	return stateManager, nil
+}
+
+// createTestStateManagerWithSkipFlag creates a state manager for testing with skip flag set
+func createTestStateManagerWithSkipFlag(t *testing.T) (*state.Manager, error) {
+	ctx := context.Background()
+	// Create temporary database file
+	tempFile := t.TempDir() + "/test-state.db"
+
+	// Create state manager
+	stateManager, err := state.NewManager(tempFile, "test-project")
+	if err != nil {
+		return nil, fmt.Errorf("failed to create state manager: %w", err)
+	}
+
+	// Set skip flag
+	err = stateManager.SetSkipNext(ctx, true)
+	if err != nil {
+		if closeErr := stateManager.Close(); closeErr != nil {
+			t.Errorf("Failed to close state manager during cleanup: %v", closeErr)
+		}
+		return nil, fmt.Errorf("failed to set skip flag: %w", err)
+	}
+
+	return stateManager, nil
+}
+
+func TestProcessPostToolUseRespectsDisabledState(t *testing.T) {
+	t.Parallel()
+	ctx, _ := setupTestWithContext(t)
+
+	// Create config with a post-event rule that should be matched
+	configContent := `rules:
+  - match:
+      pattern: "test output"
+      event: "post"
+    send: "Consider reviewing test results"
+    generate: "off"`
+
+	configPath := createTempConfig(t, configContent)
+	app := NewApp(ctx, configPath)
+
+	// Input that would normally match the rule
+	postHookInput := `{
+		"hookEventName": "PostToolUse",
+		"tool_name": "Bash",
+		"tool_response": "test output from command",
+		"transcript_path": ""
+	}`
+
+	// First, rules are enabled by default - should block
+	result1, err := app.ProcessPostToolUse(ctx, []byte(postHookInput))
+	require.NoError(t, err)
+	assert.NotEmpty(t, result1, "Should block post-tool-use when rules enabled")
+
+	// Create a hook processor with a state manager that has rules disabled
+	stateManager, err := createTestStateManagerWithDisabledRules(t)
+	require.NoError(t, err)
+	defer func() {
+		if closeErr := stateManager.Close(); closeErr != nil {
+			t.Errorf("Failed to close state manager: %v", closeErr)
+		}
+	}()
+
+	hookProcessorWithState := NewHookProcessor(app.configValidator, app.projectRoot, stateManager)
+
+	// With disabled rules, the same command should be allowed
+	result2, err := hookProcessorWithState.ProcessPostToolUse(ctx, []byte(postHookInput))
+	require.NoError(t, err)
+	assert.Empty(t, result2, "Should allow post-tool-use when rules disabled")
+}
+
+func TestProcessPostToolUseRespectsSkipFlag(t *testing.T) {
+	t.Parallel()
+	ctx, _ := setupTestWithContext(t)
+
+	// Create config with a post-event rule that should be matched
+	configContent := `rules:
+  - match:
+      pattern: "test output"
+      event: "post"
+    send: "Consider reviewing test results"
+    generate: "off"`
+
+	configPath := createTempConfig(t, configContent)
+	app := NewApp(ctx, configPath)
+
+	// Input that would normally match the rule
+	postHookInput := `{
+		"hookEventName": "PostToolUse",
+		"tool_name": "Bash",
+		"tool_response": "test output from command",
+		"transcript_path": ""
+	}`
+
+	// Create a state manager with skip flag set
+	stateManager, err := createTestStateManagerWithSkipFlag(t)
+	require.NoError(t, err)
+	defer func() {
+		if closeErr := stateManager.Close(); closeErr != nil {
+			t.Errorf("Failed to close state manager: %v", closeErr)
+		}
+	}()
+
+	hookProcessorWithState := NewHookProcessor(app.configValidator, app.projectRoot, stateManager)
+
+	// With skip flag set, command should be allowed and flag consumed
+	result, err := hookProcessorWithState.ProcessPostToolUse(ctx, []byte(postHookInput))
+	require.NoError(t, err)
+	assert.Empty(t, result, "Should allow post-tool-use when skip flag set")
+
+	// Verify skip flag was consumed - next call should block
+	result2, err := hookProcessorWithState.ProcessPostToolUse(ctx, []byte(postHookInput))
+	require.NoError(t, err)
+	assert.NotEmpty(t, result2, "Should block post-tool-use after skip flag consumed")
 }

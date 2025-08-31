@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/wizzomafizzo/bumpers/internal/infrastructure/constants"
@@ -153,7 +155,6 @@ commands:
 
 func TestProcessUserPromptWithCommandGeneration(t *testing.T) {
 	t.Parallel()
-	ctx, _ := setupTestWithContext(t)
 
 	configContent := `commands:
   - name: "help"
@@ -161,12 +162,23 @@ func TestProcessUserPromptWithCommandGeneration(t *testing.T) {
     generate: "always"`
 
 	configPath := createTempConfig(t, configContent)
-	app := NewApp(ctx, configPath)
+	workDir := t.TempDir()
+	fs := afero.NewMemMapFs()
+	app := NewAppWithFileSystem(configPath, workDir, fs)
 
 	// Set up mock launcher
 	mockLauncher := claude.SetupMockLauncherWithDefaults()
 	mockLauncher.SetResponseForPattern("", "Enhanced help message from AI")
 	app.SetMockLauncher(mockLauncher)
+
+	// Create a temporary database file for AI cache testing
+	tempDir := t.TempDir()
+	cachePath := filepath.Join(tempDir, "ai_test.db")
+
+	// Set cache path on prompt handler's AI helper for testing
+	promptHandler, ok := app.promptHandler.(*DefaultPromptHandler)
+	require.True(t, ok, "expected DefaultPromptHandler")
+	promptHandler.aiHelper.cachePath = cachePath
 
 	promptJSON := `{"prompt": "` + constants.CommandPrefix + `help"}`
 	result, err := app.ProcessUserPrompt(context.Background(), json.RawMessage(promptJSON))

@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/spf13/afero"
 	"github.com/wizzomafizzo/bumpers/internal/config"
 	"github.com/wizzomafizzo/bumpers/internal/core/logging"
 	"github.com/wizzomafizzo/bumpers/internal/core/messaging/template"
 	"github.com/wizzomafizzo/bumpers/internal/infrastructure/constants"
 	ai "github.com/wizzomafizzo/bumpers/internal/platform/claude/api"
+	"github.com/wizzomafizzo/bumpers/internal/platform/storage"
 )
 
 // PromptHandler handles user prompt processing and command generation
@@ -20,15 +22,17 @@ type PromptHandler interface {
 
 // DefaultPromptHandler implements PromptHandler
 type DefaultPromptHandler struct {
-	aiHelper   *AIHelper
-	configPath string
+	aiHelper    *AIHelper
+	configPath  string
+	projectRoot string
 }
 
 // NewPromptHandler creates a new PromptHandler
 func NewPromptHandler(configPath, projectRoot string) *DefaultPromptHandler {
 	return &DefaultPromptHandler{
-		configPath: configPath,
-		aiHelper:   NewAIHelper(projectRoot, nil, nil),
+		configPath:  configPath,
+		projectRoot: projectRoot,
+		aiHelper:    NewAIHelper(projectRoot, nil, nil),
 	}
 }
 
@@ -57,6 +61,11 @@ func (p *DefaultPromptHandler) ProcessUserPrompt(ctx context.Context, rawJSON js
 	// Extract command string and parse arguments
 	commandStr := strings.TrimPrefix(event.Prompt, constants.CommandPrefix)
 	logger.Debug().Str("command_str", commandStr).Msg("extracted command string")
+
+	// Check if it's a built-in command first
+	if IsBuiltinCommand(commandStr) {
+		return p.processBuiltinCommand(ctx, commandStr)
+	}
 
 	// Parse command name and arguments
 	commandName, args, argv := ParseCommandArgs(commandStr)
@@ -128,4 +137,22 @@ func (p *DefaultPromptHandler) ProcessUserPrompt(ctx context.Context, rawJSON js
 
 	logger.Info().Str("response", string(responseJSON)).Msg("Returning ValidationResult response")
 	return string(responseJSON), nil
+}
+
+func (p *DefaultPromptHandler) processBuiltinCommand(ctx context.Context, commandStr string) (string, error) {
+	// Get proper database path using storage manager
+	storageManager := storage.New(afero.NewOsFs())
+	dbPath, err := storageManager.GetDatabasePath()
+	if err != nil {
+		return "", fmt.Errorf("failed to get database path: %w", err)
+	}
+
+	result, err := ProcessBuiltinCommand(ctx, commandStr, dbPath, p.projectRoot)
+	if err != nil {
+		return "", err
+	}
+	if str, ok := result.(string); ok {
+		return str, nil
+	}
+	return "", fmt.Errorf("builtin command returned non-string result: %T", result)
 }

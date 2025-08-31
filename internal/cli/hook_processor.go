@@ -18,6 +18,7 @@ import (
 	"github.com/wizzomafizzo/bumpers/internal/core/messaging/template"
 	ai "github.com/wizzomafizzo/bumpers/internal/platform/claude/api"
 	"github.com/wizzomafizzo/bumpers/internal/platform/claude/transcript"
+	"github.com/wizzomafizzo/bumpers/internal/platform/state"
 	"github.com/wizzomafizzo/bumpers/internal/platform/storage"
 )
 
@@ -32,14 +33,18 @@ type HookProcessor interface {
 type DefaultHookProcessor struct {
 	configValidator ConfigValidator
 	aiGenerator     ai.MessageGenerator
+	stateManager    *state.Manager
 	projectRoot     string
 }
 
 // NewHookProcessor creates a new HookProcessor
-func NewHookProcessor(configValidator ConfigValidator, projectRoot string) *DefaultHookProcessor {
+func NewHookProcessor(
+	configValidator ConfigValidator, projectRoot string, stateManager *state.Manager,
+) *DefaultHookProcessor {
 	return &DefaultHookProcessor{
 		configValidator: configValidator,
 		projectRoot:     projectRoot,
+		stateManager:    stateManager,
 	}
 }
 
@@ -99,10 +104,46 @@ func (*DefaultHookProcessor) convertResponseToProcessResult(response string) Pro
 	return ProcessResult{Mode: ProcessModeBlock, Message: response}
 }
 
+// shouldSkipProcessing checks state manager settings and returns true if processing should be skipped
+func (h *DefaultHookProcessor) shouldSkipProcessing(ctx context.Context) bool {
+	if h.stateManager == nil {
+		return false
+	}
+
+	logger := logging.Get(ctx)
+
+	// Check if rules are disabled
+	rulesEnabled, err := h.stateManager.GetRulesEnabled(ctx)
+	if err != nil {
+		logger.Debug().Err(err).Msg("Failed to check rules enabled state, proceeding with normal processing")
+	}
+	if err == nil && !rulesEnabled {
+		logger.Debug().Msg("Rules disabled via state manager, allowing command")
+		return true
+	}
+
+	// Check and consume skip flag
+	skipNext, err := h.stateManager.ConsumeSkipNext(ctx)
+	if err != nil {
+		logger.Debug().Err(err).Msg("Failed to check skip flag, proceeding with normal processing")
+	}
+	if err == nil && skipNext {
+		logger.Debug().Msg("Skip flag consumed, allowing command")
+		return true
+	}
+
+	return false
+}
+
 // ProcessPreToolUse handles PreToolUse hook events
 func (h *DefaultHookProcessor) ProcessPreToolUse(ctx context.Context, rawJSON json.RawMessage) (string, error) {
 	logger := logging.Get(ctx)
 	logger.Debug().Msg("processing PreToolUse hook")
+
+	// Check state manager for rules enabled/skip state
+	if h.shouldSkipProcessing(ctx) {
+		return "", nil
+	}
 
 	var event hooks.HookEvent
 	if unmarshalErr := json.Unmarshal(rawJSON, &event); unmarshalErr != nil {
@@ -370,19 +411,19 @@ func (h *DefaultHookProcessor) processAIGeneration(
 		return message, nil
 	}
 
-	// Use XDG-compliant cache path
+	// Use XDG-compliant database path
 	storageManager := storage.New(afero.NewOsFs())
-	cachePath, err := storageManager.GetCachePath()
+	cachePath, err := storageManager.GetDatabasePath()
 	if err != nil {
-		return message, fmt.Errorf("failed to get cache path: %w", err)
+		return message, fmt.Errorf("failed to get database path: %w", err)
 	}
 
 	// Create AI generator with mock launcher if available
 	var generator *ai.Generator
 	if h.aiGenerator != nil {
-		generator, err = ai.NewGeneratorWithLauncher(cachePath, h.projectRoot, h.aiGenerator)
+		generator, err = ai.NewGeneratorWithLauncher(ctx, cachePath, h.projectRoot, h.aiGenerator)
 	} else {
-		generator, err = ai.NewGenerator(cachePath, h.projectRoot)
+		generator, err = ai.NewGenerator(ctx, cachePath, h.projectRoot)
 	}
 	if err != nil {
 		return message, fmt.Errorf("failed to create AI generator: %w", err)
@@ -487,6 +528,11 @@ func (*DefaultHookProcessor) determineRuleContentMatch(rule *config.Rule, conten
 func (h *DefaultHookProcessor) ProcessPostToolUse(ctx context.Context, rawJSON json.RawMessage) (string, error) {
 	logger := logging.Get(ctx)
 	logger.Debug().Msg("processing PostToolUse hook")
+
+	// Check state manager for rules enabled state
+	if h.shouldSkipProcessing(ctx) {
+		return "", nil
+	}
 
 	// Load config for rule matching
 	cfg, _, err := h.configValidator.LoadConfigAndMatcher(ctx)

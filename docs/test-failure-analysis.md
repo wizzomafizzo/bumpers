@@ -8,14 +8,14 @@ CLI package tests are failing intermittently when run as a suite, despite indivi
 
 **Shared Global Cache Between Parallel Tests**
 
-All tests share the same global cache file at `~/.local/share/bumpers/cache.db` (via XDG specification). This creates race conditions where one test's cached results interfere with another test's execution.
+All tests share the same global cache file at `~/.local/share/bumpers/bumpers.db` (via XDG specification). This creates race conditions where one test's cached results interfere with another test's execution.
 
 ## Technical Details
 
 ### Cache Path Resolution
-- Cache path determined by `storage.GetCachePath()` → `xdg.DataHome/bumpers/cache.db`
-- All tests use the same global cache file regardless of test isolation
-- BBolt database file is shared across all parallel test executions
+- Cache path determined by `storage.GetDatabasePath()` → `xdg.DataHome/bumpers/bumpers.db`
+- All tests use the same global database file regardless of test isolation
+- SQLite database file is shared across all parallel test executions
 
 ### AI Generation Flow
 1. Test calls `processAIGeneration()` or `processAIGenerationGeneric()`

@@ -25,6 +25,7 @@ type SessionManager interface {
 type DefaultSessionManager struct {
 	fileSystem afero.Fs
 	aiHelper   *AIHelper
+	cache      *ai.Cache
 	configPath string
 }
 
@@ -34,12 +35,30 @@ func NewSessionManager(configPath, projectRoot string, fileSystem afero.Fs) *Def
 		configPath: configPath,
 		fileSystem: fileSystem,
 		aiHelper:   NewAIHelper(projectRoot, nil, fileSystem),
+		cache:      nil, // Will be set by app when available
+	}
+}
+
+// NewSessionManagerWithCache creates a new SessionManager with shared cache instance
+func NewSessionManagerWithCache(configPath, projectRoot string, fileSystem afero.Fs,
+	cache *ai.Cache,
+) *DefaultSessionManager {
+	return &DefaultSessionManager{
+		configPath: configPath,
+		fileSystem: fileSystem,
+		aiHelper:   NewAIHelper(projectRoot, nil, fileSystem),
+		cache:      cache,
 	}
 }
 
 // SetMockAIGenerator sets a mock AI generator for testing
 func (s *DefaultSessionManager) SetMockAIGenerator(generator ai.MessageGenerator) {
 	s.aiHelper.aiGenerator = generator
+}
+
+// SetCacheForTesting sets the cache instance for testing
+func (s *DefaultSessionManager) SetCacheForTesting(cache *ai.Cache) {
+	s.cache = cache
 }
 
 // getFileSystem returns the filesystem to use - either injected or defaults to OS
@@ -126,15 +145,29 @@ func (s *DefaultSessionManager) ProcessSessionStart(ctx context.Context, rawJSON
 
 // ClearSessionCache clears all session-based cached AI generation entries
 func (s *DefaultSessionManager) ClearSessionCache(ctx context.Context) error {
-	// Use XDG-compliant cache path
+	// Use shared cache instance if available
+	if s.cache != nil {
+		err := s.cache.ClearSessionCache(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to clear session cache: %w", err)
+		}
+
+		logging.Get(ctx).Debug().
+			Str("project_root", s.aiHelper.projectRoot).
+			Msg("session cache cleared on session start using shared cache")
+
+		return nil
+	}
+
+	// Fallback to creating temporary cache instance (for backward compatibility)
 	storageManager := storage.New(s.getFileSystem())
-	cachePath, err := storageManager.GetCachePath()
+	cachePath, err := storageManager.GetDatabasePath()
 	if err != nil {
-		return fmt.Errorf("failed to get cache path: %w", err)
+		return fmt.Errorf("failed to get database path: %w", err)
 	}
 
 	// Create cache instance with project context
-	cache, err := ai.NewCacheWithProject(cachePath, s.aiHelper.projectRoot)
+	cache, err := ai.NewCacheWithProject(ctx, cachePath, s.aiHelper.projectRoot)
 	if err != nil {
 		return fmt.Errorf("failed to create cache: %w", err)
 	}
@@ -146,14 +179,14 @@ func (s *DefaultSessionManager) ClearSessionCache(ctx context.Context) error {
 	}()
 
 	// Clear session cache entries
-	err = cache.ClearSessionCache()
+	err = cache.ClearSessionCache(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to clear session cache: %w", err)
 	}
 
 	logging.Get(ctx).Debug().
 		Str("project_root", s.aiHelper.projectRoot).
-		Msg("session cache cleared on session start")
+		Msg("session cache cleared on session start using fallback cache")
 
 	return nil
 }

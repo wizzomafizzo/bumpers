@@ -44,11 +44,11 @@ func (m *Manager) GetLogPath() (string, error) {
 	return filepath.Join(dataDir, constants.LogFilename), nil
 }
 
-// GetCachePath returns the full path to the bumpers cache database
-func (m *Manager) GetCachePath() (string, error) {
+// GetDatabasePath returns the full path to the bumpers database
+func (m *Manager) GetDatabasePath() (string, error) {
 	dataDir, err := m.GetDataDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(dataDir, constants.CacheFilename), nil
+	return filepath.Join(dataDir, constants.DatabaseFilename), nil
 }

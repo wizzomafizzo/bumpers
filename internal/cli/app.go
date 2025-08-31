@@ -14,6 +14,9 @@ import (
 	"github.com/wizzomafizzo/bumpers/internal/core/logging"
 	"github.com/wizzomafizzo/bumpers/internal/infrastructure/project"
 	ai "github.com/wizzomafizzo/bumpers/internal/platform/claude/api"
+	"github.com/wizzomafizzo/bumpers/internal/platform/database"
+	"github.com/wizzomafizzo/bumpers/internal/platform/state"
+	"github.com/wizzomafizzo/bumpers/internal/platform/storage"
 )
 
 // App represents the main application with composed components
@@ -24,6 +27,9 @@ type App struct {
 	sessionManager  SessionManager
 	configValidator ConfigValidator
 	installManager  InstallManager
+
+	// Database
+	dbManager *database.Manager
 
 	// Configuration
 	fileSystem   afero.Fs
@@ -55,9 +61,12 @@ func NewApp(ctx context.Context, configPath string) *App {
 		}
 	}
 
+	// Create database manager
+	dbManager, stateManager := createDatabaseAndStateManager(ctx, projectRoot)
+
 	// Create specialized components
 	configValidator := NewConfigValidator(resolvedConfigPath, projectRoot)
-	hookProcessor := NewHookProcessor(configValidator, projectRoot)
+	hookProcessor := NewHookProcessor(configValidator, projectRoot, stateManager)
 	promptHandler := NewPromptHandler(resolvedConfigPath, projectRoot)
 	sessionManager := NewSessionManager(resolvedConfigPath, projectRoot, nil)
 	installManager := NewInstallManager(resolvedConfigPath, "", projectRoot, nil)
@@ -68,6 +77,7 @@ func NewApp(ctx context.Context, configPath string) *App {
 		sessionManager:  sessionManager,
 		configValidator: configValidator,
 		installManager:  installManager,
+		dbManager:       dbManager,
 		configPath:      resolvedConfigPath,
 		projectRoot:     projectRoot,
 	}
@@ -92,6 +102,72 @@ func findAlternativeConfig(projectRoot string) string {
 	return filepath.Join(projectRoot, "bumpers.yml") // fallback to original
 }
 
+// createDatabaseAndStateManager creates database manager and state manager for the given project root
+func createDatabaseAndStateManager(ctx context.Context, projectRoot string) (
+	dbManager *database.Manager, stateManager *state.Manager,
+) {
+	if projectRoot == "" {
+		return nil, nil // Can't create managers without project root
+	}
+
+	// Create storage manager to get database path
+	storageManager := storage.New(afero.NewOsFs())
+	databasePath, err := storageManager.GetDatabasePath()
+	if err != nil {
+		return nil, nil // Gracefully degrade if we can't get database path
+	}
+
+	// Create database manager
+	dbManager, err = database.NewManager(ctx, databasePath)
+	if err != nil {
+		return nil, nil // Gracefully degrade if database manager creation fails
+	}
+
+	// Generate project ID from project root
+	projectID := projectRoot
+
+	// Create state manager using the database connection
+	stateManager, err = state.NewSQLManager(dbManager.DB(), projectID)
+	if err != nil {
+		_ = dbManager.Close()
+		return nil, nil // Gracefully degrade if state manager creation fails
+	}
+
+	return dbManager, stateManager
+}
+
+// createDatabaseAndStateManagerWithFS creates database and state managers with injected filesystem for testing
+func createDatabaseAndStateManagerWithFS(ctx context.Context, projectRoot string,
+	_ afero.Fs,
+) (dbManager *database.Manager, stateManager *state.Manager) {
+	if projectRoot == "" {
+		return nil, nil // Can't create managers without project root
+	}
+
+	// For testing with in-memory filesystem, use in-memory SQLite database
+	// This avoids filesystem path issues between afero abstraction and SQLite
+	databasePath := ":memory:"
+
+	// Create database manager with in-memory database for testing
+	var err error
+	dbManager, err = database.NewManager(ctx, databasePath)
+	if err != nil {
+		return nil, nil // Gracefully degrade if database manager creation fails
+	}
+
+	// Generate project ID from project root
+	projectID := projectRoot
+
+	// Create state manager using the database connection
+	stateManager, err = state.NewSQLManager(dbManager.DB(), projectID)
+	if err != nil {
+		_ = dbManager.Close()
+		return nil, nil // Gracefully degrade if state manager creation fails
+	}
+
+	return dbManager, stateManager
+}
+
 // NewAppWithWorkDir creates a new App instance with an injectable working directory.
 // This is primarily used for testing to avoid global state dependencies.
 func NewAppWithWorkDir(configPath, workDir string) *App {
@@ -101,9 +177,13 @@ func NewAppWithWorkDir(configPath, workDir string) *App {
 		projectRoot = root
 	}
 
+	// Create database and state managers
+	ctx := context.Background()
+	dbManager, stateManager := createDatabaseAndStateManager(ctx, projectRoot)
+
 	// Create specialized components with consistent projectRoot
 	configValidator := NewConfigValidator(configPath, projectRoot)
-	hookProcessor := NewHookProcessor(configValidator, projectRoot)
+	hookProcessor := NewHookProcessor(configValidator, projectRoot, stateManager)
 	promptHandler := NewPromptHandler(configPath, projectRoot)
 	sessionManager := NewSessionManager(configPath, projectRoot, nil)
 	installManager := NewInstallManager(configPath, projectRoot, projectRoot, nil)
@@ -114,6 +194,7 @@ func NewAppWithWorkDir(configPath, workDir string) *App {
 		sessionManager:  sessionManager,
 		configValidator: configValidator,
 		installManager:  installManager,
+		dbManager:       dbManager,
 		configPath:      configPath,
 		workDir:         workDir,
 		projectRoot:     projectRoot, // Use detected project root
@@ -123,9 +204,13 @@ func NewAppWithWorkDir(configPath, workDir string) *App {
 // NewAppWithFileSystem creates a new App instance with injectable filesystem.
 // This enables parallel testing by using in-memory filesystem instead of real I/O.
 func NewAppWithFileSystem(configPath, workDir string, fs afero.Fs) *App {
+	// Create database and state managers with the injected filesystem
+	ctx := context.Background()
+	dbManager, stateManager := createDatabaseAndStateManagerWithFS(ctx, workDir, fs)
+
 	// Create specialized components with consistent workDir as projectRoot and injected filesystem
 	configValidator := NewConfigValidator(configPath, workDir)
-	hookProcessor := NewHookProcessor(configValidator, workDir)
+	hookProcessor := NewHookProcessor(configValidator, workDir, stateManager)
 	promptHandler := NewPromptHandler(configPath, workDir)
 	sessionManager := NewSessionManager(configPath, workDir, fs)
 	installManager := NewInstallManager(configPath, workDir, workDir, fs)
@@ -136,6 +221,7 @@ func NewAppWithFileSystem(configPath, workDir string, fs afero.Fs) *App {
 		sessionManager:  sessionManager,
 		configValidator: configValidator,
 		installManager:  installManager,
+		dbManager:       dbManager,
 		configPath:      configPath,
 		workDir:         workDir,
 		projectRoot:     workDir, // Ensure projectRoot is set consistently

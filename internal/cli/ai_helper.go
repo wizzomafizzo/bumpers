@@ -65,20 +65,20 @@ func (h *AIHelper) ProcessAIGenerationGeneric(
 		// Use injected cache path (for tests)
 		cachePath = h.cachePath
 	} else {
-		// Use XDG-compliant cache path (production)
+		// Use XDG-compliant database path (production)
 		storageManager := storage.New(h.getFileSystem())
-		cachePath, err = storageManager.GetCachePath()
+		cachePath, err = storageManager.GetDatabasePath()
 		if err != nil {
-			return message, fmt.Errorf("failed to get cache path: %w", err)
+			return message, fmt.Errorf("failed to get database path: %w", err)
 		}
 	}
 
 	// Create AI generator with mock launcher if available
 	var generator *ai.Generator
 	if h.aiGenerator != nil {
-		generator, err = ai.NewGeneratorWithLauncher(cachePath, h.projectRoot, h.aiGenerator)
+		generator, err = ai.NewGeneratorWithLauncher(ctx, cachePath, h.projectRoot, h.aiGenerator)
 	} else {
-		generator, err = ai.NewGenerator(cachePath, h.projectRoot)
+		generator, err = ai.NewGenerator(ctx, cachePath, h.projectRoot)
 	}
 	if err != nil {
 		return message, fmt.Errorf("failed to create AI generator: %w", err)

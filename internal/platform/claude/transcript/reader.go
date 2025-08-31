@@ -452,6 +452,9 @@ func extractTextPartsFromEntry(entry *TranscriptEntry) []string {
 		if content.Type == "text" && strings.TrimSpace(content.Text) != "" {
 			parts = append(parts, strings.TrimSpace(content.Text))
 		}
+		if content.Type == "thinking" && strings.TrimSpace(content.Thinking) != "" {
+			parts = append(parts, strings.TrimSpace(content.Thinking))
+		}
 	}
 	return parts
 }

@@ -23,7 +23,7 @@ func TestGeneratorGenerateMessage(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "test.db")
 
-	generator, err := NewGenerator(dbPath, "test-project")
+	generator, err := NewGenerator(ctx, dbPath, "test-project")
 	if err != nil {
 		t.Fatalf("Failed to create generator: %v", err)
 	}
@@ -63,7 +63,7 @@ func TestGeneratorCaching(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "test.db")
 
-	generator, err := NewGenerator(dbPath, "test-project")
+	generator, err := NewGenerator(ctx, dbPath, "test-project")
 	if err != nil {
 		t.Fatalf("Failed to create generator: %v", err)
 	}
@@ -113,7 +113,7 @@ func TestGeneratorShouldUseCache(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "test.db")
 
-	generator, err := NewGenerator(dbPath, "test-project")
+	generator, err := NewGenerator(ctx, dbPath, "test-project")
 	if err != nil {
 		t.Fatalf("Failed to create generator: %v", err)
 	}
@@ -158,7 +158,7 @@ func TestGeneratorCachingWithMock(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "test.db")
 
-	generator, err := NewGenerator(dbPath, "test-project")
+	generator, err := NewGenerator(ctx, dbPath, "test-project")
 	if err != nil {
 		t.Fatalf("Failed to create generator: %v", err)
 	}
@@ -207,7 +207,7 @@ func TestGeneratorLogsCache(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "test.db")
 
-	generator, err := NewGenerator(dbPath, "test-project")
+	generator, err := NewGenerator(ctx, dbPath, "test-project")
 	if err != nil {
 		t.Fatalf("Failed to create generator: %v", err)
 	}

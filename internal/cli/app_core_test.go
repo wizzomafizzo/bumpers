@@ -344,12 +344,37 @@ func TestNewApp_AutoFindsConfigFile(t *testing.T) {
 	testNewAppAutoFindsConfigFile(t, "bumpers.yaml")
 }
 
-func TestNewApp_AutoFindsTomlConfigFile(t *testing.T) {
-	t.Parallel()
-	t.Skip("TOML parsing doesn't work with polymorphic 'generate' field - skipping for now")
-}
+// NOTE: TOML config file support is currently disabled due to polymorphic 'generate' field parsing issues
+// If TOML support is needed in the future, the config loading will need to handle field type conversion
 
 func TestNewApp_AutoFindsJsonConfigFile(t *testing.T) {
 	t.Parallel()
 	testNewAppAutoFindsConfigFile(t, "bumpers.json")
+}
+
+func TestNewApp_InitializesStateManager(t *testing.T) {
+	t.Parallel()
+
+	configContent := `rules:
+  - match: "test"
+    send: "test message"`
+
+	// Use in-memory filesystem to avoid real filesystem database issues
+	fs := afero.NewMemMapFs()
+	configPath := "/test/bumpers.yml"
+	err := afero.WriteFile(fs, configPath, []byte(configContent), 0o600)
+	if err != nil {
+		t.Fatalf("Failed to create config file: %v", err)
+	}
+
+	app := NewAppWithFileSystem(configPath, "/test", fs)
+
+	// Verify that hook processor has a state manager initialized
+	if defaultHookProcessor, ok := app.hookProcessor.(*DefaultHookProcessor); ok {
+		if defaultHookProcessor.stateManager == nil {
+			t.Error("Expected hook processor to have state manager initialized")
+		}
+	} else {
+		t.Error("Expected DefaultHookProcessor")
+	}
 }

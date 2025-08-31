@@ -22,8 +22,8 @@ type Generator struct {
 }
 
 // NewGenerator creates a new AI message generator with project context
-func NewGenerator(dbPath, projectID string) (*Generator, error) {
-	cache, err := NewCacheWithProject(dbPath, projectID)
+func NewGenerator(ctx context.Context, dbPath, projectID string) (*Generator, error) {
+	cache, err := NewCacheWithProject(ctx, dbPath, projectID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create cache: %w", err)
 	}
@@ -35,8 +35,10 @@ func NewGenerator(dbPath, projectID string) (*Generator, error) {
 }
 
 // NewGeneratorWithLauncher creates a new AI message generator with custom launcher (for testing)
-func NewGeneratorWithLauncher(dbPath, projectID string, launcher MessageGenerator) (*Generator, error) {
-	cache, err := NewCacheWithProject(dbPath, projectID)
+func NewGeneratorWithLauncher(ctx context.Context, dbPath, projectID string,
+	launcher MessageGenerator,
+) (*Generator, error) {
+	cache, err := NewCacheWithProject(ctx, dbPath, projectID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create cache: %w", err)
 	}
@@ -64,7 +66,7 @@ func (g *Generator) GenerateMessage(ctx context.Context, req *GenerateRequest) (
 
 	// Try to get from cache first (except for "always" mode)
 	if req.GenerateMode != "always" {
-		if cached, err := g.cache.Get(cacheKey); err == nil && cached != nil {
+		if cached, err := g.cache.Get(ctx, cacheKey); err == nil && cached != nil {
 			if !cached.IsExpired() {
 				logging.Get(ctx).Debug().
 					Str("mode", req.GenerateMode).
@@ -102,7 +104,7 @@ func (g *Generator) GenerateMessage(ctx context.Context, req *GenerateRequest) (
 		}
 
 		// Store in cache (ignore cache errors)
-		_ = g.cache.Put(cacheKey, cacheEntry)
+		_ = g.cache.Put(ctx, cacheKey, cacheEntry)
 	}
 
 	return result, nil

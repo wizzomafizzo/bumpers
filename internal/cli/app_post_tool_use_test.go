@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/wizzomafizzo/bumpers/internal/platform/claude"
@@ -51,10 +52,9 @@ rules:
 // TestProcessHookRoutesPostToolUse tests that PostToolUse hooks are properly routed
 func TestProcessHookRoutesPostToolUse(t *testing.T) {
 	t.Parallel()
-	ctx, _ := setupTestWithContext(t)
 
 	configContent := `rules:
-  # Post-tool-use rule matching output (TODO: implement tool_response support)
+  # Post-tool-use rule matching output
   - match:
       pattern: "error|failed"
       event: "post"
@@ -68,7 +68,9 @@ func TestProcessHookRoutesPostToolUse(t *testing.T) {
     send: "AI claiming unrelated - please verify"`
 
 	configPath := createTempConfig(t, configContent)
-	app := NewApp(ctx, configPath)
+	workDir := t.TempDir()
+	fs := afero.NewMemMapFs()
+	app := NewAppWithFileSystem(configPath, workDir, fs)
 
 	// Use static testdata transcript
 	testdataDir := "../../testdata"
@@ -110,7 +112,6 @@ func TestProcessHookRoutesPostToolUse(t *testing.T) {
 // TestPostToolUseWithDifferentTranscript tests that PostToolUse reads actual transcript content
 func TestPostToolUseWithDifferentTranscript(t *testing.T) {
 	t.Parallel()
-	ctx, _ := setupTestWithContext(t)
 
 	configContent := `rules:
   - match:
@@ -120,7 +121,9 @@ func TestPostToolUseWithDifferentTranscript(t *testing.T) {
     send: "File permission error detected"`
 
 	configPath := createTempConfig(t, configContent)
-	app := NewApp(ctx, configPath)
+	workDir := t.TempDir()
+	fs := afero.NewMemMapFs()
+	app := NewAppWithFileSystem(configPath, workDir, fs)
 
 	// Use static testdata transcript with permission denied content
 	testdataDir := "../../testdata"

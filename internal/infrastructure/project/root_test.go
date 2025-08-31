@@ -11,11 +11,10 @@ import (
 )
 
 func TestCheckClaudeProjectDir_EmptyEnv(t *testing.T) {
+	t.Parallel()
 	_, _ = testutil.NewTestContext(t) // Context-aware logging available
 
-	// Ensure CLAUDE_PROJECT_DIR is not set
-	t.Setenv("CLAUDE_PROJECT_DIR", "")
-
+	// Test with unset environment variable (default state)
 	path, found := checkClaudeProjectDir()
 
 	assert.False(t, found)

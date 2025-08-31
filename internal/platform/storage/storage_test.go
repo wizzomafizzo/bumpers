@@ -36,12 +36,12 @@ func TestStorageManagerPaths(t *testing.T) {
 			},
 		},
 		{
-			name: "GetCachePath returns correct path",
+			name: "GetDatabasePath returns correct path",
 			methodCall: func(m *Manager) (string, error) {
-				return m.GetCachePath()
+				return m.GetDatabasePath()
 			},
 			expectedPath: func() string {
-				return filepath.Join(xdg.DataHome, AppName, constants.CacheFilename)
+				return filepath.Join(xdg.DataHome, AppName, constants.DatabaseFilename)
 			},
 		},
 	}
