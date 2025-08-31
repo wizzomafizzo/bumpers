@@ -21,6 +21,8 @@ rules:
       send: Bumpers configuration file should not be accessed.
     - match: cat.*EOF.*>\s*[^\s]
       send: Use Write tool instead of cat heredoc redirection to create files.
+    - match: sed -i
+      send: Using sed for editing can be dangerous, use manual edits instead.
 commands:
     - name: test
       send: Run "just test-all" to run all tests and fix ALL failing tests if any.

@@ -25,6 +25,7 @@ type DefaultPromptHandler struct {
 	aiHelper    *AIHelper
 	configPath  string
 	projectRoot string
+	testDBPath  string // Optional override for testing
 }
 
 // NewPromptHandler creates a new PromptHandler
@@ -34,6 +35,11 @@ func NewPromptHandler(configPath, projectRoot string) *DefaultPromptHandler {
 		projectRoot: projectRoot,
 		aiHelper:    NewAIHelper(projectRoot, nil, nil),
 	}
+}
+
+// SetTestDBPath sets a test database path for testing
+func (p *DefaultPromptHandler) SetTestDBPath(dbPath string) {
+	p.testDBPath = dbPath
 }
 
 // SetMockAIGenerator sets a mock AI generator for testing
@@ -140,19 +146,41 @@ func (p *DefaultPromptHandler) ProcessUserPrompt(ctx context.Context, rawJSON js
 }
 
 func (p *DefaultPromptHandler) processBuiltinCommand(ctx context.Context, commandStr string) (string, error) {
-	// Get proper database path using storage manager
-	storageManager := storage.New(afero.NewOsFs())
-	dbPath, err := storageManager.GetDatabasePath()
-	if err != nil {
-		return "", fmt.Errorf("failed to get database path: %w", err)
+	var dbPath string
+	var err error
+
+	// Use test database path if set, otherwise use production path
+	if p.testDBPath != "" {
+		dbPath = p.testDBPath
+	} else {
+		storageManager := storage.New(afero.NewOsFs())
+		dbPath, err = storageManager.GetDatabasePath()
+		if err != nil {
+			return "", fmt.Errorf("failed to get database path: %w", err)
+		}
 	}
 
 	result, err := ProcessBuiltinCommand(ctx, commandStr, dbPath, p.projectRoot)
 	if err != nil {
 		return "", err
 	}
-	if str, ok := result.(string); ok {
-		return str, nil
+
+	str, ok := result.(string)
+	if !ok {
+		return "", fmt.Errorf("builtin command returned non-string result: %T", result)
 	}
-	return "", fmt.Errorf("builtin command returned non-string result: %T", result)
+	message := str
+
+	// Return blocking format for builtin commands
+	response := map[string]any{
+		"decision": "block",
+		"reason":   message,
+	}
+
+	responseJSON, err := json.Marshal(response)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal response: %w", err)
+	}
+
+	return string(responseJSON), nil
 }
