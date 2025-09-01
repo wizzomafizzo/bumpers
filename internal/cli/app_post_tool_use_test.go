@@ -127,14 +127,27 @@ func TestPostToolUseWithDifferentTranscript(t *testing.T) {
 	fs := afero.NewMemMapFs()
 	app := NewAppWithFileSystem(configPath, workDir, fs)
 
-	// Use static testdata transcript with permission denied content
-	testdataDir := testdataRelativePath
-	transcriptPath := filepath.Join(testdataDir, "transcript-permission-denied.jsonl")
-	absPath, err := filepath.Abs(transcriptPath)
+	// Create a temporary transcript file to avoid path dependency issues
+	line1 := `{"type":"user","message":{"role":"user","content":"List the files in /root directory"},` +
+		`"uuid":"user1","timestamp":"2024-01-01T10:00:00Z"}`
+	line2 := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"text",` +
+		`"text":"I'll try to list the files in the /root directory for you."}]},` +
+		`"uuid":"assistant1","timestamp":"2024-01-01T10:01:00Z"}`
+	line3 := `{"type":"user","message":{"role":"user","content":[{"tool_use_id":"tool1",` +
+		`"type":"tool_result","content":[{"type":"text","text":"ls: cannot access '/root': Permission denied"}]}]},` +
+		`"uuid":"user2","timestamp":"2024-01-01T10:02:00Z"}`
+	line4 := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"text",` +
+		`"text":"I can see there's a permission denied error when trying to access the /root directory. ` +
+		`This suggests the command was run without sufficient privileges."}]},` +
+		`"uuid":"assistant2","timestamp":"2024-01-01T10:03:00Z"}`
+	transcriptContent := line1 + "\n" + line2 + "\n" + line3 + "\n" + line4
+
+	transcriptFile := filepath.Join(t.TempDir(), "transcript-permission-denied.jsonl")
+	err := os.WriteFile(transcriptFile, []byte(transcriptContent), 0o600)
 	if err != nil {
-		t.Fatalf("Failed to get absolute path: %v", err)
+		t.Fatalf("Failed to create transcript file: %v", err)
 	}
-	transcriptPath = absPath
+	transcriptPath := transcriptFile
 
 	postToolUseInput := `{
 		"session_id": "test456",

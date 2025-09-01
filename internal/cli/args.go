@@ -7,29 +7,43 @@ import (
 
 // ParseCommandArgs parses a command string into command name and arguments.
 func ParseCommandArgs(input string) (commandName, args string, argv []string) {
+	commandName, args = parseCommandAndArgs(input)
+	argv = buildArgv(commandName, args)
+	return commandName, args, argv
+}
+
+// parseCommandAndArgs separates the command name from its arguments
+func parseCommandAndArgs(input string) (commandName, args string) {
 	input = strings.TrimSpace(input)
 	if input == "" {
-		return "", "", []string{}
+		return "", ""
 	}
 
 	// Find the first space to separate command name from arguments
 	firstSpace := strings.IndexFunc(input, unicode.IsSpace)
 	if firstSpace == -1 {
 		// No arguments, just command name
-		return input, "", []string{input}
+		return input, ""
 	}
 
 	commandName = input[:firstSpace]
 	args = strings.TrimSpace(input[firstSpace+1:])
+	return commandName, args
+}
 
-	// Parse arguments into array
-	argv = []string{commandName}
+// buildArgv constructs the argv array from command name and arguments
+func buildArgv(commandName, args string) []string {
+	if commandName == "" {
+		return []string{}
+	}
+
+	argv := []string{commandName}
 	if args != "" {
 		parsedArgs := parseArguments(args)
 		argv = append(argv, parsedArgs...)
 	}
 
-	return commandName, args, argv
+	return argv
 }
 
 // parseArguments parses space-separated arguments respecting quoted strings.

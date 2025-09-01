@@ -89,22 +89,7 @@ func (h *DefaultHookProcessor) ProcessHook(ctx context.Context, input io.Reader)
 	}
 
 	// Convert string response to ProcessResult
-	return h.convertResponseToProcessResult(response), nil
-}
-
-// convertResponseToProcessResult converts legacy string responses to structured ProcessResult
-func (*DefaultHookProcessor) convertResponseToProcessResult(response string) ProcessResult {
-	if response == "" {
-		return ProcessResult{Mode: ProcessModeAllow, Message: ""}
-	}
-
-	// Check if response is hookSpecificOutput format (should be informational)
-	if strings.Contains(response, "hookEventName") {
-		return ProcessResult{Mode: ProcessModeInformational, Message: response}
-	}
-
-	// Otherwise it's a blocking response
-	return ProcessResult{Mode: ProcessModeBlock, Message: response}
+	return convertResponseToProcessResult(response), nil
 }
 
 // shouldSkipProcessing checks state manager settings and returns true if processing should be skipped

@@ -37,7 +37,7 @@ func NewPromptHandler(configPath, projectRoot string, stateManager ...*state.Man
 	handler := &DefaultPromptHandler{
 		configPath:  configPath,
 		projectRoot: projectRoot,
-		aiHelper:    NewAIHelper(projectRoot, nil, nil),
+		aiHelper:    NewAIHelper(AIHelperOptions{ProjectRoot: projectRoot}),
 	}
 	if len(stateManager) > 0 {
 		handler.stateManager = stateManager[0]
@@ -56,33 +56,67 @@ func (p *DefaultPromptHandler) SetMockAIGenerator(generator ai.MessageGenerator)
 }
 
 func (p *DefaultPromptHandler) ProcessUserPrompt(ctx context.Context, rawJSON json.RawMessage) (string, error) {
-	logger := logging.Get(ctx)
-
-	// Parse the UserPromptSubmit JSON
-	var event UserPromptEvent
-	if err := json.Unmarshal(rawJSON, &event); err != nil {
-		logger.Error().Err(err).Msg("Failed to parse UserPromptSubmit event")
-		return "", fmt.Errorf("failed to parse UserPromptSubmit event: %w", err)
+	event, err := p.parsePromptEvent(ctx, rawJSON)
+	if err != nil {
+		return "", err
 	}
 
-	logger.Debug().Str("prompt", event.Prompt).Msg("processing UserPromptSubmit with prompt")
-
-	// Check for alignment trigger phrases and emergency stops
-	if p.stateManager != nil {
-		if handled, response, err := p.handleAlignmentTriggers(ctx, event.Prompt); err != nil {
-			logger.Debug().Err(err).Msg("Failed to handle alignment triggers, proceeding with normal processing")
-		} else if handled {
-			return response, nil
-		}
+	if handled, response, err := p.handleSpecialCases(ctx, event.Prompt); err != nil {
+		return "", err
+	} else if handled {
+		return response, nil
 	}
 
-	// Check if prompt starts with command prefix
-	if !strings.HasPrefix(event.Prompt, constants.CommandPrefix) {
+	commandStr, isCommand := p.extractCommand(event.Prompt)
+	if !isCommand {
 		return "", nil // Not a command, pass through
 	}
 
-	// Extract command string and parse arguments
-	commandStr := strings.TrimPrefix(event.Prompt, constants.CommandPrefix)
+	return p.processCommand(ctx, commandStr)
+}
+
+// parsePromptEvent parses the raw JSON into a UserPromptEvent
+func (*DefaultPromptHandler) parsePromptEvent(
+	ctx context.Context, rawJSON json.RawMessage,
+) (*UserPromptEvent, error) {
+	logger := logging.Get(ctx)
+
+	var event UserPromptEvent
+	if err := json.Unmarshal(rawJSON, &event); err != nil {
+		logger.Error().Err(err).Msg("Failed to parse UserPromptSubmit event")
+		return nil, fmt.Errorf("failed to parse UserPromptSubmit event: %w", err)
+	}
+
+	logger.Debug().Str("prompt", event.Prompt).Msg("processing UserPromptSubmit with prompt")
+	return &event, nil
+}
+
+// handleSpecialCases checks for alignment triggers and returns early if handled
+func (p *DefaultPromptHandler) handleSpecialCases(
+	ctx context.Context, prompt string,
+) (handled bool, response string, err error) {
+	if p.stateManager != nil {
+		if handled, response, err := p.handleAlignmentTriggers(ctx, prompt); err != nil {
+			logger := logging.Get(ctx)
+			logger.Debug().Err(err).Msg("Failed to handle alignment triggers, proceeding with normal processing")
+		} else if handled {
+			return true, response, nil
+		}
+	}
+	return false, "", nil
+}
+
+// extractCommand extracts the command string from the prompt if it has the command prefix
+func (*DefaultPromptHandler) extractCommand(prompt string) (commandStr string, isCommand bool) {
+	if !strings.HasPrefix(prompt, constants.CommandPrefix) {
+		return "", false
+	}
+	return strings.TrimPrefix(prompt, constants.CommandPrefix), true
+}
+
+// processCommand handles the main command processing logic
+func (p *DefaultPromptHandler) processCommand(ctx context.Context, commandStr string) (string, error) {
+	logger := logging.Get(ctx)
 	logger.Debug().Str("command_str", commandStr).Msg("extracted command string")
 
 	// Check if it's a built-in command first
@@ -106,24 +140,12 @@ func (p *DefaultPromptHandler) ProcessUserPrompt(ctx context.Context, rawJSON js
 	}
 
 	// Find command by name
-	var commandMessage string
-	var foundCommand bool
-	var matchedCommand *config.Command
-
-	for _, cmd := range cfg.Commands {
-		if cmd.Name != commandName {
-			continue
-		}
-		commandMessage = cmd.Send
-		foundCommand = true
-		matchedCommand = &cmd
-		logger.Debug().Str("commandName", commandName).Str("message", commandMessage).Msg("found valid command")
-		break
-	}
-
-	if !foundCommand {
+	matchedCommand, commandMessage, found := p.findCommandInConfig(cfg.Commands, commandName)
+	if !found {
 		return "", nil // Command not found, pass through
 	}
+
+	logger.Debug().Str("commandName", commandName).Str("message", commandMessage).Msg("found valid command")
 
 	// Process template with command context including shared variables and arguments
 	processedMessage, err := template.ExecuteCommandTemplateWithArgs(commandMessage, commandName, args, argv)
@@ -140,10 +162,29 @@ func (p *DefaultPromptHandler) ProcessUserPrompt(ctx context.Context, rawJSON js
 		finalMessage = processedMessage
 	}
 
+	return p.createHookResponse(ctx, finalMessage)
+}
+
+// findCommandInConfig searches for a command by name in the config
+func (*DefaultPromptHandler) findCommandInConfig(
+	commands []config.Command, commandName string,
+) (*config.Command, string, bool) {
+	for _, cmd := range commands {
+		if cmd.Name == commandName {
+			return &cmd, cmd.Send, true
+		}
+	}
+	return nil, "", false
+}
+
+// createHookResponse creates the final JSON response for Claude Code hooks
+func (*DefaultPromptHandler) createHookResponse(ctx context.Context, message string) (string, error) {
+	logger := logging.Get(ctx)
+
 	// Create hook response that replaces the prompt and continues processing
 	response := HookSpecificOutput{
 		HookEventName:     constants.UserPromptSubmitEvent,
-		AdditionalContext: finalMessage,
+		AdditionalContext: message,
 	}
 
 	// Wrap in hookSpecificOutput structure as required by Claude Code hook specification
@@ -190,7 +231,7 @@ func (p *DefaultPromptHandler) processBuiltinCommand(ctx context.Context, comman
 
 	// Return blocking format for builtin commands
 	response := map[string]any{
-		"decision": "block",
+		"decision": DecisionBlock,
 		"reason":   message,
 	}
 

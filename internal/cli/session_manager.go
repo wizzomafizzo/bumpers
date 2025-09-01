@@ -29,26 +29,44 @@ type DefaultSessionManager struct {
 	configPath string
 }
 
-// NewSessionManager creates a new SessionManager
+// SessionManagerOptions configures SessionManager construction
+type SessionManagerOptions struct {
+	FileSystem  afero.Fs
+	Cache       *ai.Cache
+	ConfigPath  string
+	ProjectRoot string
+}
+
+// NewSessionManager creates a new SessionManager (maintains backward compatibility)
 func NewSessionManager(configPath, projectRoot string, fileSystem afero.Fs) *DefaultSessionManager {
+	return NewSessionManagerFromOptions(SessionManagerOptions{
+		ConfigPath:  configPath,
+		ProjectRoot: projectRoot,
+		FileSystem:  fileSystem,
+		Cache:       nil,
+	})
+}
+
+// NewSessionManagerFromOptions creates a new SessionManager with options pattern
+func NewSessionManagerFromOptions(opts SessionManagerOptions) *DefaultSessionManager {
 	return &DefaultSessionManager{
-		configPath: configPath,
-		fileSystem: fileSystem,
-		aiHelper:   NewAIHelper(projectRoot, nil, fileSystem),
-		cache:      nil, // Will be set by app when available
+		configPath: opts.ConfigPath,
+		fileSystem: opts.FileSystem,
+		aiHelper:   NewAIHelper(AIHelperOptions{ProjectRoot: opts.ProjectRoot, FileSystem: opts.FileSystem}),
+		cache:      opts.Cache,
 	}
 }
 
 // NewSessionManagerWithCache creates a new SessionManager with shared cache instance
-func NewSessionManagerWithCache(configPath, projectRoot string, fileSystem afero.Fs,
-	cache *ai.Cache,
+func NewSessionManagerWithCache(
+	configPath, projectRoot string, fileSystem afero.Fs, cache *ai.Cache,
 ) *DefaultSessionManager {
-	return &DefaultSessionManager{
-		configPath: configPath,
-		fileSystem: fileSystem,
-		aiHelper:   NewAIHelper(projectRoot, nil, fileSystem),
-		cache:      cache,
-	}
+	return NewSessionManagerFromOptions(SessionManagerOptions{
+		ConfigPath:  configPath,
+		ProjectRoot: projectRoot,
+		FileSystem:  fileSystem,
+		Cache:       cache,
+	})
 }
 
 // SetMockAIGenerator sets a mock AI generator for testing
@@ -174,7 +192,7 @@ func (s *DefaultSessionManager) ClearSessionCache(ctx context.Context) error {
 	defer func() {
 		if closeErr := cache.Close(); closeErr != nil {
 			// Log error but don't fail the function - cache close is non-critical
-			_ = closeErr
+			logging.Get(ctx).Error().Err(closeErr).Msg("failed to close cache")
 		}
 	}()
 

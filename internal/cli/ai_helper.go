@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/spf13/afero"
+	"github.com/wizzomafizzo/bumpers/internal/core/logging"
 	ai "github.com/wizzomafizzo/bumpers/internal/platform/claude/api"
 	"github.com/wizzomafizzo/bumpers/internal/platform/storage"
 )
@@ -17,23 +18,21 @@ type AIHelper struct {
 	projectRoot string
 }
 
-// NewAIHelper creates a new AI helper
-func NewAIHelper(projectRoot string, aiGenerator ai.MessageGenerator, fileSystem afero.Fs) *AIHelper {
-	return &AIHelper{
-		cachePath:   "", // Use XDG path (production default)
-		projectRoot: projectRoot,
-		aiGenerator: aiGenerator,
-		fileSystem:  fileSystem,
-	}
+// AIHelperOptions holds configuration options for AIHelper
+type AIHelperOptions struct {
+	Generator   ai.MessageGenerator
+	FileSystem  afero.Fs
+	CachePath   string
+	ProjectRoot string
 }
 
-// NewAIHelperWithCache creates a new AI helper with custom cache path (for tests)
-func NewAIHelperWithCache(cachePath, projectRoot string, generator ai.MessageGenerator, fs afero.Fs) *AIHelper {
+// NewAIHelper creates a new AI helper with options
+func NewAIHelper(opts AIHelperOptions) *AIHelper {
 	return &AIHelper{
-		cachePath:   cachePath,
-		projectRoot: projectRoot,
-		aiGenerator: generator,
-		fileSystem:  fs,
+		cachePath:   opts.CachePath,
+		projectRoot: opts.ProjectRoot,
+		aiGenerator: opts.Generator,
+		fileSystem:  opts.FileSystem,
 	}
 }
 
@@ -86,7 +85,7 @@ func (h *AIHelper) ProcessAIGenerationGeneric(
 	defer func() {
 		if closeErr := generator.Close(); closeErr != nil {
 			// Log error but don't fail the hook - generator.Close() error is non-critical
-			_ = closeErr // Silence linter about empty block
+			logging.Get(ctx).Error().Err(closeErr).Msg("failed to close AI generator")
 		}
 	}()
 

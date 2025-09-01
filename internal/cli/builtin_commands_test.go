@@ -144,6 +144,40 @@ func TestProcessBuiltinCommand_DifferentProjectsHaveIndependentState(t *testing.
 	}
 }
 
+// Boundary condition tests for IsBuiltinCommand
+func TestIsBuiltinCommand_ExactlyEightCharacters(t *testing.T) {
+	t.Parallel()
+	// Exactly 8 characters but not "bumpers " - should be false
+	result := IsBuiltinCommand("bumpers!")
+	require.False(t, result)
+}
+
+func TestIsBuiltinCommand_LessThanEightCharacters(t *testing.T) {
+	t.Parallel()
+	// Less than 8 characters - should be false
+	result := IsBuiltinCommand("bumpers")
+	require.False(t, result)
+}
+
+func TestIsBuiltinCommand_EmptyString(t *testing.T) {
+	t.Parallel()
+	// Empty string - should be false
+	result := IsBuiltinCommand("")
+	require.False(t, result)
+}
+
+func TestProcessBuiltinCommand_UnknownCommand(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "test.db")
+
+	// Test unknown command - should return "success" (default case)
+	response, err := ProcessBuiltinCommand(ctx, "bumpers unknown", dbPath, testProjectID)
+	require.NoError(t, err)
+	require.Equal(t, "success", response)
+}
+
 func TestProcessBuiltinCommand_StatePersistsAcrossProcessCalls(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

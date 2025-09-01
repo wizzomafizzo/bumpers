@@ -235,11 +235,11 @@ func (a *App) ProcessHook(ctx context.Context, input io.Reader) (ProcessResult, 
 	if err != nil {
 		return ProcessResult{}, err
 	}
-	return a.convertResponseToProcessResult(response), nil
+	return convertResponseToProcessResult(response), nil
 }
 
 // convertResponseToProcessResult converts legacy string responses to structured ProcessResult
-func (*App) convertResponseToProcessResult(response string) ProcessResult {
+func convertResponseToProcessResult(response string) ProcessResult {
 	if response == "" {
 		return ProcessResult{Mode: ProcessModeAllow, Message: ""}
 	}

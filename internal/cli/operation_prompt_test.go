@@ -64,7 +64,7 @@ func createTestPromptHandler(t *testing.T) (*DefaultPromptHandler, *state.Manage
 	handler := &DefaultPromptHandler{
 		configPath:   filepath.Join(tempDir, "bumpers.yml"),
 		projectRoot:  tempDir,
-		aiHelper:     NewAIHelper(tempDir, nil, nil),
+		aiHelper:     NewAIHelper(AIHelperOptions{ProjectRoot: tempDir}),
 		stateManager: stateManager,
 	}
 

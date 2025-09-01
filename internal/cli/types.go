@@ -18,12 +18,20 @@ type HookResponse struct {
 	HookSpecificOutput HookSpecificOutput `json:"hookSpecificOutput"` //nolint:tagliatelle // Claude Code API format
 }
 
+// Decision represents the validation decision type
+type Decision string
+
+const (
+	DecisionBlock Decision = "block"
+	DecisionAllow Decision = "allow"
+)
+
 // ValidationResult represents a validation decision result
 type ValidationResult struct {
-	Decision   any    `json:"decision,omitempty"`
-	Reason     string `json:"reason"`
-	StopReason string `json:"stopReason,omitempty"` //nolint:tagliatelle // Claude Code API format
-	Continue   bool   `json:"continue,omitempty"`
+	Decision   Decision `json:"decision,omitempty"`
+	Reason     string   `json:"reason"`
+	StopReason string   `json:"stopReason,omitempty"` //nolint:tagliatelle // Claude Code API format
+	Continue   bool     `json:"continue,omitempty"`
 }
 
 // SessionStartEvent represents a session start event
