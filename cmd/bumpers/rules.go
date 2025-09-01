@@ -16,7 +16,29 @@ import (
 	"github.com/wizzomafizzo/bumpers/internal/prompt"
 )
 
-const bashToolPattern = "^Bash$"
+const (
+	// Tool patterns
+	bashToolPattern = "^Bash$"
+	editToolPattern = "^(Write|Edit|MultiEdit)$"
+
+	// Tool choice labels
+	bashToolLabel   = "Bash only (default)"
+	allToolsLabel   = "All tools"
+	editToolsLabel  = "Edit tools (Write, Edit, MultiEdit)"
+	customToolLabel = "Custom regex"
+
+	// Generate mode labels
+	generateOffLabel     = "off (default)"
+	generateOnceLabel    = "once - generate one time"
+	generateSessionLabel = "session - cache for session"
+	generateAlwaysLabel  = "always - regenerate each time"
+
+	// Generate mode values
+	generateOff     = "off"
+	generateOnce    = "once"
+	generateSession = "session"
+	generateAlways  = "always"
+)
 
 // createRulesCommand creates the rules management command with subcommands
 func createRulesCommand() *cobra.Command {
@@ -158,13 +180,6 @@ func createRulesAddCommand() *cobra.Command {
 	return cmd
 }
 
-// runNonInteractiveRuleAdd handles non-interactive rule creation
-//
-//nolint:unused // Kept for backward compatibility
-func runNonInteractiveRuleAdd(pattern, message, tools, generate string) error {
-	return runNonInteractiveRuleAddWithConfigPath(pattern, message, tools, generate, "bumpers.yml")
-}
-
 // runNonInteractiveRuleAddWithConfigPath handles non-interactive rule creation with a specific config path
 func runNonInteractiveRuleAddWithConfigPath(pattern, message, tools, generate, configPath string) error {
 	cfg := &config.Config{}
@@ -244,31 +259,14 @@ func deleteRuleFromConfigPath(index int, configPath string) error {
 	return nil
 }
 
-// runInteractiveRuleAdd handles the interactive rule creation flow
-//
-//nolint:unused // Kept for backward compatibility
-func runInteractiveRuleAdd() error {
-	p := prompt.NewLinerPrompter()
-	return runInteractiveRuleAddWithPrompter(p)
-}
-
 // runInteractiveRuleAddWithConfigPath handles the interactive rule creation flow with config path
-func runInteractiveRuleAddWithConfigPath(_ string) error {
-	return nil
+func runInteractiveRuleAddWithConfigPath(configPath string) error {
+	p := prompt.NewLinerPrompter()
+	return runInteractiveRuleAddWithPrompterAndConfigPath(p, configPath)
 }
 
-// runInteractiveRuleAddWithPrompter handles the interactive rule creation flow with a custom prompter
-//
-//nolint:unused // Kept for backward compatibility
-func runInteractiveRuleAddWithPrompter(prompter prompt.Prompter) error {
-	return runInteractiveRuleAddWithPrompterAndConfigPath(prompter, "bumpers.yml")
-}
-
-// runInteractiveRuleAddWithPrompterAndConfigPath handles the interactive rule creation flow
-// with a custom prompter and config path
-func runInteractiveRuleAddWithPrompterAndConfigPath(prompter prompt.Prompter, configPath string) error {
-	defer func() { _ = prompter.Close() }()
-
+// collectRuleInputsForAdd handles the interactive prompting for rule creation
+func collectRuleInputsForAdd(prompter prompt.Prompter, configPath string) error {
 	// Step 1: Command Pattern (with AI generation)
 	pattern, err := prompt.AITextInputWithPrompter(prompter, "Enter command to block", patterns.GeneratePattern)
 	if err != nil {
@@ -277,10 +275,10 @@ func runInteractiveRuleAddWithPrompterAndConfigPath(prompter prompt.Prompter, co
 
 	// Step 2: Tool Selection (Quick select)
 	toolOptions := map[string]string{
-		"b": "Bash only (default)",
-		"a": "All tools",
-		"e": "Edit tools (Write, Edit, MultiEdit)",
-		"c": "Custom regex",
+		"b": bashToolLabel,
+		"a": allToolsLabel,
+		"e": editToolsLabel,
+		"c": customToolLabel,
 	}
 
 	toolChoice, err := prompt.QuickSelectWithPrompter(prompter, "Which tools should this rule apply to?", toolOptions)
@@ -296,10 +294,10 @@ func runInteractiveRuleAddWithPrompterAndConfigPath(prompter prompt.Prompter, co
 
 	// Step 4: AI Generation (Quick select)
 	generateOptions := map[string]string{
-		"o": "off (default)",
-		"n": "once - generate one time",
-		"s": "session - cache for session",
-		"a": "always - regenerate each time",
+		"o": generateOffLabel,
+		"n": generateOnceLabel,
+		"s": generateSessionLabel,
+		"a": generateAlwaysLabel,
 	}
 
 	generateMode, err := prompt.QuickSelectWithPrompter(prompter, "Generate AI responses?", generateOptions)
@@ -319,6 +317,14 @@ func runInteractiveRuleAddWithPrompterAndConfigPath(prompter prompt.Prompter, co
 	return nil
 }
 
+// runInteractiveRuleAddWithPrompterAndConfigPath handles the interactive rule creation flow
+// with a custom prompter and config path
+func runInteractiveRuleAddWithPrompterAndConfigPath(prompter prompt.Prompter, configPath string) error {
+	defer func() { _ = prompter.Close() }()
+
+	return collectRuleInputsForAdd(prompter, configPath)
+}
+
 // buildRuleFromInputs converts user inputs to a Rule struct
 func buildRuleFromInputs(pattern, toolChoice, message, generateMode string) config.Rule {
 	rule := config.Rule{
@@ -328,26 +334,26 @@ func buildRuleFromInputs(pattern, toolChoice, message, generateMode string) conf
 
 	// Convert tool choice to regex
 	switch toolChoice {
-	case "Bash only (default)":
+	case bashToolLabel:
 		rule.Tool = bashToolPattern
-	case "All tools":
+	case allToolsLabel:
 		rule.Tool = ""
-	case "Edit tools (Write, Edit, MultiEdit)":
-		rule.Tool = "^(Write|Edit|MultiEdit)$"
-	case "Custom regex":
+	case editToolsLabel:
+		rule.Tool = editToolPattern
+	case customToolLabel:
 		rule.Tool = ""
 	}
 
 	// Convert generate mode
 	switch generateMode {
-	case "off (default)":
-		rule.Generate = "off"
-	case "once - generate one time":
-		rule.Generate = "once"
-	case "session - cache for session":
-		rule.Generate = "session"
-	case "always - regenerate each time":
-		rule.Generate = "always"
+	case generateOffLabel:
+		rule.Generate = generateOff
+	case generateOnceLabel:
+		rule.Generate = generateOnce
+	case generateSessionLabel:
+		rule.Generate = generateSession
+	case generateAlwaysLabel:
+		rule.Generate = generateAlways
 	}
 
 	return rule
@@ -462,10 +468,10 @@ func runInteractiveRuleEditWithPrompterAndConfigPath(prompter prompt.Prompter, i
 
 	// Step 2: Tool Selection (Quick select)
 	toolOptions := map[string]string{
-		"b": "Bash only (default)",
-		"a": "All tools",
-		"e": "Edit tools (Write, Edit, MultiEdit)",
-		"c": "Custom regex",
+		"b": bashToolLabel,
+		"a": allToolsLabel,
+		"e": editToolsLabel,
+		"c": customToolLabel,
 	}
 
 	toolChoice, err := prompt.QuickSelectWithPrompter(prompter, "Which tools should this rule apply to?", toolOptions)
@@ -481,10 +487,10 @@ func runInteractiveRuleEditWithPrompterAndConfigPath(prompter prompt.Prompter, i
 
 	// Step 4: AI Generation (Quick select)
 	generateOptions := map[string]string{
-		"o": "off (default)",
-		"n": "once - generate one time",
-		"s": "session - cache for session",
-		"a": "always - regenerate each time",
+		"o": generateOffLabel,
+		"n": generateOnceLabel,
+		"s": generateSessionLabel,
+		"a": generateAlwaysLabel,
 	}
 
 	generateMode, err := prompt.QuickSelectWithPrompter(prompter, "Generate AI responses?", generateOptions)

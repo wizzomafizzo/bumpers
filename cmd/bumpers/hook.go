@@ -1,10 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
-	"strings"
 
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
@@ -23,20 +23,18 @@ func (e *HookExitError) Error() string {
 	return e.Message
 }
 
-// findWorkingDir finds the project working directory
-func findWorkingDir() (string, error) {
-	root, err := project.FindRoot()
+// initLoggingForHook initializes logging context specifically for hook processing
+func initLoggingForHook() (context.Context, error) {
+	// Detect project root for logging context
+	projectRoot, err := project.FindRoot()
 	if err != nil {
-		return "", fmt.Errorf("failed to find project root: %w", err)
+		// Fall back to current working directory if project root detection fails
+		projectRoot = ""
 	}
-	return root, nil
-}
 
-// initLogging initializes logging for hook commands and returns context with logger
-func initLogging(workingDir string) (context.Context, error) {
 	fs := afero.NewOsFs()
 	ctx, err := logging.New(context.Background(), fs, logging.Config{
-		ProjectID: workingDir,
+		ProjectID: projectRoot,
 		Level:     logging.DebugLevel,
 	})
 	if err != nil {
@@ -52,12 +50,12 @@ func processHookCommand(
 	// Read input for processing
 	inputBytes, err := io.ReadAll(input)
 	if err != nil {
-		return cli.ProcessResult{}, 1, fmt.Errorf("error reading input: %w", err)
+		return cli.ProcessResult{}, 1, fmt.Errorf("failed to read hook input: %w", err)
 	}
 
-	result, err = app.ProcessHook(ctx, strings.NewReader(string(inputBytes)))
+	result, err = app.ProcessHook(ctx, bytes.NewReader(inputBytes))
 	if err != nil {
-		return cli.ProcessResult{}, 1, fmt.Errorf("error: %w", err)
+		return cli.ProcessResult{}, 1, fmt.Errorf("failed to process hook: %w", err)
 	}
 
 	// Use structured ProcessResult to determine exit code
@@ -76,13 +74,8 @@ func processHookCommand(
 
 // runHookCommand handles the main execution logic for the hook command.
 func runHookCommand(cmd *cobra.Command, _ []string) error {
-	// Initialize logging only for hook command
-	workingDir, err := findWorkingDir()
-	if err != nil {
-		return fmt.Errorf("failed to find project root: %w", err)
-	}
-
-	ctx, err := initLogging(workingDir)
+	// Initialize logging context specifically for hook processing
+	ctx, err := initLoggingForHook()
 	if err != nil {
 		return fmt.Errorf("logger init failed: %w", err)
 	}

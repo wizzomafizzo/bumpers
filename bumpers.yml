@@ -1,7 +1,7 @@
 rules:
     - match: ' /tmp'
       send: Use a "tmp" directory in the project root instead.
-    - match: '^go test'
+    - match: 'go test '
       send: |
         This project uses "just test" for TDD integration. Simply replace
         your "go" with "just" in the command to use this integration, it's

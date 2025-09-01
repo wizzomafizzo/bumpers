@@ -23,10 +23,7 @@ func createStatusCommand() *cobra.Command {
 				return fmt.Errorf("failed to get status: %w", err)
 			}
 
-			_, err = fmt.Print(status)
-			if err != nil {
-				return fmt.Errorf("failed to print status: %w", err)
-			}
+			_, _ = fmt.Print(status)
 			return nil
 		},
 	}
