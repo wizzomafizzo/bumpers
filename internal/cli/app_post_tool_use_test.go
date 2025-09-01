@@ -437,82 +437,95 @@ func TestPostToolUseWithThinkingAndTextBlocks(t *testing.T) {
 	}
 }
 
-type postToolUseIntegrationTestCase struct {
-	sessionID       string
-	transcriptFile  string
-	matchPattern    string
-	command         string
-	expectedMessage string
-	success         bool
-}
-
-// Helper function for PostToolUse integration tests
-func testPostToolUseIntegration(t *testing.T, tc *postToolUseIntegrationTestCase) {
-	t.Helper()
+func TestIntegrationThinkingAndTextExtraction(t *testing.T) {
+	t.Parallel()
 	ctx, _ := setupTestWithContext(t)
 
-	testdataDir := testdataRelativePath
-	transcriptPath := filepath.Join(testdataDir, tc.transcriptFile)
-	absPath, err := filepath.Abs(transcriptPath)
-	if err != nil {
-		t.Fatalf("Failed to get absolute path: %v", err)
-	}
+	// Create embedded transcript content with thinking and text content that matches "transcript.*data"
+	line1 := `{"type":"user","message":{"role":"user","content":"Can you analyze this transcript data?"},` +
+		`"uuid":"user1","timestamp":"2024-01-01T10:00:00Z"}`
+	line2 := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"thinking",` +
+		`"thinking":"I need to analyze the transcript data provided. This will involve examining the ` +
+		`structure and extracting meaningful insights from the conversation flow."},{"type":"text",` +
+		`"text":"I'll analyze the transcript data for you. Let me examine the structure and content."}]},` +
+		`"uuid":"assistant1","timestamp":"2024-01-01T10:01:00Z"}`
+	transcriptContent := line1 + "\n" + line2
 
-	configContent := fmt.Sprintf(`rules:
+	transcriptFile := filepath.Join(t.TempDir(), "transcript-thinking-text.jsonl")
+	err := os.WriteFile(transcriptFile, []byte(transcriptContent), 0o600)
+	require.NoError(t, err)
+
+	configContent := `rules:
   - match:
-      pattern: "%s"
+      pattern: "transcript.*data"
       event: "post"
       sources: ["#intent"]
-    send: "%s"
-    generate: "off"`, tc.matchPattern, tc.expectedMessage)
+    send: "Transcript analysis detected"
+    generate: "off"`
 
 	configPath := createTempConfig(t, configContent)
 	app := NewApp(ctx, configPath)
 
 	postToolUseInput := fmt.Sprintf(`{
-		"session_id": "%s",
+		"session_id": "integration-test",
 		"transcript_path": "%s",
 		"cwd": "/test/dir",
 		"hook_event_name": "PostToolUse",
 		"tool_name": "Bash",
-		"tool_input": {"command": "%s"},
-		"tool_response": {"success": %t}
-	}`, tc.sessionID, absPath, tc.command, tc.success)
+		"tool_input": {"command": "go test ./..."},
+		"tool_response": {"success": false}
+	}`, transcriptFile)
 
-	result, err := app.ProcessHook(context.Background(), strings.NewReader(postToolUseInput))
-	if err != nil {
-		t.Fatalf("ProcessHook failed: %v", err)
-	}
+	result, err := app.ProcessHook(ctx, strings.NewReader(postToolUseInput))
+	require.NoError(t, err)
 
-	if result.Message != tc.expectedMessage {
-		t.Errorf("Expected %q, got %q", tc.expectedMessage, result.Message)
-	}
-}
-
-func TestIntegrationThinkingAndTextExtraction(t *testing.T) {
-	t.Parallel()
-
-	testPostToolUseIntegration(t, &postToolUseIntegrationTestCase{
-		sessionID:       "integration-test",
-		transcriptFile:  "transcript-thinking-and-text.jsonl",
-		matchPattern:    "transcript.*data",
-		command:         "go test ./...",
-		expectedMessage: "Transcript analysis detected",
-		success:         false,
-	})
+	expected := "Transcript analysis detected"
+	assert.Equal(t, expected, result.Message)
 }
 
 func TestIntegrationPerformanceAnalysisDetection(t *testing.T) {
 	t.Parallel()
+	ctx, _ := setupTestWithContext(t)
 
-	testPostToolUseIntegration(t, &postToolUseIntegrationTestCase{
-		sessionID:       "perf-test",
-		transcriptFile:  "transcript-performance-analysis.jsonl",
-		matchPattern:    "immediate.*optimization",
-		command:         "top",
-		expectedMessage: "Performance optimization guidance triggered",
-		success:         true,
-	})
+	// Create embedded transcript content with thinking content that matches "immediate.*optimization"
+	line1 := `{"type":"user","message":{"role":"user","content":"The application seems slow, can you help?"},` +
+		`"uuid":"user1","timestamp":"2024-01-01T10:00:00Z"}`
+	line2 := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"thinking",` +
+		`"thinking":"Performance issues need immediate optimization to prevent system degradation ` +
+		`and user experience problems."},{"type":"text","text":"I'll help optimize the performance. ` +
+		`Let me analyze the system metrics first."}]},"uuid":"assistant1","timestamp":"2024-01-01T10:01:00Z"}`
+	transcriptContent := line1 + "\n" + line2
+
+	transcriptFile := filepath.Join(t.TempDir(), "transcript-performance.jsonl")
+	err := os.WriteFile(transcriptFile, []byte(transcriptContent), 0o600)
+	require.NoError(t, err)
+
+	configContent := `rules:
+  - match:
+      pattern: "immediate.*optimization"
+      event: "post"
+      sources: ["#intent"]
+    send: "Performance optimization guidance triggered"
+    generate: "off"`
+
+	configPath := createTempConfig(t, configContent)
+	app := NewApp(ctx, configPath)
+
+	postToolUseInput := fmt.Sprintf(`{
+		"session_id": "perf-test",
+		"transcript_path": "%s",
+		"cwd": "/test/dir",
+		"hook_event_name": "PostToolUse",
+		"tool_name": "Bash",
+		"tool_input": {"command": "top"},
+		"tool_response": {"success": true}
+	}`, transcriptFile)
+
+	result, err := app.ProcessHook(ctx, strings.NewReader(postToolUseInput))
+	require.NoError(t, err)
+
+	expected := "Performance optimization guidance triggered"
+	assert.Equal(t, expected, result.Message)
 }
 
 // TestPostToolUseStructuredToolResponseFields tests matching against specific fields in structured tool responses

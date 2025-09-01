@@ -2,6 +2,8 @@ package config
 
 import (
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 const (
@@ -9,6 +11,14 @@ const (
 	generateModeOnce   = "once"
 	generateModeAlways = "always"
 )
+
+// Helper function to load config from YAML and handle errors consistently
+func loadConfigFromYAML(t *testing.T, yamlContent string) *Config {
+	t.Helper()
+	config, err := LoadFromYAML([]byte(yamlContent))
+	require.NoError(t, err, "Should load config from YAML without error")
+	return config
+}
 
 // Test the Commands feature
 func TestConfigWithCommands(t *testing.T) {
@@ -24,20 +34,13 @@ commands:
   - name: "status"
     send: "Project Status: All systems operational"`
 
-	config, err := LoadFromYAML([]byte(yamlContent))
-	if err != nil {
-		t.Fatalf("Expected no error loading config with commands, got %v", err)
-	}
+	config := loadConfigFromYAML(t, yamlContent)
 
 	// Test rules are still loaded
-	if len(config.Rules) != 1 {
-		t.Fatalf("Expected 1 rule, got %d", len(config.Rules))
-	}
+	require.Len(t, config.Rules, 1, "Should have exactly 1 rule")
 
 	// Test commands are loaded
-	if len(config.Commands) != 2 {
-		t.Fatalf("Expected 2 commands, got %d", len(config.Commands))
-	}
+	require.Len(t, config.Commands, 2, "Should have exactly 2 commands")
 
 	expectedMessages := []string{
 		"Available commands:\\n!help - Show this help\\n!status - Show project status",
@@ -45,9 +48,7 @@ commands:
 	}
 
 	for i, cmd := range config.Commands {
-		if cmd.Send != expectedMessages[i] {
-			t.Errorf("Expected command %d message %q, got %q", i, expectedMessages[i], cmd.Send)
-		}
+		require.Equal(t, expectedMessages[i], cmd.Send, "Command %d should have expected message", i)
 	}
 }
 
@@ -59,18 +60,10 @@ func TestConfigValidationWithCommands(t *testing.T) {
   - name: "help"
     send: "Help command response"`
 
-	config, err := LoadFromYAML([]byte(yamlContent))
-	if err != nil {
-		t.Fatalf("Expected no error loading config with commands only, got %v", err)
-	}
+	config := loadConfigFromYAML(t, yamlContent)
 
-	if len(config.Commands) != 1 {
-		t.Fatalf("Expected 1 command, got %d", len(config.Commands))
-	}
-
-	if len(config.Rules) != 0 {
-		t.Fatalf("Expected 0 rules, got %d", len(config.Rules))
-	}
+	require.Len(t, config.Commands, 1, "Should have exactly 1 command")
+	require.Empty(t, config.Rules, "Should have no rules")
 }
 
 // Test Command Generate field defaults to session
@@ -276,5 +269,30 @@ func TestDefaultConfigIncludesNotes(t *testing.T) {
 
 	if !hasUsefulNote {
 		t.Error("Expected at least one note with non-empty message")
+	}
+}
+
+func TestDefaultConfigCommandsHaveNames(t *testing.T) {
+	t.Parallel()
+
+	config := DefaultConfig()
+
+	if len(config.Commands) == 0 {
+		t.Error("Expected default config to include commands")
+	}
+
+	expectedNames := []string{"help", "status", "docs"}
+
+	if len(config.Commands) != len(expectedNames) {
+		t.Fatalf("Expected %d commands, got %d", len(expectedNames), len(config.Commands))
+	}
+
+	for i, cmd := range config.Commands {
+		if cmd.Name == "" {
+			t.Errorf("Command %d is missing required Name field", i)
+		}
+		if cmd.Name != expectedNames[i] {
+			t.Errorf("Expected command %d to have name %q, got %q", i, expectedNames[i], cmd.Name)
+		}
 	}
 }
