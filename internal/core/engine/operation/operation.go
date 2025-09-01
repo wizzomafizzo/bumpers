@@ -1,6 +1,9 @@
 package operation
 
-import "strings"
+import (
+	"strings"
+	"time"
+)
 
 // OperationMode represents the current operation state
 type OperationMode string
@@ -22,31 +25,46 @@ func DefaultState() *OperationState {
 	return &OperationState{
 		Mode:         PlanMode,
 		TriggerCount: 0,
-		UpdatedAt:    0,
+		UpdatedAt:    time.Now().Unix(),
 	}
 }
 
-// TriggerPhrases that switch from plan to execute mode
-var TriggerPhrases = []string{
+// triggerPhrases that switch from plan to execute mode
+var triggerPhrases = []string{
 	"make it so",
 	"go ahead",
 }
 
-// EmergencyStopPhrases that immediately force plan mode
-var EmergencyStopPhrases = []string{
+// GetTriggerPhrases returns a copy of the trigger phrases
+func GetTriggerPhrases() []string {
+	return append([]string(nil), triggerPhrases...)
+}
+
+// emergencyStopPhrases that immediately force plan mode
+var emergencyStopPhrases = []string{
 	"STOP",
 	"SILENCE",
 }
 
-// ReadOnlyBashCommands that are always allowed even in plan mode
-var ReadOnlyBashCommands = []string{
+// GetEmergencyStopPhrases returns a copy of the emergency stop phrases
+func GetEmergencyStopPhrases() []string {
+	return append([]string(nil), emergencyStopPhrases...)
+}
+
+// readOnlyBashCommands that are always allowed even in plan mode
+var readOnlyBashCommands = []string{
 	"ls", "cat", "git status",
+}
+
+// GetReadOnlyBashCommands returns a copy of the read-only bash commands
+func GetReadOnlyBashCommands() []string {
+	return append([]string(nil), readOnlyBashCommands...)
 }
 
 // DetectTriggerPhrase checks if user message contains trigger phrases
 func DetectTriggerPhrase(message string) bool {
 	msgLower := strings.ToLower(message)
-	for _, phrase := range TriggerPhrases {
+	for _, phrase := range triggerPhrases {
 		if strings.Contains(msgLower, phrase) {
 			return true
 		}
@@ -56,8 +74,9 @@ func DetectTriggerPhrase(message string) bool {
 
 // DetectEmergencyStop checks if user message contains emergency stop phrases
 func DetectEmergencyStop(message string) bool {
-	for _, phrase := range EmergencyStopPhrases {
-		if strings.Contains(message, phrase) {
+	msgUpper := strings.ToUpper(message)
+	for _, phrase := range emergencyStopPhrases {
+		if strings.Contains(msgUpper, strings.ToUpper(phrase)) {
 			return true
 		}
 	}
@@ -69,7 +88,7 @@ func IsReadOnlyBashCommand(command string) bool {
 	command = strings.TrimSpace(command)
 
 	// Check for exact matches and prefixes
-	for _, readOnly := range ReadOnlyBashCommands {
+	for _, readOnly := range readOnlyBashCommands {
 		if command == readOnly || strings.HasPrefix(command, readOnly+" ") {
 			return true
 		}

@@ -370,7 +370,7 @@ func (a *App) installClaudeHooks() error {
 }
 
 // extractAndLogIntent delegates to HookProcessor - needed for tests
-func (a *App) extractAndLogIntent(ctx context.Context, event hooks.HookEvent) string {
+func (a *App) extractAndLogIntent(ctx context.Context, event *hooks.HookEvent) string {
 	if defaultHookProcessor, ok := a.hookProcessor.(*DefaultHookProcessor); ok {
 		return defaultHookProcessor.ExtractAndLogIntent(ctx, event)
 	}

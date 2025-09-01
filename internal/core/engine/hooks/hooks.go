@@ -40,6 +40,10 @@ type HookEvent struct {
 	ToolName       string         `json:"tool_name"`
 	TranscriptPath string         `json:"transcript_path"`
 	ToolUseID      string         `json:"tool_use_id"`
+	ToolResponse   any            `json:"tool_response"`
+	SessionID      string         `json:"session_id"`
+	HookEventName  string         `json:"hook_event_name"`
+	CWD            string         `json:"cwd"`
 }
 
 func ParseInput(reader io.Reader) (*HookEvent, error) {
@@ -65,8 +69,23 @@ func DetectHookType(reader io.Reader) (HookType, json.RawMessage, error) {
 		return UnknownHook, nil, fmt.Errorf("failed to parse hook input JSON: %w", err)
 	}
 
-	// Check for distinctive fields to determine hook type
-	// PostToolUse has both tool_input and tool_response, so check for it first
+	// Check for hook_event_name first for more reliable detection
+	if hookEventName, ok := generic["hook_event_name"]; ok {
+		if eventName, ok := hookEventName.(string); ok {
+			switch eventName {
+			case "PreToolUse":
+				return PreToolUseHook, json.RawMessage(data), nil
+			case "PostToolUse":
+				return PostToolUseHook, json.RawMessage(data), nil
+			case "UserPromptSubmit":
+				return UserPromptSubmitHook, json.RawMessage(data), nil
+			case "SessionStart":
+				return SessionStartHook, json.RawMessage(data), nil
+			}
+		}
+	}
+
+	// Fallback to field presence detection for compatibility
 	if _, hasInput := generic["tool_input"]; hasInput {
 		if _, hasResponse := generic["tool_response"]; hasResponse {
 			return PostToolUseHook, json.RawMessage(data), nil
@@ -78,11 +97,6 @@ func DetectHookType(reader io.Reader) (HookType, json.RawMessage, error) {
 	}
 	if _, ok := generic["tool_response"]; ok {
 		return PostToolUseHook, json.RawMessage(data), nil
-	}
-	if hookEventName, ok := generic["hook_event_name"]; ok {
-		if eventName, ok := hookEventName.(string); ok && eventName == "SessionStart" {
-			return SessionStartHook, json.RawMessage(data), nil
-		}
 	}
 
 	return UnknownHook, json.RawMessage(data), nil

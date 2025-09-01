@@ -391,7 +391,7 @@ func TestExtractAndLogIntent_ReturnsIntentContent(t *testing.T) {
 	event := hooks.HookEvent{TranscriptPath: transcriptPath}
 
 	// Test that extractAndLogIntent returns the extracted content
-	intentContent := app.extractAndLogIntent(ctx, event)
+	intentContent := app.extractAndLogIntent(ctx, &event)
 	assert.Contains(t, intentContent, "I'll search the codebase to understand")
 
 	_ = getLogOutput // Suppress unused variable warning

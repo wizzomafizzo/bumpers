@@ -155,7 +155,7 @@ func (h *DefaultHookProcessor) ProcessPreToolUse(ctx context.Context, rawJSON js
 	// Extract intent from transcript if available
 	var intentContent string
 	if event.TranscriptPath != "" {
-		intentContent = h.ExtractAndLogIntent(ctx, event)
+		intentContent = h.ExtractAndLogIntent(ctx, &event)
 	}
 
 	// Log summary of available sources for rule matching
@@ -180,7 +180,7 @@ func (h *DefaultHookProcessor) ProcessPreToolUse(ctx context.Context, rawJSON js
 	}
 
 	// Find matching rule
-	matchedRule, matchedValue := h.findMatchingPreRule(ctx, preRules, ruleMatcher, event)
+	matchedRule, matchedValue := h.findMatchingPreRule(ctx, preRules, ruleMatcher, &event)
 	if matchedRule == nil {
 		return "", nil
 	}
@@ -205,7 +205,7 @@ func (*DefaultHookProcessor) filterPreEventRules(rules []config.Rule) []config.R
 }
 
 // ExtractAndLogIntent extracts and logs intent content from transcript (public for testing)
-func (*DefaultHookProcessor) ExtractAndLogIntent(ctx context.Context, event hooks.HookEvent) string {
+func (*DefaultHookProcessor) ExtractAndLogIntent(ctx context.Context, event *hooks.HookEvent) string {
 	if event.TranscriptPath == "" {
 		return ""
 	}
@@ -228,7 +228,7 @@ func (*DefaultHookProcessor) ExtractAndLogIntent(ctx context.Context, event hook
 
 // findMatchingPreRule finds the first rule that matches the event
 func (h *DefaultHookProcessor) findMatchingPreRule(
-	ctx context.Context, preRules []config.Rule, ruleMatcher *matcher.RuleMatcher, event hooks.HookEvent,
+	ctx context.Context, preRules []config.Rule, ruleMatcher *matcher.RuleMatcher, event *hooks.HookEvent,
 ) (rule *config.Rule, matchedField string) {
 	for i := range preRules {
 		rule := &preRules[i]
@@ -242,7 +242,7 @@ func (h *DefaultHookProcessor) findMatchingPreRule(
 
 // checkRuleSources checks if rule matches using sources or fallback behavior
 func (h *DefaultHookProcessor) checkRuleSources(
-	ctx context.Context, rule *config.Rule, ruleMatcher *matcher.RuleMatcher, event hooks.HookEvent,
+	ctx context.Context, rule *config.Rule, ruleMatcher *matcher.RuleMatcher, event *hooks.HookEvent,
 ) (matchedRule *config.Rule, matchedField string) {
 	match := rule.GetMatch()
 	if len(match.Sources) > 0 {
@@ -253,7 +253,7 @@ func (h *DefaultHookProcessor) checkRuleSources(
 
 // checkSpecificSources checks only specified source fields
 func (h *DefaultHookProcessor) checkSpecificSources(
-	ctx context.Context, rule *config.Rule, ruleMatcher *matcher.RuleMatcher, event hooks.HookEvent,
+	ctx context.Context, rule *config.Rule, ruleMatcher *matcher.RuleMatcher, event *hooks.HookEvent,
 ) (matchedRule *config.Rule, matchedField string) {
 	match := rule.GetMatch()
 	for _, fieldName := range match.Sources {
@@ -269,7 +269,7 @@ func (h *DefaultHookProcessor) checkSpecificSources(
 
 // checkIntentSource handles #intent source field
 func (h *DefaultHookProcessor) checkIntentSource(
-	ctx context.Context, fieldName string, rule *config.Rule, ruleMatcher *matcher.RuleMatcher, event hooks.HookEvent,
+	ctx context.Context, fieldName string, rule *config.Rule, ruleMatcher *matcher.RuleMatcher, event *hooks.HookEvent,
 ) (matched bool, content string) {
 	if fieldName != "#intent" {
 		return false, ""
@@ -298,7 +298,7 @@ func (h *DefaultHookProcessor) checkIntentSource(
 
 // checkToolInputSource handles regular ToolInput fields
 func (h *DefaultHookProcessor) checkToolInputSource(
-	fieldName string, rule *config.Rule, ruleMatcher *matcher.RuleMatcher, event hooks.HookEvent,
+	fieldName string, rule *config.Rule, ruleMatcher *matcher.RuleMatcher, event *hooks.HookEvent,
 ) (matched bool, content string) {
 	value, exists := event.ToolInput[fieldName]
 	if !exists {
@@ -336,7 +336,7 @@ func (h *DefaultHookProcessor) matchRuleContent(
 }
 
 // checkOriginalBehavior uses original matching behavior for backward compatibility
-func (h *DefaultHookProcessor) checkOriginalBehavior(rule *config.Rule, event hooks.HookEvent) (
+func (h *DefaultHookProcessor) checkOriginalBehavior(rule *config.Rule, event *hooks.HookEvent) (
 	matchedRule *config.Rule, matchedField string,
 ) {
 	tempMatcher, err := matcher.NewRuleMatcher([]config.Rule{*rule})
@@ -352,7 +352,7 @@ func (h *DefaultHookProcessor) checkOriginalBehavior(rule *config.Rule, event ho
 }
 
 func (h *DefaultHookProcessor) findMatchingRule(
-	ruleMatcher *matcher.RuleMatcher, event hooks.HookEvent,
+	ruleMatcher *matcher.RuleMatcher, event *hooks.HookEvent,
 ) (*config.Rule, string, error) {
 	for key, value := range event.ToolInput {
 		strValue, ok := value.(string)
