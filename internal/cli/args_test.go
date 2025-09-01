@@ -2,6 +2,8 @@ package cli
 
 import "testing"
 
+const testCommand = "test"
+
 func TestParseCommandArgs_EmptyInput(t *testing.T) {
 	t.Parallel()
 	gotCommand, gotArgs, gotArgv := ParseCommandArgs("")
@@ -21,7 +23,7 @@ func TestParseCommandArgs_CommandOnly(t *testing.T) {
 	t.Parallel()
 	gotCommand, gotArgs, gotArgv := ParseCommandArgs("test")
 
-	if gotCommand != "test" {
+	if gotCommand != testCommand {
 		t.Errorf("ParseCommandArgs(\"test\") command = %q, want \"test\"", gotCommand)
 	}
 	if gotArgs != "" {
@@ -37,7 +39,7 @@ func TestParseCommandArgs_SimpleArguments(t *testing.T) {
 	t.Parallel()
 	gotCommand, gotArgs, gotArgv := ParseCommandArgs("test foo bar")
 
-	if gotCommand != "test" {
+	if gotCommand != testCommand {
 		t.Errorf("ParseCommandArgs(\"test foo bar\") command = %q, want \"test\"", gotCommand)
 	}
 	if gotArgs != "foo bar" {
@@ -59,7 +61,7 @@ func TestParseCommandArgs_QuotedArguments(t *testing.T) {
 	t.Parallel()
 	gotCommand, gotArgs, gotArgv := ParseCommandArgs("test foo \"bar baz\" qux")
 
-	if gotCommand != "test" {
+	if gotCommand != testCommand {
 		t.Errorf("ParseCommandArgs() command = %q, want \"test\"", gotCommand)
 	}
 	if gotArgs != "foo \"bar baz\" qux" {

@@ -67,7 +67,7 @@ func NewApp(ctx context.Context, configPath string) *App {
 	// Create specialized components
 	configValidator := NewConfigValidator(resolvedConfigPath, projectRoot)
 	hookProcessor := NewHookProcessor(configValidator, projectRoot, stateManager)
-	promptHandler := NewPromptHandler(resolvedConfigPath, projectRoot)
+	promptHandler := NewPromptHandler(resolvedConfigPath, projectRoot, stateManager)
 	sessionManager := NewSessionManager(resolvedConfigPath, projectRoot, nil)
 	installManager := NewInstallManager(resolvedConfigPath, "", projectRoot, nil)
 

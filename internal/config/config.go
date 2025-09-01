@@ -59,7 +59,7 @@ type Session struct {
 }
 
 func Load(path string) (*Config, error) {
-	data, err := os.ReadFile(path) //nolint:gosec // Path comes from validated user config
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read config: %w", err)
 	}

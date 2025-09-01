@@ -5,6 +5,8 @@ import (
 	"time"
 )
 
+const testCommandName = "test"
+
 func TestNewSharedContext(t *testing.T) {
 	t.Parallel()
 
@@ -76,14 +78,14 @@ func TestBuildCommandContext(t *testing.T) {
 func TestBuildCommandContextWithArgs(t *testing.T) {
 	t.Parallel()
 
-	result := BuildCommandContextWithArgs("test", "foo bar", []string{"test", "foo", "bar"})
+	result := BuildCommandContextWithArgs(testCommandName, "foo bar", []string{testCommandName, "foo", "bar"})
 
 	// Should have all context fields
 	expectedDate := time.Now().Format("2006-01-02")
 	if result["Today"] != expectedDate {
 		t.Errorf("Expected Today to be %q, got %v", expectedDate, result["Today"])
 	}
-	if result["Name"] != "test" {
+	if result["Name"] != testCommandName {
 		t.Errorf("Expected Name to be 'test', got %v", result["Name"])
 	}
 	if result["Args"] != "foo bar" {
@@ -96,7 +98,7 @@ func TestBuildCommandContextWithArgs(t *testing.T) {
 		return
 	}
 
-	expectedArgv := []string{"test", "foo", "bar"}
+	expectedArgv := []string{testCommandName, "foo", "bar"}
 	if len(argv) != len(expectedArgv) {
 		t.Errorf("Expected Argv length %d, got %d", len(expectedArgv), len(argv))
 		return
@@ -114,16 +116,16 @@ func TestMergeContexts_WithCommandContextArgs(t *testing.T) {
 
 	shared := SharedContext{Today: "2025-08-25"}
 	specific := CommandContext{
-		Name: "test",
+		Name: testCommandName,
 		Args: "foo bar",
-		Argv: []string{"test", "foo", "bar"},
+		Argv: []string{testCommandName, "foo", "bar"},
 	}
 	result := MergeContexts(shared, specific)
 
 	if result["Today"] != "2025-08-25" {
 		t.Errorf("Expected Today to be '2025-08-25', got %v", result["Today"])
 	}
-	if result["Name"] != "test" {
+	if result["Name"] != testCommandName {
 		t.Errorf("Expected Name to be 'test', got %v", result["Name"])
 	}
 	if result["Args"] != "foo bar" {
@@ -134,7 +136,7 @@ func TestMergeContexts_WithCommandContextArgs(t *testing.T) {
 	if !ok {
 		t.Errorf("Expected Argv to be []string, got %T", result["Argv"])
 	}
-	if len(argv) != 3 || argv[0] != "test" || argv[1] != "foo" || argv[2] != "bar" {
+	if len(argv) != 3 || argv[0] != testCommandName || argv[1] != "foo" || argv[2] != "bar" {
 		t.Errorf("Expected Argv to be [test foo bar], got %v", argv)
 	}
 }

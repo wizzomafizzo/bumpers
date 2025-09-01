@@ -51,7 +51,8 @@ func processReasoningLine(line string) string {
 	line = strings.TrimSuffix(line, "\n")
 
 	// Check if it's an assistant message and extract text content
-	if !strings.Contains(line, `"type":"assistant"`) {
+	const assistantType = `"type":"assistant"`
+	if !strings.Contains(line, assistantType) {
 		return ""
 	}
 
@@ -76,7 +77,7 @@ func extractTextFromLine(line string) string {
 type TranscriptEntry struct {
 	Type       string         `json:"type"`
 	UUID       string         `json:"uuid"`
-	ParentUUID string         `json:"parentUuid"`
+	ParentUUID string         `json:"parentUuid"` //nolint:tagliatelle // Claude transcript format
 	Message    MessageContent `json:"message"`
 }
 
@@ -172,7 +173,8 @@ func extractIntentFromLine(line string) []string {
 	}
 
 	// Only process assistant messages
-	if entry.Type != "assistant" {
+	const assistantType = "assistant"
+	if entry.Type != assistantType {
 		return nil
 	}
 
@@ -407,7 +409,8 @@ func parseTranscriptEntry(line string) (TranscriptEntry, bool) {
 
 // checkForToolUseMatch checks if entry contains matching tool use and returns intent
 func checkForToolUseMatch(entry *TranscriptEntry, toolUseID string, processedEntries []TranscriptEntry) string {
-	if entry.Type != "assistant" {
+	const assistantType = "assistant"
+	if entry.Type != assistantType {
 		return ""
 	}
 
@@ -420,8 +423,9 @@ func checkForToolUseMatch(entry *TranscriptEntry, toolUseID string, processedEnt
 
 // findParentIntent finds the parent intent message for the given entry
 func findParentIntent(entry *TranscriptEntry, processedEntries []TranscriptEntry) string {
+	const assistantType = "assistant"
 	for _, processed := range processedEntries {
-		if processed.Type == "assistant" && processed.UUID == entry.ParentUUID {
+		if processed.Type == assistantType && processed.UUID == entry.ParentUUID {
 			return extractTextFromEntry(&processed)
 		}
 	}
@@ -485,8 +489,9 @@ func extractParentUUIDFromLine(line string) string {
 
 // isAssistantEntry checks if the entry is an assistant type
 func isAssistantEntry(entry map[string]any) bool {
+	const assistantType = "assistant"
 	entryType, ok := entry["type"].(string)
-	return ok && entryType == "assistant"
+	return ok && entryType == assistantType
 }
 
 // findToolUseParentUUID finds the parent UUID for a tool use entry
@@ -605,8 +610,9 @@ func extractPrioritizedContent(lines []string, mostRecentToolUseParentUUID strin
 
 // extractContentFromLine extracts text content from a single line
 func extractContentFromLine(line string) []string {
+	const assistantType = "assistant"
 	entry, valid := parseTranscriptEntry(line)
-	if !valid || entry.Type != "assistant" {
+	if !valid || entry.Type != assistantType {
 		return nil
 	}
 

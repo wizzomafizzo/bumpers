@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/wizzomafizzo/bumpers/internal/testing"
+	testutil "github.com/wizzomafizzo/bumpers/internal/testing"
 )
 
 //nolint:paralleltest // Cannot use t.Parallel() due to shared global logger state causing race conditions

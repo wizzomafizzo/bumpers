@@ -4,6 +4,12 @@ import (
 	"testing"
 )
 
+const (
+	generateModeOff    = "off"
+	generateModeOnce   = "once"
+	generateModeAlways = "always"
+)
+
 // Test the Commands feature
 func TestConfigWithCommands(t *testing.T) {
 	t.Parallel()
@@ -82,7 +88,7 @@ func TestCommandGenerateFieldDefaultToOff(t *testing.T) {
 
 	command := config.Commands[0]
 	generate := command.GetGenerate()
-	if generate.Mode != "off" {
+	if generate.Mode != generateModeOff {
 		t.Errorf("Expected Command Generate.Mode to be 'off', got %s", generate.Mode)
 	}
 }
@@ -103,7 +109,7 @@ func TestCommandGenerateShortform(t *testing.T) {
 
 	command := config.Commands[0]
 	generate := command.GetGenerate()
-	if generate.Mode != "once" {
+	if generate.Mode != generateModeOnce {
 		t.Errorf("Expected Command Generate.Mode to be 'once', got %s", generate.Mode)
 	}
 }
@@ -126,7 +132,7 @@ func TestCommandGenerateFullForm(t *testing.T) {
 
 	command := config.Commands[0]
 	generate := command.GetGenerate()
-	if generate.Mode != "always" {
+	if generate.Mode != generateModeAlways {
 		t.Errorf("Expected Command Generate.Mode to be 'always', got %s", generate.Mode)
 	}
 	if generate.Prompt != "Custom prompt" {

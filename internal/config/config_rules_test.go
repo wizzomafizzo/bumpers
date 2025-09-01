@@ -351,8 +351,9 @@ func TestStringMatchFormatAccepted(t *testing.T) {
 	if match.Pattern != "test-pattern" {
 		t.Errorf("Expected pattern 'test-pattern', got '%s'", match.Pattern)
 	}
-	if match.Event != "pre" {
-		t.Errorf("Expected default event 'pre', got '%s'", match.Event)
+	const expectedEvent = "pre"
+	if match.Event != expectedEvent {
+		t.Errorf("Expected default event '%s', got '%s'", expectedEvent, match.Event)
 	}
 	if len(match.Sources) != 0 {
 		t.Errorf("Expected empty sources, got %v", match.Sources)

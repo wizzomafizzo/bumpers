@@ -16,6 +16,8 @@ import (
 	"github.com/wizzomafizzo/bumpers/internal/platform/claude"
 )
 
+const testdataRelativePath = "../../testdata"
+
 // TestProcessPostToolUseWithContext tests that ProcessPostToolUse can accept context for race-safe logging
 func TestProcessPostToolUseWithContext(t *testing.T) {
 	t.Parallel()
@@ -73,7 +75,7 @@ func TestProcessHookRoutesPostToolUse(t *testing.T) {
 	app := NewAppWithFileSystem(configPath, workDir, fs)
 
 	// Use static testdata transcript
-	testdataDir := "../../testdata"
+	testdataDir := testdataRelativePath
 	transcriptPath := filepath.Join(testdataDir, "transcript-not-related.jsonl")
 	absPath, err := filepath.Abs(transcriptPath)
 	if err != nil {
@@ -126,7 +128,7 @@ func TestPostToolUseWithDifferentTranscript(t *testing.T) {
 	app := NewAppWithFileSystem(configPath, workDir, fs)
 
 	// Use static testdata transcript with permission denied content
-	testdataDir := "../../testdata"
+	testdataDir := testdataRelativePath
 	transcriptPath := filepath.Join(testdataDir, "transcript-permission-denied.jsonl")
 	absPath, err := filepath.Abs(transcriptPath)
 	if err != nil {
@@ -178,7 +180,7 @@ func TestPostToolUseRuleNotMatching(t *testing.T) {
 	app := NewApp(ctx, configPath)
 
 	// Use transcript that won't match the "file not found" pattern
-	testdataDir := "../../testdata"
+	testdataDir := testdataRelativePath
 	transcriptPath := filepath.Join(testdataDir, "transcript-no-match.jsonl")
 	absPath, err := filepath.Abs(transcriptPath)
 	if err != nil {
@@ -436,7 +438,7 @@ func testPostToolUseIntegration(t *testing.T, tc *postToolUseIntegrationTestCase
 	t.Helper()
 	ctx, _ := setupTestWithContext(t)
 
-	testdataDir := "../../testdata"
+	testdataDir := testdataRelativePath
 	transcriptPath := filepath.Join(testdataDir, tc.transcriptFile)
 	absPath, err := filepath.Abs(transcriptPath)
 	if err != nil {

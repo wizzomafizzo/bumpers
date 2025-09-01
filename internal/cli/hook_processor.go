@@ -14,6 +14,7 @@ import (
 	"github.com/wizzomafizzo/bumpers/internal/config"
 	"github.com/wizzomafizzo/bumpers/internal/core/engine/hooks"
 	"github.com/wizzomafizzo/bumpers/internal/core/engine/matcher"
+	"github.com/wizzomafizzo/bumpers/internal/core/engine/operation"
 	"github.com/wizzomafizzo/bumpers/internal/core/logging"
 	"github.com/wizzomafizzo/bumpers/internal/core/messaging/template"
 	ai "github.com/wizzomafizzo/bumpers/internal/platform/claude/api"
@@ -21,6 +22,8 @@ import (
 	"github.com/wizzomafizzo/bumpers/internal/platform/state"
 	"github.com/wizzomafizzo/bumpers/internal/platform/storage"
 )
+
+const intentFieldName = "#intent"
 
 // HookProcessor handles all hook-related processing including pre/post tool use
 type HookProcessor interface {
@@ -148,6 +151,20 @@ func (h *DefaultHookProcessor) ProcessPreToolUse(ctx context.Context, rawJSON js
 	var event hooks.HookEvent
 	if unmarshalErr := json.Unmarshal(rawJSON, &event); unmarshalErr != nil {
 		return "", fmt.Errorf("failed to parse hook input: %w", unmarshalErr)
+	}
+
+	// Check operation state - block editing tools if in plan mode
+	if h.stateManager != nil {
+		operationState, err := h.stateManager.GetOperationMode(ctx)
+		if err != nil {
+			logger.Debug().Err(err).Msg("Failed to get operation state, proceeding with normal processing")
+		} else if operationState != nil && operationState.Mode == operation.PlanMode &&
+			h.isEditingTool(event.ToolName) {
+			message := "You're currently in plan mode. Please discuss your planned changes first, " +
+				"then use a trigger phrase like 'make it so', 'go ahead', or 'proceed' to enter " +
+				"execute mode."
+			return message, nil
+		}
 	}
 
 	// Extract intent from transcript if available
@@ -611,6 +628,20 @@ func (*DefaultHookProcessor) matchRulePattern(
 	return contentRe.MatchString(content), nil
 }
 
+// isEditingTool checks if the given tool name is an editing tool that should be blocked in discussion mode
+func (*DefaultHookProcessor) isEditingTool(toolName string) bool {
+	editingTools := []string{
+		"Edit", "Write", "MultiEdit", "NotebookEdit",
+	}
+
+	for _, tool := range editingTools {
+		if toolName == tool {
+			return true
+		}
+	}
+	return false
+}
+
 // Helper functions from original implementation
 
 func determinePostEventMatch(rule *config.Rule, content *postToolContent) (string, bool) {
@@ -650,7 +681,7 @@ func findFirstToolOutputValue(toolOutputMap map[string]any) (string, bool) {
 
 func analyzeSourceMatches(sources []string) (matchesIntent, matchesToolOutput bool) {
 	for _, source := range sources {
-		if source == "#intent" {
+		if source == intentFieldName {
 			matchesIntent = true
 		} else {
 			matchesToolOutput = true
@@ -666,7 +697,7 @@ func analyzeSourceMatches(sources []string) (matchesIntent, matchesToolOutput bo
 
 func findMatchingToolOutputField(sources []string, toolOutputMap map[string]any) (string, bool) {
 	for _, source := range sources {
-		if source != "#intent" {
+		if source != intentFieldName {
 			if value, exists := toolOutputMap[source]; exists {
 				if strValue, ok := value.(string); ok && strValue != "" {
 					return strValue, true

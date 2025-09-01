@@ -9,6 +9,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const testProjectID = "test-project"
+
 func TestIsBuiltinCommand_EnableCommand(t *testing.T) {
 	t.Parallel()
 	result := IsBuiltinCommand("bumpers enable")
@@ -27,7 +29,7 @@ func TestProcessBuiltinCommand_Enable(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "test.db")
 
-	response, err := ProcessBuiltinCommand(ctx, "bumpers enable", dbPath, "test-project")
+	response, err := ProcessBuiltinCommand(ctx, "bumpers enable", dbPath, testProjectID)
 	require.NoError(t, err)
 	require.NotNil(t, response)
 }
@@ -38,7 +40,7 @@ func TestProcessBuiltinCommand_StatusReturnsString(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "test.db")
 
-	response, err := ProcessBuiltinCommand(ctx, "bumpers status", dbPath, "test-project")
+	response, err := ProcessBuiltinCommand(ctx, "bumpers status", dbPath, testProjectID)
 	require.NoError(t, err)
 	require.IsType(t, "", response, "status command should return a string")
 }
@@ -49,7 +51,7 @@ func TestProcessBuiltinCommand_Skip(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "test.db")
 
-	response, err := ProcessBuiltinCommand(ctx, "bumpers skip", dbPath, "test-project")
+	response, err := ProcessBuiltinCommand(ctx, "bumpers skip", dbPath, testProjectID)
 	require.NoError(t, err)
 	require.NotNil(t, response)
 }
@@ -60,7 +62,7 @@ func TestProcessBuiltinCommand_DisableActuallyDisables(t *testing.T) {
 
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "test.db")
-	projectID := "test-project"
+	projectID := testProjectID
 
 	// First, disable rules
 	_, err := ProcessBuiltinCommand(ctx, "bumpers disable", dbPath, projectID)
@@ -84,7 +86,7 @@ func TestProcessBuiltinCommand_EnableAfterDisableShowsEnabled(t *testing.T) {
 
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "test.db")
-	projectID := "test-project"
+	projectID := testProjectID
 
 	// First, disable rules
 	_, err := ProcessBuiltinCommand(ctx, "bumpers disable", dbPath, projectID)
@@ -148,7 +150,7 @@ func TestProcessBuiltinCommand_StatePersistsAcrossProcessCalls(t *testing.T) {
 
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "test.db")
-	projectID := "test-project"
+	projectID := testProjectID
 
 	// Disable rules
 	_, err := ProcessBuiltinCommand(ctx, "bumpers disable", dbPath, projectID)

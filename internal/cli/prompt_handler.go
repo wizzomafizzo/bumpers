@@ -5,13 +5,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/spf13/afero"
 	"github.com/wizzomafizzo/bumpers/internal/config"
+	"github.com/wizzomafizzo/bumpers/internal/core/engine/operation"
 	"github.com/wizzomafizzo/bumpers/internal/core/logging"
 	"github.com/wizzomafizzo/bumpers/internal/core/messaging/template"
 	"github.com/wizzomafizzo/bumpers/internal/infrastructure/constants"
 	ai "github.com/wizzomafizzo/bumpers/internal/platform/claude/api"
+	"github.com/wizzomafizzo/bumpers/internal/platform/state"
 	"github.com/wizzomafizzo/bumpers/internal/platform/storage"
 )
 
@@ -22,19 +25,24 @@ type PromptHandler interface {
 
 // DefaultPromptHandler implements PromptHandler
 type DefaultPromptHandler struct {
-	aiHelper    *AIHelper
-	configPath  string
-	projectRoot string
-	testDBPath  string // Optional override for testing
+	aiHelper     *AIHelper
+	stateManager *state.Manager
+	configPath   string
+	projectRoot  string
+	testDBPath   string
 }
 
-// NewPromptHandler creates a new PromptHandler
-func NewPromptHandler(configPath, projectRoot string) *DefaultPromptHandler {
-	return &DefaultPromptHandler{
+// NewPromptHandler creates a new PromptHandler with optional state manager
+func NewPromptHandler(configPath, projectRoot string, stateManager ...*state.Manager) *DefaultPromptHandler {
+	handler := &DefaultPromptHandler{
 		configPath:  configPath,
 		projectRoot: projectRoot,
 		aiHelper:    NewAIHelper(projectRoot, nil, nil),
 	}
+	if len(stateManager) > 0 {
+		handler.stateManager = stateManager[0]
+	}
+	return handler
 }
 
 // SetTestDBPath sets a test database path for testing
@@ -58,6 +66,15 @@ func (p *DefaultPromptHandler) ProcessUserPrompt(ctx context.Context, rawJSON js
 	}
 
 	logger.Debug().Str("prompt", event.Prompt).Msg("processing UserPromptSubmit with prompt")
+
+	// Check for alignment trigger phrases and emergency stops
+	if p.stateManager != nil {
+		if handled, response, err := p.handleAlignmentTriggers(ctx, event.Prompt); err != nil {
+			logger.Debug().Err(err).Msg("Failed to handle alignment triggers, proceeding with normal processing")
+		} else if handled {
+			return response, nil
+		}
+	}
 
 	// Check if prompt starts with command prefix
 	if !strings.HasPrefix(event.Prompt, constants.CommandPrefix) {
@@ -183,4 +200,22 @@ func (p *DefaultPromptHandler) processBuiltinCommand(ctx context.Context, comman
 	}
 
 	return string(responseJSON), nil
+}
+
+// handleAlignmentTriggers checks for trigger phrases and emergency stops
+func (p *DefaultPromptHandler) handleAlignmentTriggers(
+	ctx context.Context, prompt string,
+) (handled bool, response string, err error) {
+	if operation.DetectTriggerPhrase(prompt) {
+		newState := &operation.OperationState{
+			Mode:         operation.ExecuteMode,
+			TriggerCount: 1,
+			UpdatedAt:    time.Now().Unix(),
+		}
+		if err := p.stateManager.SetOperationMode(ctx, newState); err != nil {
+			return false, "", fmt.Errorf("failed to set alignment mode: %w", err)
+		}
+		return true, "", nil
+	}
+	return false, "", nil
 }

@@ -7,7 +7,7 @@ package settings
 type Settings struct {
 	Permissions *Permissions `json:"permissions,omitempty"`
 	Hooks       *Hooks       `json:"hooks,omitempty"`
-	OutputStyle string       `json:"outputStyle,omitempty"`
+	OutputStyle string       `json:"outputStyle,omitempty"` //nolint:tagliatelle // Claude settings.json format
 	Model       string       `json:"model,omitempty"`
 }
 

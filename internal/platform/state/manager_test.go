@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"github.com/wizzomafizzo/bumpers/internal/core/engine/operation"
 )
 
 func TestNewManager(t *testing.T) {
@@ -155,4 +156,39 @@ func TestConsumeSkipNext(t *testing.T) {
 	consumed, err = manager.ConsumeSkipNext(ctx)
 	require.NoError(t, err)
 	require.False(t, consumed)
+}
+
+func TestGetOperationMode_DefaultPlan(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	manager := createTestManager(t)
+
+	state, err := manager.GetOperationMode(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, state)
+	require.Equal(t, operation.PlanMode, state.Mode)
+	require.Equal(t, 0, state.TriggerCount)
+}
+
+func TestSetOperationMode(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	manager := createTestManager(t)
+
+	// Set to execute mode
+	newState := &operation.OperationState{
+		Mode:         operation.ExecuteMode,
+		TriggerCount: 1,
+		UpdatedAt:    123456789,
+	}
+
+	err := manager.SetOperationMode(ctx, newState)
+	require.NoError(t, err)
+
+	// Verify it was stored
+	stored, err := manager.GetOperationMode(ctx)
+	require.NoError(t, err)
+	require.Equal(t, operation.ExecuteMode, stored.Mode)
+	require.Equal(t, 1, stored.TriggerCount)
+	require.Equal(t, int64(123456789), stored.UpdatedAt)
 }

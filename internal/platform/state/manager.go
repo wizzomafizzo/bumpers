@@ -6,12 +6,14 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/wizzomafizzo/bumpers/internal/core/engine/operation"
 	_ "modernc.org/sqlite"
 )
 
 // Manager handles persistent state storage for Bumpers configuration using SQLite only
 type Manager struct {
 	db        *sql.DB
+	operation *operation.OperationState
 	projectID string
 }
 
@@ -154,6 +156,20 @@ func (m *Manager) ConsumeSkipNext(ctx context.Context) (bool, error) {
 	}
 
 	return value, nil
+}
+
+// GetOperationMode returns the current operation state
+func (m *Manager) GetOperationMode(_ context.Context) (*operation.OperationState, error) {
+	if m.operation == nil {
+		return operation.DefaultState(), nil
+	}
+	return m.operation, nil
+}
+
+// SetOperationMode sets the operation state
+func (m *Manager) SetOperationMode(_ context.Context, state *operation.OperationState) error {
+	m.operation = state
+	return nil
 }
 
 // NewSQLManager creates a new SQL-based state manager instance

@@ -456,9 +456,10 @@ func TestSettings_AddHook_PreventsDuplicates(t *testing.T) {
 	// Test that AddHook prevents duplicate matchers for the same event
 	settings := &Settings{}
 
+	const testEchoCommand = "echo 'first'"
 	command1 := HookCommand{
 		Type:    "command",
-		Command: "echo 'first'",
+		Command: testEchoCommand,
 	}
 
 	command2 := HookCommand{
@@ -484,7 +485,7 @@ func TestSettings_AddHook_PreventsDuplicates(t *testing.T) {
 	}
 
 	// Verify the original hook is unchanged
-	if settings.Hooks.PreToolUse[0].Hooks[0].Command != "echo 'first'" {
+	if settings.Hooks.PreToolUse[0].Hooks[0].Command != testEchoCommand {
 		t.Error("Original hook was modified when duplicate was rejected")
 	}
 }
@@ -534,9 +535,10 @@ func TestSettings_AddOrAppendHook(t *testing.T) {
 	// Test adding a hook to a new matcher
 	settings := &Settings{}
 
+	const testEchoCommand = "echo 'first'"
 	command1 := HookCommand{
 		Type:    "command",
-		Command: "echo 'first'",
+		Command: testEchoCommand,
 	}
 
 	err := settings.AddOrAppendHook(PreToolUseEvent, "Bash", command1)
@@ -551,7 +553,7 @@ func TestSettings_AddOrAppendHook(t *testing.T) {
 	if len(settings.Hooks.PreToolUse[0].Hooks) != 1 {
 		t.Errorf("Expected 1 command, got %d", len(settings.Hooks.PreToolUse[0].Hooks))
 	}
-	if settings.Hooks.PreToolUse[0].Hooks[0].Command != "echo 'first'" {
+	if settings.Hooks.PreToolUse[0].Hooks[0].Command != testEchoCommand {
 		t.Errorf("Expected 'echo 'first'', got %s", settings.Hooks.PreToolUse[0].Hooks[0].Command)
 	}
 
@@ -576,7 +578,7 @@ func TestSettings_AddOrAppendHook(t *testing.T) {
 
 	// Verify commands are preserved
 	commands := settings.Hooks.PreToolUse[0].Hooks
-	if commands[0].Command != "echo 'first'" {
+	if commands[0].Command != testEchoCommand {
 		t.Errorf("Expected first command 'echo 'first'', got %s", commands[0].Command)
 	}
 	if commands[1].Command != "echo 'second'" {

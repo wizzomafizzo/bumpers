@@ -12,6 +12,12 @@ import (
 	"github.com/wizzomafizzo/bumpers/internal/platform/state"
 )
 
+const preToolUseHookInput = `{
+	"hookEventName": "PreToolUse",
+	"tool_input": {"command": "ls"},
+	"tool_name": "Bash"
+}`
+
 func TestProcessHookWithContext(t *testing.T) {
 	t.Parallel()
 	ctx, getLogs := setupTestWithContext(t)
@@ -198,11 +204,7 @@ func TestProcessHookWorks(t *testing.T) {
 	configPath := createTempConfig(t, configContent)
 	app := NewApp(ctx, configPath)
 
-	hookInput := `{
-		"hookEventName": "PreToolUse",
-		"tool_input": {"command": "ls"},
-		"tool_name": "Bash"
-	}`
+	hookInput := preToolUseHookInput
 
 	_, err := app.ProcessHook(context.Background(), strings.NewReader(hookInput))
 	if err != nil {
@@ -222,11 +224,7 @@ func TestProcessHookPreToolUseMatchesCommand(t *testing.T) {
 	configPath := createTempConfig(t, configContent)
 	app := NewApp(ctx, configPath)
 
-	hookInput := `{
-		"hookEventName": "PreToolUse",
-		"tool_input": {"command": "ls"},
-		"tool_name": "Bash"
-	}`
+	hookInput := preToolUseHookInput
 
 	response, err := app.ProcessHook(context.Background(), strings.NewReader(hookInput))
 	require.NoError(t, err)
@@ -249,11 +247,7 @@ func TestProcessHookPreToolUseRespectsEventField(t *testing.T) {
 	configPath := createTempConfig(t, configContent)
 	app := NewApp(ctx, configPath)
 
-	hookInput := `{
-		"hookEventName": "PreToolUse",
-		"tool_input": {"command": "ls"},
-		"tool_name": "Bash"
-	}`
+	hookInput := preToolUseHookInput
 
 	response, err := app.ProcessHook(context.Background(), strings.NewReader(hookInput))
 	require.NoError(t, err)

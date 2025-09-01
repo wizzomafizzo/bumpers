@@ -7,7 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/wizzomafizzo/bumpers/internal/testing"
+	testutil "github.com/wizzomafizzo/bumpers/internal/testing"
 )
 
 func TestCheckClaudeProjectDir_EmptyEnv(t *testing.T) {

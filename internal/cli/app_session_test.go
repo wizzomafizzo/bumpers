@@ -15,6 +15,12 @@ import (
 	ai "github.com/wizzomafizzo/bumpers/internal/platform/claude/api"
 )
 
+const sessionStartHookInput = `{
+	"session_id": "abc123",
+	"hook_event_name": "SessionStart",
+	"source": "startup"
+}`
+
 func TestProcessSessionStartWithContext(t *testing.T) {
 	t.Parallel()
 	ctx, getLogs := setupTestWithContext(t)
@@ -58,11 +64,7 @@ session:
 	app := NewApp(ctx, configPath)
 
 	// Test SessionStart hook routing with startup source
-	sessionStartInput := `{
-		"session_id": "abc123",
-		"hook_event_name": "SessionStart",
-		"source": "startup"
-	}`
+	sessionStartInput := sessionStartHookInput
 
 	result, err := app.ProcessHook(context.Background(), strings.NewReader(sessionStartInput))
 	if err != nil {
@@ -91,11 +93,7 @@ session:
 	configPath := createTempConfig(t, configContent)
 	app := NewApp(ctx, configPath)
 
-	sessionStartInput := `{
-		"session_id": "abc123",
-		"hook_event_name": "SessionStart",
-		"source": "startup"
-	}`
+	sessionStartInput := sessionStartHookInput
 
 	result, err := app.ProcessHook(context.Background(), strings.NewReader(sessionStartInput))
 	if err != nil {
@@ -176,11 +174,7 @@ func TestProcessSessionStartWithTemplate(t *testing.T) {
 	configPath := createTempConfig(t, configContent)
 	app := NewApp(ctx, configPath)
 
-	sessionStartInput := `{
-		"session_id": "abc123",
-		"hook_event_name": "SessionStart",
-		"source": "startup"
-	}`
+	sessionStartInput := sessionStartHookInput
 
 	result, err := app.ProcessHook(context.Background(), strings.NewReader(sessionStartInput))
 	if err != nil {
@@ -206,11 +200,7 @@ func TestProcessSessionStartWithTodayVariable(t *testing.T) {
 	configPath := createTempConfig(t, configContent)
 	app := NewApp(ctx, configPath)
 
-	sessionStartInput := `{
-		"session_id": "abc123",
-		"hook_event_name": "SessionStart",
-		"source": "startup"
-	}`
+	sessionStartInput := sessionStartHookInput
 
 	result, err := app.ProcessSessionStart(ctx, json.RawMessage(sessionStartInput))
 	if err != nil {
@@ -283,11 +273,7 @@ func TestProcessSessionStartClearsSessionCache(t *testing.T) { //nolint:parallel
 	require.True(t, ok, "expected DefaultSessionManager")
 	sessionManager.SetCacheForTesting(sharedCache)
 
-	sessionStartInput := `{
-		"session_id": "abc123",
-		"hook_event_name": "SessionStart",
-		"source": "startup"
-	}`
+	sessionStartInput := sessionStartHookInput
 
 	// Process session start should clear session cache without database conflicts
 	_, err = app.ProcessSessionStart(ctx, json.RawMessage(sessionStartInput))
@@ -338,11 +324,7 @@ func TestProcessSessionStartWithAIGeneration(t *testing.T) {
 	require.True(t, ok, "expected DefaultSessionManager")
 	sessionManager.aiHelper.cachePath = cachePath
 
-	sessionStartInput := `{
-		"session_id": "abc123",
-		"hook_event_name": "SessionStart",
-		"source": "startup"
-	}`
+	sessionStartInput := sessionStartHookInput
 
 	result, err := app.ProcessHook(ctx, strings.NewReader(sessionStartInput))
 	if err != nil {

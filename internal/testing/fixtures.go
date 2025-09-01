@@ -29,7 +29,7 @@ func LoadTestdataFile(t *testing.T, relativePath string) []byte {
 	}
 
 	fullPath := filepath.Join(projectRoot, "testdata", relativePath)
-	content, err := os.ReadFile(fullPath) //nolint:gosec // reading test fixtures from known testdata directory
+	content, err := os.ReadFile(fullPath)
 	if err != nil {
 		t.Fatalf("Failed to load testdata file %s: %v", relativePath, err)
 	}

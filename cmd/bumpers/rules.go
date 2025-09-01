@@ -16,6 +16,8 @@ import (
 	"github.com/wizzomafizzo/bumpers/internal/prompt"
 )
 
+const bashToolPattern = "^Bash$"
+
 // createRulesCommand creates the rules management command with subcommands
 func createRulesCommand() *cobra.Command {
 	cmd := &cobra.Command{
@@ -150,7 +152,7 @@ func createRulesAddCommand() *cobra.Command {
 	cmd.Flags().BoolP("interactive", "i", false, "Interactive rule creation")
 	cmd.Flags().StringP("pattern", "p", "", "Regex pattern for matching")
 	cmd.Flags().StringP("message", "m", "", "Help message to display")
-	cmd.Flags().StringP("tools", "t", "^Bash$", "Tool regex (default: ^Bash$)")
+	cmd.Flags().StringP("tools", "t", bashToolPattern, "Tool regex (default: "+bashToolPattern+")")
 	cmd.Flags().StringP("generate", "g", "off", "AI generation mode (default: off)")
 
 	return cmd
@@ -327,7 +329,7 @@ func buildRuleFromInputs(pattern, toolChoice, message, generateMode string) conf
 	// Convert tool choice to regex
 	switch toolChoice {
 	case "Bash only (default)":
-		rule.Tool = "^Bash$"
+		rule.Tool = bashToolPattern
 	case "All tools":
 		rule.Tool = ""
 	case "Edit tools (Write, Edit, MultiEdit)":

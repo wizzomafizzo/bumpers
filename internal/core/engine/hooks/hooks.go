@@ -20,7 +20,8 @@ const (
 func (h HookType) String() string {
 	switch h {
 	case UnknownHook:
-		return "Unknown"
+		const unknownType = "Unknown"
+		return unknownType
 	case PreToolUseHook:
 		return "PreToolUse"
 	case UserPromptSubmitHook:
@@ -35,10 +36,10 @@ func (h HookType) String() string {
 }
 
 type HookEvent struct {
-	ToolInput      map[string]any `json:"tool_input"`      //nolint:tagliatelle // API uses snake_case
-	ToolName       string         `json:"tool_name"`       //nolint:tagliatelle // API uses snake_case
-	TranscriptPath string         `json:"transcript_path"` //nolint:tagliatelle // API uses snake_case
-	ToolUseID      string         `json:"tool_use_id"`     //nolint:tagliatelle // API uses snake_case
+	ToolInput      map[string]any `json:"tool_input"`
+	ToolName       string         `json:"tool_name"`
+	TranscriptPath string         `json:"transcript_path"`
+	ToolUseID      string         `json:"tool_use_id"`
 }
 
 func ParseInput(reader io.Reader) (*HookEvent, error) {

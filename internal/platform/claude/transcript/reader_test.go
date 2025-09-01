@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/wizzomafizzo/bumpers/internal/testing"
+	testutil "github.com/wizzomafizzo/bumpers/internal/testing"
 )
 
 func TestExtractReasoningContent_WithRealisticTranscript(t *testing.T) {

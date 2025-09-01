@@ -1,4 +1,3 @@
-//nolint:forbidigo // This is the logging module itself
 package logging
 
 import (
@@ -7,7 +6,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/rs/zerolog" //nolint:depguard // This is the logging wrapper itself
+	"github.com/rs/zerolog"
 	"github.com/spf13/afero"
 	"github.com/wizzomafizzo/bumpers/internal/platform/storage"
 	"gopkg.in/natefinch/lumberjack.v2"

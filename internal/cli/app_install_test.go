@@ -19,7 +19,7 @@ func TestAppInitializeWithMemoryFileSystem(t *testing.T) {
 	configContent := []byte(`rules:
   - match: "rm -rf"
     send: "Use safer alternatives"`)
-	configPath := "/test/bumpers.yml"
+	configPath := testConfigPath
 
 	err := afero.WriteFile(fs, configPath, configContent, 0o600)
 	if err != nil {
@@ -193,7 +193,7 @@ func TestInitializeInstallsClaudeHooksInProjectDirectory(t *testing.T) {
 	}
 
 	// Check that hook was installed with absolute paths
-	content, err := os.ReadFile(localSettingsPath) //nolint:gosec // test file path
+	content, err := os.ReadFile(localSettingsPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -238,7 +238,7 @@ func TestInstallActuallyAddsHook(t *testing.T) {
 	// Check that Bash hook was actually added
 	claudeDir := filepath.Join(tempDir, ".claude")
 	localSettingsPath := filepath.Join(claudeDir, "settings.local.json")
-	content, err := os.ReadFile(localSettingsPath) //nolint:gosec // test file path
+	content, err := os.ReadFile(localSettingsPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -523,7 +523,7 @@ func TestInstallPreservesExistingHooks(t *testing.T) {
 	}
 
 	// Read the settings back
-	content, err := os.ReadFile(settingsPath) //nolint:gosec // test file, controlled path
+	content, err := os.ReadFile(settingsPath)
 	if err != nil {
 		t.Fatal(err)
 	}

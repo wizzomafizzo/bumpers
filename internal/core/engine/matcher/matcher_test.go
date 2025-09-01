@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/wizzomafizzo/bumpers/internal/config"
-	"github.com/wizzomafizzo/bumpers/internal/testing"
+	testutil "github.com/wizzomafizzo/bumpers/internal/testing"
 )
 
 func TestRuleMatcher(t *testing.T) {

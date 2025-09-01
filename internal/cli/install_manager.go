@@ -12,6 +12,8 @@ import (
 	"github.com/wizzomafizzo/bumpers/internal/platform/claude/settings"
 )
 
+const bumpersCommandName = "bumpers"
+
 // InstallManager handles installation, setup, and Claude hooks management
 type InstallManager interface {
 	Initialize() error
@@ -200,8 +202,8 @@ func (*DefaultInstallManager) resolveBumpersPath(originalCommand string) string 
 	baseName := filepath.Base(originalCommand)
 	hasPathSep := strings.Contains(originalCommand, string(filepath.Separator))
 
-	if baseName == "bumpers" && !hasPathSep {
-		return "bumpers"
+	if baseName == bumpersCommandName && !hasPathSep {
+		return bumpersCommandName
 	}
 
 	// If it's a relative path, make it absolute for reliability

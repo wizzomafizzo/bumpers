@@ -5,9 +5,9 @@ import "time"
 // CacheEntry represents a cached AI-generated message
 type CacheEntry struct {
 	Timestamp        time.Time  `json:"timestamp"`
-	ExpiresAt        *time.Time `json:"expiresAt,omitempty"`
-	GeneratedMessage string     `json:"generatedMessage"`
-	OriginalMessage  string     `json:"originalMessage"`
+	ExpiresAt        *time.Time `json:"expires_at,omitempty"`
+	GeneratedMessage string     `json:"generated_message"`
+	OriginalMessage  string     `json:"original_message"`
 }
 
 // GenerateRequest contains the parameters for AI message generation
@@ -28,7 +28,11 @@ func (e *CacheEntry) IsExpired() bool {
 
 // ShouldCache returns true if the entry should be cached based on mode
 func (r *GenerateRequest) ShouldCache() bool {
-	return r.GenerateMode == "once" || r.GenerateMode == "session"
+	const (
+		modeOnce    = "once"
+		modeSession = "session"
+	)
+	return r.GenerateMode == modeOnce || r.GenerateMode == modeSession
 }
 
 // IsValidGenerateMode checks if the given generate mode is valid

@@ -13,6 +13,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const (
+	testConfigPath = "/test/bumpers.yml"
+	validConfigMsg = "Configuration is valid"
+)
+
 // setupProjectStructureWithConfig creates a temporary project structure for advanced config testing
 func setupProjectStructureWithConfig(t *testing.T, configFileName string) (projectDir, subDir string, cleanup func()) {
 	t.Helper()
@@ -108,7 +113,7 @@ func TestCustomConfigPathLoading(t *testing.T) {
 	// Test that the custom config is actually loaded by validating it
 	result, err := app.ValidateConfig()
 	require.NoError(t, err)
-	assert.Contains(t, result, "Configuration is valid")
+	assert.Contains(t, result, validConfigMsg)
 
 	// Test that the rule from custom config works
 	response, err := app.TestCommand(context.Background(), "test-pattern should match")
@@ -125,7 +130,7 @@ func TestAppWithMemoryFileSystem(t *testing.T) {
 	configContent := []byte(`rules:
   - match: "rm -rf"
     send: "Use safer alternatives"`)
-	configPath := "/test/bumpers.yml"
+	configPath := testConfigPath
 
 	err := afero.WriteFile(fs, configPath, configContent, 0o600)
 	if err != nil {
@@ -290,8 +295,8 @@ func TestValidateConfig(t *testing.T) {
 		t.Fatalf("Expected no error for valid config, got %v", err)
 	}
 
-	if result != "Configuration is valid" {
-		t.Errorf("Expected 'Configuration is valid', got %q", result)
+	if result != validConfigMsg {
+		t.Errorf("Expected '%s', got %q", validConfigMsg, result)
 	}
 }
 
@@ -312,7 +317,7 @@ func TestNewApp_ProjectRootDetection(t *testing.T) {
 		t.Fatalf("ValidateConfig failed: %v", err)
 	}
 
-	if result != "Configuration is valid" {
+	if result != validConfigMsg {
 		t.Errorf("Expected configuration to be valid, got: %s", result)
 	}
 }
@@ -334,7 +339,7 @@ func testNewAppAutoFindsConfigFile(t *testing.T, configFileName string) {
 		t.Fatalf("ValidateConfig failed: %v", err)
 	}
 
-	if result != "Configuration is valid" {
+	if result != validConfigMsg {
 		t.Errorf("Expected configuration to be valid, got: %s", result)
 	}
 }
@@ -361,7 +366,7 @@ func TestNewApp_InitializesStateManager(t *testing.T) {
 
 	// Use in-memory filesystem to avoid real filesystem database issues
 	fs := afero.NewMemMapFs()
-	configPath := "/test/bumpers.yml"
+	configPath := testConfigPath
 	err := afero.WriteFile(fs, configPath, []byte(configContent), 0o600)
 	if err != nil {
 		t.Fatalf("Failed to create config file: %v", err)

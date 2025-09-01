@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/wizzomafizzo/bumpers/internal/platform/claude"
-	"github.com/wizzomafizzo/bumpers/internal/testing"
+	testutil "github.com/wizzomafizzo/bumpers/internal/testing"
 )
 
 // setupTest initializes test logger to prevent race conditions

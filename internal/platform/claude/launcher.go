@@ -1,4 +1,3 @@
-//nolint:tagliatelle // JSON tags must match Claude API format
 package claude
 
 import (
@@ -96,7 +95,7 @@ func (l *Launcher) ExecuteWithInput(ctx context.Context, input string) ([]byte, 
 		input,
 	}
 
-	cmd := exec.CommandContext(execCtx, claudePath, cmdArgs...) //nolint:gosec // claudePath validated
+	cmd := exec.CommandContext(execCtx, claudePath, cmdArgs...)
 	cmd.Env = append(os.Environ(), "BUMPERS_SKIP=1")
 
 	// Set working directory to project root to ensure Claude runs from there

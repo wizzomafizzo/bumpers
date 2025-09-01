@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/rs/zerolog" //nolint:depguard // Test utilities need direct zerolog access
+	"github.com/rs/zerolog"
 	"github.com/wizzomafizzo/bumpers/internal/core/logging"
 )
 

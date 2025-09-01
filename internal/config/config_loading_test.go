@@ -200,8 +200,9 @@ func TestGenerateFieldAsString(t *testing.T) {
 
 	rule := config.Rules[0]
 	generate := rule.GetGenerate()
-	if generate.Mode != "session" {
-		t.Errorf("Expected Generate.Mode to be 'session', got %s", generate.Mode)
+	const expectedMode = "session"
+	if generate.Mode != expectedMode {
+		t.Errorf("Expected Generate.Mode to be '%s', got %s", expectedMode, generate.Mode)
 	}
 }
 

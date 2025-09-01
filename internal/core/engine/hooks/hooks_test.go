@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/wizzomafizzo/bumpers/internal/testing"
+	testutil "github.com/wizzomafizzo/bumpers/internal/testing"
 )
 
 func TestParseInput(t *testing.T) {

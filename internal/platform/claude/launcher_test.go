@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/wizzomafizzo/bumpers/internal/config"
 	"github.com/wizzomafizzo/bumpers/internal/infrastructure/project"
-	"github.com/wizzomafizzo/bumpers/internal/testing"
+	testutil "github.com/wizzomafizzo/bumpers/internal/testing"
 )
 
 func TestIsClaudeNotFoundError(t *testing.T) {
