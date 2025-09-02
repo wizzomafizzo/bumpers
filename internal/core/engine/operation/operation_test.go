@@ -9,6 +9,35 @@ const (
 	testModifiedValue = "modified"
 )
 
+func TestEncapsulation_GlobalVariablesShouldBePrivate(t *testing.T) {
+	t.Parallel()
+	// Test that we can get copies but cannot modify originals directly
+	originalTriggers := GetTriggerPhrases()
+	originalStops := GetEmergencyStopPhrases()
+	originalCommands := GetReadOnlyBashCommands()
+
+	// Modify the copies
+	originalTriggers[0] = testModifiedValue
+	originalStops[0] = testModifiedValue
+	originalCommands[0] = testModifiedValue
+
+	// Get fresh copies - they should not be affected
+	freshTriggers := GetTriggerPhrases()
+	freshStops := GetEmergencyStopPhrases()
+	freshCommands := GetReadOnlyBashCommands()
+
+	// Verify original values are preserved
+	if freshTriggers[0] == testModifiedValue {
+		t.Error("triggerPhrases should return copies to prevent external modification")
+	}
+	if freshStops[0] == testModifiedValue {
+		t.Error("emergencyStopPhrases should return copies to prevent external modification")
+	}
+	if freshCommands[0] == testModifiedValue {
+		t.Error("readOnlyBashCommands should return copies to prevent external modification")
+	}
+}
+
 func TestDetectTriggerPhrase(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

@@ -176,6 +176,7 @@ linters:
     wrapcheck:
       extra-ignore-sigs:
         - .Err(
+        - .Handle(
     depguard:
       rules:
         main:

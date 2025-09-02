@@ -28,11 +28,6 @@ func (m *MockLauncher) GetCallCount() int {
 	return len(m.Calls)
 }
 
-// WasCalledWithPattern checks if called with pattern
-func (*MockLauncher) WasCalledWithPattern(_ string) bool {
-	return false // TODO: implement
-}
-
 // SetResponseForPattern sets response for pattern
 func (m *MockLauncher) SetResponseForPattern(_, response string) {
 	m.Response = response

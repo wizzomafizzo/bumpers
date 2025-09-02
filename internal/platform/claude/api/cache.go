@@ -53,7 +53,10 @@ func NewCacheWithDB(_ any, _ string) (*Cache, error) {
 
 // Close closes the cache
 func (c *Cache) Close() error {
-	return c.db.Close() //nolint:wrapcheck // Database close error is self-explanatory
+	if err := c.db.Close(); err != nil {
+		return fmt.Errorf("failed to close cache database: %w", err)
+	}
+	return nil
 }
 
 // Put stores an entry in the cache
@@ -67,7 +70,10 @@ func (c *Cache) Put(ctx context.Context, key string, entry *CacheEntry) error {
 	_, err := c.db.ExecContext(ctx,
 		"INSERT OR REPLACE INTO cache (key, project_id, value, expires_at) VALUES (?, ?, ?, ?)",
 		key, c.projectID, entry.GeneratedMessage, expiresAt)
-	return err //nolint:wrapcheck // Database operation error is self-explanatory
+	if err != nil {
+		return fmt.Errorf("failed to store cache entry for key %q: %w", key, err)
+	}
+	return nil
 }
 
 // Get retrieves an entry from the cache
@@ -87,7 +93,7 @@ func (c *Cache) Get(ctx context.Context, key string) (*CacheEntry, error) {
 		return nil, nil //nolint:nilnil // Cache miss returns nil value and nil error
 	}
 	if err != nil {
-		return nil, err //nolint:wrapcheck // Database query error is self-explanatory
+		return nil, fmt.Errorf("failed to retrieve cache entry for key %q: %w", key, err)
 	}
 
 	entry = &CacheEntry{GeneratedMessage: message}

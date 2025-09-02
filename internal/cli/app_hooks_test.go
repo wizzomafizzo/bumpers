@@ -32,7 +32,7 @@ rules: []
 	app := NewApp(ctx, configPath)
 
 	// Create a simple hook input - UserPromptSubmit with no matching rules
-	input := `{"hook_event":"user_prompt_submit","intent":"echo hello"}`
+	input := `{"hook_event_name":"UserPromptSubmit","prompt":"echo hello"}`
 	reader := strings.NewReader(input)
 
 	// This should not fail and should accept context

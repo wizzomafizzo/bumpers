@@ -17,6 +17,7 @@ import (
 	"github.com/wizzomafizzo/bumpers/internal/core/engine/operation"
 	"github.com/wizzomafizzo/bumpers/internal/core/logging"
 	"github.com/wizzomafizzo/bumpers/internal/core/messaging/template"
+	"github.com/wizzomafizzo/bumpers/internal/infrastructure/constants"
 	ai "github.com/wizzomafizzo/bumpers/internal/platform/claude/api"
 	"github.com/wizzomafizzo/bumpers/internal/platform/claude/transcript"
 	"github.com/wizzomafizzo/bumpers/internal/platform/state"
@@ -471,7 +472,7 @@ func (*DefaultHookProcessor) extractPostToolContent(
 	transcriptPath, _ := event["transcript_path"].(string) //nolint:revive // intentionally ignoring ok value
 	toolName, _ := event["tool_name"].(string)             //nolint:revive // intentionally ignoring ok value
 	toolUseID, _ := event["tool_use_id"].(string)          //nolint:revive // intentionally ignoring ok value
-	toolResponse := event["tool_response"]
+	toolResponse := event[constants.FieldToolResponse]
 
 	content := &postToolContent{
 		toolName:      toolName,
@@ -510,7 +511,7 @@ func (*DefaultHookProcessor) extractPostToolContent(
 			content.toolOutputMap = v
 		case string:
 			// Handle simple string responses for backward compatibility
-			content.toolOutputMap["tool_response"] = v
+			content.toolOutputMap[constants.FieldToolResponse] = v
 		}
 	}
 
@@ -547,18 +548,16 @@ func (h *DefaultHookProcessor) ProcessPostToolUse(ctx context.Context, rawJSON j
 		return "", err
 	}
 
+	sources := make([]string, 0, len(content.toolOutputMap))
+	for key := range content.toolOutputMap {
+		sources = append(sources, key)
+	}
 	logger.Debug().
 		Str("hook_type", "PostToolUse").
 		Str("tool_name", content.toolName).
 		Str("extracted_intent", content.intent).
 		Int("tool_response_field_count", len(content.toolOutputMap)).
-		Interface("tool_response_sources", func() []string {
-			sources := make([]string, 0, len(content.toolOutputMap))
-			for key := range content.toolOutputMap {
-				sources = append(sources, key)
-			}
-			return sources
-		}()).
+		Interface("tool_response_sources", sources).
 		Msg("Hook processing summary - sources available for rule matching")
 
 	// Skip if no content to match against (neither intent nor tool response)
@@ -578,7 +577,11 @@ func (h *DefaultHookProcessor) ProcessPostToolUse(ctx context.Context, rawJSON j
 		// Check if pattern matches the selected content
 		if matched, err := h.matchRulePattern(ctx, rule, contentToMatch, content.toolName); err == nil && matched {
 			// Process and return the rule's message using existing template system
-			return template.ExecuteRuleTemplate(rule.Send, contentToMatch) //nolint:wrapcheck // preserve behavior
+			result, err := template.ExecuteRuleTemplate(rule.Send, contentToMatch)
+			if err != nil {
+				return "", fmt.Errorf("failed to execute rule template: %w", err)
+			}
+			return result, nil
 		}
 	}
 
@@ -595,7 +598,7 @@ func (*DefaultHookProcessor) matchRulePattern(
 		toolRe, err := regexp.Compile("(?i)" + toolPattern)
 		if err != nil {
 			logging.Get(ctx).Debug().Err(err).Str("pattern", toolPattern).Msg("invalid tool pattern")
-			return false, err //nolint:wrapcheck // preserving existing behavior
+			return false, fmt.Errorf("failed to compile tool pattern %q: %w", toolPattern, err)
 		}
 		if !toolRe.MatchString(toolName) {
 			return false, nil
@@ -607,7 +610,7 @@ func (*DefaultHookProcessor) matchRulePattern(
 	contentRe, err := regexp.Compile(match.Pattern)
 	if err != nil {
 		logging.Get(ctx).Debug().Err(err).Str("pattern", match.Pattern).Msg("invalid content pattern")
-		return false, err //nolint:wrapcheck // preserving existing behavior
+		return false, fmt.Errorf("failed to compile content pattern %q: %w", match.Pattern, err)
 	}
 
 	return contentRe.MatchString(content), nil

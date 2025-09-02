@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+
+	"github.com/wizzomafizzo/bumpers/internal/infrastructure/constants"
 )
 
 type HookType int
@@ -25,11 +27,11 @@ func (h HookType) String() string {
 	case PreToolUseHook:
 		return "PreToolUse"
 	case UserPromptSubmitHook:
-		return "UserPromptSubmit"
+		return constants.UserPromptSubmitEvent
 	case PostToolUseHook:
 		return "PostToolUse"
 	case SessionStartHook:
-		return "SessionStart"
+		return constants.SessionStartEvent
 	default:
 		return "Unknown"
 	}
@@ -77,9 +79,9 @@ func DetectHookType(reader io.Reader) (HookType, json.RawMessage, error) {
 				return PreToolUseHook, json.RawMessage(data), nil
 			case "PostToolUse":
 				return PostToolUseHook, json.RawMessage(data), nil
-			case "UserPromptSubmit":
+			case constants.UserPromptSubmitEvent:
 				return UserPromptSubmitHook, json.RawMessage(data), nil
-			case "SessionStart":
+			case constants.SessionStartEvent:
 				return SessionStartHook, json.RawMessage(data), nil
 			}
 		}
@@ -87,15 +89,15 @@ func DetectHookType(reader io.Reader) (HookType, json.RawMessage, error) {
 
 	// Fallback to field presence detection for compatibility
 	if _, hasInput := generic["tool_input"]; hasInput {
-		if _, hasResponse := generic["tool_response"]; hasResponse {
+		if _, hasResponse := generic[constants.FieldToolResponse]; hasResponse {
 			return PostToolUseHook, json.RawMessage(data), nil
 		}
 		return PreToolUseHook, json.RawMessage(data), nil
 	}
-	if _, ok := generic["prompt"]; ok {
+	if _, ok := generic[constants.FieldPrompt]; ok {
 		return UserPromptSubmitHook, json.RawMessage(data), nil
 	}
-	if _, ok := generic["tool_response"]; ok {
+	if _, ok := generic[constants.FieldToolResponse]; ok {
 		return PostToolUseHook, json.RawMessage(data), nil
 	}
 

@@ -84,18 +84,6 @@ func AssertMockCalled(t *testing.T, mock *MockLauncher, expectedCalls int) {
 	}
 }
 
-// AssertMockCalledWithPattern verifies that the mock was called with a prompt matching the pattern
-func AssertMockCalledWithPattern(t *testing.T, mock *MockLauncher, pattern string) {
-	t.Helper()
-	if !mock.WasCalledWithPattern(pattern) {
-		t.Errorf("Expected mock to be called with pattern %q, but no matching calls found", pattern)
-		t.Log("Actual calls:")
-		for i, call := range mock.Calls {
-			t.Logf("  %d: %q", i+1, call.Prompt)
-		}
-	}
-}
-
 // AssertMockNotCalled verifies that the mock was never called
 func AssertMockNotCalled(t *testing.T, mock *MockLauncher) {
 	t.Helper()

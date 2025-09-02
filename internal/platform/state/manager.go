@@ -60,13 +60,18 @@ func runSchemaMigration(ctx context.Context, db *sql.DB) error {
 		);
 		CREATE INDEX IF NOT EXISTS idx_state_project ON state(project_id);
 	`)
-	return err //nolint:wrapcheck // Schema migration error is self-explanatory
+	if err != nil {
+		return fmt.Errorf("failed to create state table: %w", err)
+	}
+	return nil
 }
 
 // Close closes the state manager
 func (m *Manager) Close() error {
 	if m.db != nil {
-		return m.db.Close() //nolint:wrapcheck // Database close error is self-explanatory
+		if err := m.db.Close(); err != nil {
+			return fmt.Errorf("failed to close database: %w", err)
+		}
 	}
 	return nil
 }

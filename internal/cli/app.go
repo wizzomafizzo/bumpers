@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -271,21 +272,25 @@ func (a *App) processHookWithContext(ctx context.Context, input io.Reader) (stri
 	}
 	logger.Debug().RawJSON("hook", rawJSON).Str("type", hookType.String()).Msg("received hook")
 
-	// Route to appropriate handler based on hook type
-	if hookType == hooks.UserPromptSubmitHook {
+	// Route to appropriate handler based on hook type using switch
+	switch hookType {
+	case hooks.UserPromptSubmitHook:
 		logger.Debug().Msg("processing UserPromptSubmit hook")
 		return a.ProcessUserPrompt(ctx, rawJSON)
-	}
-	if hookType == hooks.SessionStartHook {
+	case hooks.SessionStartHook:
 		logger.Debug().Msg("processing SessionStart hook")
 		return a.ProcessSessionStart(ctx, rawJSON)
-	}
-	if hookType == hooks.PostToolUseHook {
+	case hooks.PostToolUseHook:
 		logger.Debug().Msg("processing PostToolUse hook")
 		return a.ProcessPostToolUse(ctx, rawJSON)
+	case hooks.PreToolUseHook:
+		// Handle PreToolUse hooks
+		return a.processPreToolUse(ctx, rawJSON)
+	case hooks.UnknownHook:
+		return "", errors.New("unknown hook type detected")
+	default:
+		return "", fmt.Errorf("unsupported hook type: %s", hookType.String())
 	}
-	// Handle PreToolUse and other hooks
-	return a.processPreToolUse(ctx, rawJSON)
 }
 
 // processPreToolUse delegates to HookProcessor
