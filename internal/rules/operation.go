@@ -20,10 +20,10 @@ type OperationState struct {
 	UpdatedAt    int64         `json:"updated_at"`
 }
 
-// DefaultState returns the default operation state (plan mode)
+// DefaultState returns the default operation state (execute mode - plan mode temporarily disabled)
 func DefaultState() *OperationState {
 	return &OperationState{
-		Mode:         PlanMode,
+		Mode:         ExecuteMode,
 		TriggerCount: 0,
 		UpdatedAt:    time.Now().Unix(),
 	}

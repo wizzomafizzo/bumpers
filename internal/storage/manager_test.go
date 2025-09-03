@@ -158,7 +158,7 @@ func TestConsumeSkipNext(t *testing.T) {
 	require.False(t, consumed)
 }
 
-func TestGetOperationMode_DefaultPlan(t *testing.T) {
+func TestGetOperationMode_DefaultExecute(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	manager := createTestManager(t)
@@ -166,7 +166,7 @@ func TestGetOperationMode_DefaultPlan(t *testing.T) {
 	state, err := manager.GetOperationMode(ctx)
 	require.NoError(t, err)
 	require.NotNil(t, state)
-	require.Equal(t, rules.PlanMode, state.Mode)
+	require.Equal(t, rules.ExecuteMode, state.Mode)
 	require.Equal(t, 0, state.TriggerCount)
 }
 

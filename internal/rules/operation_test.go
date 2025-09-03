@@ -175,8 +175,8 @@ func TestDefaultState(t *testing.T) {
 	state := DefaultState()
 	afterCall := time.Now().Unix()
 
-	if state.Mode != PlanMode {
-		t.Errorf("DefaultState().Mode = %v, want %v", state.Mode, PlanMode)
+	if state.Mode != ExecuteMode {
+		t.Errorf("DefaultState().Mode = %v, want %v", state.Mode, ExecuteMode)
 	}
 
 	if state.TriggerCount != 0 {
