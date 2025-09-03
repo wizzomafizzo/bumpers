@@ -249,7 +249,7 @@ func (h *DefaultHookProcessor) checkRuleSources(
 	if len(match.Sources) > 0 {
 		return h.checkSpecificSources(ctx, rule, ruleMatcher, event)
 	}
-	return h.checkOriginalBehavior(rule, event)
+	return h.checkOriginalBehavior(ctx, rule, event)
 }
 
 // checkSpecificSources checks only specified source fields
@@ -337,7 +337,7 @@ func (h *DefaultHookProcessor) matchRuleContent(
 }
 
 // checkOriginalBehavior uses original matching behavior for backward compatibility
-func (h *DefaultHookProcessor) checkOriginalBehavior(rule *config.Rule, event *hooks.HookEvent) (
+func (h *DefaultHookProcessor) checkOriginalBehavior(ctx context.Context, rule *config.Rule, event *hooks.HookEvent) (
 	matchedRule *config.Rule, matchedField string,
 ) {
 	tempMatcher, err := matcher.NewRuleMatcher([]config.Rule{*rule})
@@ -345,7 +345,7 @@ func (h *DefaultHookProcessor) checkOriginalBehavior(rule *config.Rule, event *h
 		return nil, ""
 	}
 
-	foundRule, foundValue, err := h.findMatchingRule(tempMatcher, event)
+	foundRule, foundValue, err := h.findMatchingRule(ctx, tempMatcher, event)
 	if err == nil && foundRule != nil {
 		return foundRule, foundValue
 	}
@@ -353,34 +353,70 @@ func (h *DefaultHookProcessor) checkOriginalBehavior(rule *config.Rule, event *h
 }
 
 func (h *DefaultHookProcessor) findMatchingRule(
-	ruleMatcher *matcher.RuleMatcher, event *hooks.HookEvent,
+	ctx context.Context, ruleMatcher *matcher.RuleMatcher, event *hooks.HookEvent,
 ) (*config.Rule, string, error) {
-	for key, value := range event.ToolInput {
-		strValue, ok := value.(string)
-		if !ok {
-			continue
-		}
+	fieldsToCheck := h.getFieldsToCheck(ctx, event)
 
-		// Create template context with project information
-		templateContext := make(map[string]any)
-		if h.projectRoot != "" {
-			templateContext["ProjectRoot"] = h.projectRoot
-		}
-
-		rule, err := ruleMatcher.MatchWithContext(strValue, event.ToolName, templateContext)
-		if err != nil {
-			if errors.Is(err, matcher.ErrNoRuleMatch) {
-				continue // Try next field
-			}
-			return nil, "", fmt.Errorf("failed to match rule for %s '%s': %w", key, strValue, err)
-		}
-
-		if rule != nil {
-			return rule, strValue, nil
+	for _, key := range fieldsToCheck {
+		if rule, value, err := h.tryMatchField(key, event, ruleMatcher); err != nil {
+			return nil, "", err
+		} else if rule != nil {
+			return rule, value, nil
 		}
 	}
 
 	return nil, "", nil
+}
+
+// getFieldsToCheck determines which fields to check for a given tool
+func (*DefaultHookProcessor) getFieldsToCheck(ctx context.Context, event *hooks.HookEvent) []string {
+	if defaultFields, exists := constants.DefaultToolFields[event.ToolName]; exists {
+		return defaultFields
+	}
+
+	// For unknown tools, log warning and check all fields (backward compatibility)
+	logger := logging.Get(ctx)
+	logger.Warn().
+		Str("tool_name", event.ToolName).
+		Msg("tool not found in DefaultToolFields, falling back to checking all input fields. " +
+			"Consider adding this tool to improve performance and reduce false positives.")
+
+	fieldsToCheck := make([]string, 0, len(event.ToolInput))
+	for key := range event.ToolInput {
+		fieldsToCheck = append(fieldsToCheck, key)
+	}
+	return fieldsToCheck
+}
+
+// tryMatchField attempts to match a specific field value against rules
+func (h *DefaultHookProcessor) tryMatchField(
+	key string, event *hooks.HookEvent, ruleMatcher *matcher.RuleMatcher,
+) (*config.Rule, string, error) {
+	value, exists := event.ToolInput[key]
+	if !exists {
+		return nil, "", nil
+	}
+
+	strValue, ok := value.(string)
+	if !ok {
+		return nil, "", nil
+	}
+
+	// Create template context with project information
+	templateContext := make(map[string]any)
+	if h.projectRoot != "" {
+		templateContext["ProjectRoot"] = h.projectRoot
+	}
+
+	rule, err := ruleMatcher.MatchWithContext(strValue, event.ToolName, templateContext)
+	if err != nil {
+		if errors.Is(err, matcher.ErrNoRuleMatch) {
+			return nil, "", nil // Try next field
+		}
+		return nil, "", fmt.Errorf("failed to match rule for %s '%s': %w", key, strValue, err)
+	}
+
+	return rule, strValue, nil
 }
 
 // processMatchedRule processes template and AI generation for matched rule

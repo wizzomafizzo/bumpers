@@ -168,8 +168,16 @@ rules:
 ```
 
 **Special sources:**
-- `#intent`: Claude's reasoning from transcript
-- Empty array: All available fields
+- `#intent`: Claude's reasoning from transcript  
+- `#all`: Force check all fields
+- Empty array: Use smart defaults per tool
+
+**Default fields per tool:**
+- **Bash**: `command` (not `description`)
+- **Edit**: `file_path`, `new_string` (not `old_string`)
+- **Read**: `file_path`
+- **Grep**: `pattern`, `path`
+- Unknown tools: all fields
 
 ## Validation
 
