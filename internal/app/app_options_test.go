@@ -78,9 +78,10 @@ func TestNewAppWithOptions_ErrorWhenManagersCannotBeCreated(t *testing.T) {
 	ctx := context.Background()
 
 	// Test actual NewAppWithOptions behavior - it should fail when database setup fails
+	// Use an invalid path that would cause storage.GetDatabasePath() to fail
 	app, err := NewAppWithOptions(ctx, AppOptions{
 		ConfigPath: "bumpers.yml",
-		WorkDir:    "", // Empty work dir should cause database creation to fail
+		WorkDir:    "/invalid/nonexistent/path/that/cannot/be/created", // Invalid path causes failure
 	})
 
 	// Should return an error when managers cannot be created (this validates the production behavior)
