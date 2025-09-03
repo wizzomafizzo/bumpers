@@ -2,14 +2,15 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"strings"
 	"testing"
 
-	"github.com/wizzomafizzo/bumpers/internal/testing"
+	testutil "github.com/wizzomafizzo/bumpers/internal/testing"
 )
 
 func TestCreateRootCommand(t *testing.T) {
-	testutil.InitTestLogger(t)
+	_, _ = testutil.NewTestContext(t) // Context-aware logging available if needed
 	t.Parallel()
 
 	cmd := createNewRootCommand()
@@ -33,7 +34,7 @@ func TestCreateRootCommand(t *testing.T) {
 }
 
 func TestNewRootCommandShowsHelp(t *testing.T) {
-	testutil.InitTestLogger(t)
+	_, _ = testutil.NewTestContext(t) // Context-aware logging available if needed
 	t.Parallel()
 
 	cmd := createNewRootCommand()
@@ -54,7 +55,7 @@ func TestNewRootCommandShowsHelp(t *testing.T) {
 }
 
 func TestNewRootCommandHasAllSubcommands(t *testing.T) {
-	testutil.InitTestLogger(t)
+	_, _ = testutil.NewTestContext(t) // Context-aware logging available if needed
 	t.Parallel()
 
 	cmd := createNewRootCommand()
@@ -106,7 +107,7 @@ func TestNewRootCommandHasAllSubcommands(t *testing.T) {
 }
 
 func TestNewRootCommandHasConfigFlag(t *testing.T) {
-	testutil.InitTestLogger(t)
+	_, _ = testutil.NewTestContext(t) // Context-aware logging available if needed
 	t.Parallel()
 
 	cmd := createNewRootCommand()
@@ -123,7 +124,7 @@ func TestNewRootCommandHasConfigFlag(t *testing.T) {
 }
 
 func TestCreateAppFromCommand(t *testing.T) {
-	testutil.InitTestLogger(t)
+	_, _ = testutil.NewTestContext(t) // Context-aware logging available if needed
 	t.Parallel()
 
 	cmd := createNewRootCommand()
@@ -135,7 +136,7 @@ func TestCreateAppFromCommand(t *testing.T) {
 		t.Fatalf("Failed to parse flags: %v", err)
 	}
 
-	app, err := createAppFromCommand(cmd)
+	app, err := createAppFromCommand(context.Background(), cmd)
 	if err != nil {
 		t.Fatalf("Expected createAppFromCommand to succeed, got error: %v", err)
 	}

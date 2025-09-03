@@ -34,13 +34,16 @@ See justfile for more information.`,
 		},
 		Commands: []Command{
 			{
+				Name: "help",
 				Send: "Available commands:\\n!help - Show this help\\n!status - Show project status\\n" +
 					"!docs - Open documentation",
 			},
 			{
+				Name: "status",
 				Send: "Project Status: All systems operational",
 			},
 			{
+				Name: "docs",
 				Send: "📚 Documentation: Visit https://github.com/wizzomafizzo/bumpers for usage guides and examples",
 			},
 		},

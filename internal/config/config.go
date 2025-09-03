@@ -59,7 +59,7 @@ type Session struct {
 }
 
 func Load(path string) (*Config, error) {
-	data, err := os.ReadFile(path) //nolint:gosec // Path comes from validated user config
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read config: %w", err)
 	}
@@ -210,28 +210,38 @@ func (r *Rule) GetMatch() Match {
 
 	// Handle struct form: match: { pattern: "...", event: "...", sources: [...] }
 	if matchMap, ok := r.Match.(map[string]any); ok {
-		match := Match{
-			Event:   "pre",      // Default event
-			Sources: []string{}, // Default sources
-		}
-
-		if pattern, ok := matchMap["pattern"].(string); ok {
-			match.Pattern = pattern
-		}
-
-		if event, ok := matchMap["event"].(string); ok {
-			match.Event = event
-		}
-
-		if sources, ok := matchMap["sources"].([]any); ok {
-			match.Sources = convertSourcesSlice(sources)
-		}
-
-		return match
+		return parseMatchFromMap(matchMap)
 	}
 
 	// Invalid match field - return empty Match that will fail validation
 	return Match{Pattern: "", Event: "pre", Sources: []string{}}
+}
+
+// parseMatchFromMap parses a match field from a map structure
+func parseMatchFromMap(matchMap map[string]any) Match {
+	match := Match{
+		Event:   "pre",      // Default event
+		Sources: []string{}, // Default sources
+	}
+
+	if pattern, ok := matchMap["pattern"].(string); ok {
+		match.Pattern = pattern
+	}
+
+	if event, ok := matchMap["event"].(string); ok {
+		match.Event = event
+	}
+
+	if sources, ok := matchMap["sources"].([]any); ok {
+		convertedSources, err := convertSourcesSlice(sources)
+		if err != nil {
+			// Return invalid Match that will fail validation
+			return Match{Pattern: "", Event: "pre", Sources: []string{}}
+		}
+		match.Sources = convertedSources
+	}
+
+	return match
 }
 
 // LoadPartial loads config from YAML bytes with partial parsing support
@@ -316,14 +326,16 @@ func (s *Session) GetGenerate() Generate {
 }
 
 // convertSourcesSlice converts []any sources to []string
-func convertSourcesSlice(sources []any) []string {
+func convertSourcesSlice(sources []any) ([]string, error) {
 	result := make([]string, len(sources))
 	for i, source := range sources {
-		if sourceStr, ok := source.(string); ok {
-			result[i] = sourceStr
+		sourceStr, ok := source.(string)
+		if !ok {
+			return nil, fmt.Errorf("source at index %d is not a string: %T", i, source)
 		}
+		result[i] = sourceStr
 	}
-	return result
+	return result, nil
 }
 
 // Save writes config to file with proper YAML formatting

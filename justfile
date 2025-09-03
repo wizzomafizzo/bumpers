@@ -17,7 +17,7 @@ build:
     go build -o bin/bumpers ./cmd/bumpers
 
 # Run go test with TDD Guard if available
-_test-with-guard *args:
+test *args:
     #!/usr/bin/env bash
     set -euo pipefail
     if command -v tdd-guard-go >/dev/null 2>&1; then
@@ -26,38 +26,38 @@ _test-with-guard *args:
         go test {{args}}
     fi
 
-# Run all test categories  
-test *args:
-    just test-unit {{args}}
-    just test-integration {{args}}
-    just test-e2e {{args}}
-
 # Run unit tests
 test-unit *args="":
     #!/usr/bin/env bash
     if [ "{{args}}" = "" ]; then
-        just _test-with-guard -race ./cmd/... ./internal/...
+        just test -race ./cmd/... ./internal/...
     else
-        just _test-with-guard -race {{args}}
+        just test -race {{args}}
     fi
 
 # Run integration tests
 test-integration *args="":
     #!/usr/bin/env bash
     if [ "{{args}}" = "" ]; then
-        just _test-with-guard -race -tags=integration ./...
+        just test -race -tags=integration ./cmd/... ./internal/...
     else
-        just _test-with-guard -race {{args}} -tags=integration
+        just test -race {{args}} -tags=integration
     fi
 
 # Run end-to-end tests
 test-e2e *args="":
     #!/usr/bin/env bash
     if [ "{{args}}" = "" ]; then
-        just _test-with-guard -race -tags=e2e ./...
+        just test -race -tags=e2e ./cmd/... ./internal/...
     else
-        just _test-with-guard -race {{args}} -tags=e2e
+        just test -race {{args}} -tags=e2e
     fi
+
+# Run all test categories  
+test-all *args:
+    just test-unit {{args}}
+    just test-integration {{args}}
+    just test-e2e {{args}}
 
 # Install the bumpers binary
 install:

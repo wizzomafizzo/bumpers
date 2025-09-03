@@ -13,7 +13,7 @@ func createValidateCommand() *cobra.Command {
 		Short: "Validate configuration file",
 		Long:  "Validate configuration file",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			app, err := createAppFromCommand(cmd.Parent())
+			app, err := createAppFromCommand(cmd.Context(), cmd.Parent())
 			if err != nil {
 				return err
 			}

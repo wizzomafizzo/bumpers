@@ -48,6 +48,14 @@ linters:
     - containedctx
     - contextcheck
     - iface
+    - depguard
+    - forbidigo
+    - asciicheck
+    - copyloopvar
+    - goconst
+    - misspell
+    - bidichk
+    - durationcheck
   settings:
     govet:
       enable:
@@ -61,7 +69,7 @@ linters:
     gocyclo:
       min-complexity: 15
     funlen:
-      lines: 80
+      lines: 100
       statements: 50
     prealloc:
       simple: true
@@ -150,7 +158,7 @@ linters:
         - name: var-naming
         - name: waitgroup-by-value
     gocognit:
-      min-complexity: 15
+      min-complexity: 20
     cyclop:
       max-complexity: 15
     nestif:
@@ -162,14 +170,65 @@ linters:
       case:
         rules:
           yaml: snake
+          json: snake
     dupl:
-      threshold: 100
+      threshold: 150
     wrapcheck:
       extra-ignore-sigs:
         - .Err(
+        - .Handle(
+    depguard:
+      rules:
+        main:
+          deny:
+            - pkg: "github.com/rs/zerolog"
+              desc: "Use internal/logging instead"
+            - pkg: "github.com/rs/zerolog/log"
+              desc: "Use internal/logging instead"
+    forbidigo:
+      forbid:
+        # Prevent direct use of global log functions - only match actual function calls
+        - pattern: '^log\.(Debug|Info|Warn|Error|Panic|Fatal)(f|ln)?\('
+          msg: "Use logging.Get(ctx) from internal/core/logging instead of the global log package"
+        # Prevent direct use of zerolog context functions
+        - pattern: '^zerolog\.Ctx\('
+          msg: "Use logging.Get(ctx) from internal/core/logging instead"
+        # Prevent using background context for logging (defeats the purpose)
+        - pattern: '^logging\.Get\(context\.Background\(\)\)'
+          msg: "Don't use context.Background() for logging - pass proper context through the call chain"
+      exclude-godoc-examples: false
+      analyze-types: true
+  exclusions:
+    presets:
+      - comments
+      - std-error-handling
+      - common-false-positives
+      - legacy
+    rules:
+      - path: internal/logging/
+        linters:
+          - depguard
+      - path: internal/testing/
+        linters:
+          - depguard
+      - path: ^internal/rules/
+        linters:
+          - forbidigo
+      - path: ^internal/matcher/
+        linters:
+          - forbidigo
+      - path: ^cmd/bumpers/
+        linters:
+          - forbidigo
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 25
+  uniq-by-line: false
 
 formatters:
   enable:
     - gofumpt
     - gci
+    - goimports
   

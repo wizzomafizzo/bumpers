@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/wizzomafizzo/bumpers/internal/testing"
+	testutil "github.com/wizzomafizzo/bumpers/internal/testing"
 )
 
 //nolint:paralleltest // Cannot use t.Parallel() due to shared global logger state causing race conditions
@@ -150,5 +150,5 @@ func logCommandOutput(t *testing.T, stdout, stderr string, err error) {
 
 func setupTest(t *testing.T) {
 	t.Helper()
-	testutil.InitTestLogger(t)
+	_, _ = testutil.NewTestContext(t) // Context-aware logging
 }

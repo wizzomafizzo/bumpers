@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	"github.com/wizzomafizzo/bumpers/internal/config"
-	"github.com/wizzomafizzo/bumpers/internal/core/engine/hooks"
-	"github.com/wizzomafizzo/bumpers/internal/core/engine/matcher"
+	"github.com/wizzomafizzo/bumpers/internal/hooks"
+	"github.com/wizzomafizzo/bumpers/internal/matcher"
 )
 
 func TestEndToEndHookProcessing(t *testing.T) {

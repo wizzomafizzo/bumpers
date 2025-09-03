@@ -1,3 +1,4 @@
 {"type":"user","message":{"role":"user","content":"Check the logs"},"uuid":"user1"}
-{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"I'll check the logs to see what might be causing this issue."}]},"uuid":"assistant1"}
-{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Looking at these test failures, I can see they appear to be pre-existing issues not related to my changes."}]},"uuid":"assistant2"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_01TestToolUseId","name":"Bash","input":{"command":"tail -n 20 /var/log/system.log"}}]},"uuid":"assistant1"}
+{"parentUuid":"assistant1","type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_01TestToolUseId","type":"tool_result","content":"Error: test failure in module X\nError: test failure in module Y","is_error":false}]},"uuid":"user2","toolUseResult":{"stdout":"Error: test failure in module X\nError: test failure in module Y","stderr":"","interrupted":false,"isImage":false}}
+{"parentUuid":"user2","type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Looking at these test failures, I can see they appear to be pre-existing issues not related to my changes."}]},"uuid":"assistant2"}

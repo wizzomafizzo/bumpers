@@ -77,7 +77,17 @@ rules:
     send: "Check documentation first"
 ```
 
-**Empty sources**: `sources: []` matches all available fields
+**Empty sources**: `sources: []` uses smart defaults per tool, or `sources: ["#all"]` to force all fields
+
+### Default Tool Fields
+
+When no `sources` are specified, Bumpers uses sensible defaults to avoid false positives:
+
+- **Bash**: Only checks `command` field (ignores potentially noisy `description`)
+- **Edit**: Checks `file_path` and `new_string` (ignores `old_string` which may be unrelated)
+- **Read**: Checks `file_path` only
+- **Grep**: Checks `pattern` and `path` fields
+- **Unknown tools**: Check all fields (backward compatibility)
 
 ## Tool-Specific Configuration
 

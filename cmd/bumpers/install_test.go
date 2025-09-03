@@ -3,11 +3,11 @@ package main
 import (
 	"testing"
 
-	"github.com/wizzomafizzo/bumpers/internal/testing"
+	testutil "github.com/wizzomafizzo/bumpers/internal/testing"
 )
 
 func TestCreateInstallCommand(t *testing.T) {
-	testutil.InitTestLogger(t)
+	_, _ = testutil.NewTestContext(t) // Context-aware logging available if needed
 	t.Parallel()
 
 	cmd := createInstallCommand()

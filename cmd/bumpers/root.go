@@ -1,10 +1,11 @@
 package main
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/spf13/cobra"
-	"github.com/wizzomafizzo/bumpers/internal/cli"
+	"github.com/wizzomafizzo/bumpers/internal/app"
 )
 
 // createNewRootCommand creates the main root command that shows help by default.
@@ -33,13 +34,19 @@ func createNewRootCommand() *cobra.Command {
 	return rootCmd
 }
 
+// createApp creates a CLI app using the factory pattern
+func createApp(ctx context.Context, configPath string) (*app.App, error) {
+	factory := app.NewAppFactory()
+	cliApp := factory.CreateAppWithComponentFactory(ctx, configPath)
+	return cliApp, nil
+}
+
 // createAppFromCommand extracts config path and creates a CLI app
-func createAppFromCommand(cmd *cobra.Command) (*cli.App, error) {
+func createAppFromCommand(ctx context.Context, cmd *cobra.Command) (*app.App, error) {
 	configPath, err := cmd.Flags().GetString("config")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get config flag: %w", err)
 	}
 
-	app := cli.NewApp(configPath)
-	return app, nil
+	return createApp(ctx, configPath)
 }

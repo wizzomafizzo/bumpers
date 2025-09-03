@@ -1,24 +1,30 @@
 package testutil
 
 import (
-	"io"
-	"sync"
+	"context"
+	"strings"
 	"testing"
 
 	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
+	"github.com/wizzomafizzo/bumpers/internal/logging"
 )
 
-var loggerInitOnce sync.Once
-
-// InitTestLogger initializes the test logger to prevent race conditions.
-// This should be called from all test files that need logger initialization.
-// Implementation moved here to break import cycle with filesystem tests.
-func InitTestLogger(t *testing.T) {
+// NewTestContext creates a context with logger for race-safe testing
+// Returns a context with logger attached and a function to retrieve log output
+func NewTestContext(t *testing.T) (ctx context.Context, getLogOutput func() string) {
 	t.Helper()
-	loggerInitOnce.Do(func() {
-		// Initialize test logger directly without importing logger package
-		// This prevents the import cycle: filesystem -> testutil -> logger -> filesystem
-		log.Logger = zerolog.New(io.Discard)
+
+	var logOutput strings.Builder
+	syncWriter := zerolog.SyncWriter(&logOutput)
+
+	ctx, err := logging.New(context.Background(), nil, logging.Config{
+		ProjectID: "test-project",
+		Writer:    syncWriter,
+		Level:     zerolog.DebugLevel,
 	})
+	if err != nil {
+		t.Fatalf("Failed to create test logger: %v", err)
+	}
+
+	return ctx, logOutput.String
 }

@@ -3,23 +3,17 @@ rules:
       send: Use a "tmp" directory in the project root instead.
     - match: 'go test '
       send: |
-        Use "just test" instead for TDD integration:
-        just test                               # Run all test categories (unit, integration, e2e)
-        just test-unit                          # Run only unit tests
-        just test-integration                   # Run only integration tests
-        just test-e2e                           # Run only e2e tests
-        just test-unit ./internal/claude        # Test specific package (unit tests only)
-        just test-integration -run TestExample  # Run specific test pattern (integration)
-        just test-unit -v ./internal/claude     # Verbose output for specific package
-        just test-e2e -race=false ./...         # Disable race detection for e2e tests
+        This project uses "just test" for TDD integration. Simply replace
+        your "go" with "just" in the command to use this integration, it's
+        a simple wrapper of "go test" and supports the same arguments.
     - match: ^(gci|go vet|goimports|gofumpt|go *fmt|golangci-lint)
       send: Use "just lint fix" instead to resolve lint/formatting issues.
     - match: git commit --no-verify|LEFTHOOK=0
       send: Pre-commit hooks must not be skipped.
     - match: fieldalignment
-      send: Fix field alignment issues by adding names to struct fields and running "just lint fix".
+      send: Fix field alignment by adding names to fields and run "just lint fix".
     - match: find\s+.*-exec\s+(rm(\s+-\w+)*|sed\s+-i|>\s*\S+)\s+
-      send: Don't use dangerous exec in find commands.
+      send: Don't use dangerous exec in find commands. Stick to manual edits.
     - match: BUMPERS_SKIP=1
       send: Bumpers should not be skipped.
     - match: ^bumpers\.yml^
@@ -27,13 +21,15 @@ rules:
       send: Bumpers configuration file should not be accessed.
     - match: cat.*EOF.*>\s*[^\s]
       send: Use Write tool instead of cat heredoc redirection to create files.
+    - match: sed -i
+      send: Using sed for editing can be dangerous, use manual edits instead.
 commands:
     - name: test
-      send: Run "just test" to run all tests and fix ALL failing tests if any.
+      send: Run "just test-all" to run all tests and fix ALL failing tests if any.
     - name: lint
       send: Run "just lint fix" and fix ALL linting issues if any.
     - name: check
-      send: Run "just lint fix" and "just test" and fix ALL issues if any.
+      send: Run "just lint fix" and "just test-all" and fix ALL issues if any.
     - name: commit
       send: Commit ALL modified files.
     - name: logs
