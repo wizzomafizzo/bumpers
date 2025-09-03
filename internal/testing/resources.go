@@ -18,7 +18,7 @@ import (
 //	}
 func VerifyNoLeaks(t *testing.T) {
 	t.Helper()
-	goleak.VerifyNone(t)
+	goleak.VerifyNone(t, defaultOptions()...)
 }
 
 // VerifyNoLeaksWithOptions provides more control over leak detection.
@@ -33,5 +33,18 @@ func VerifyNoLeaks(t *testing.T) {
 //	}
 func VerifyNoLeaksWithOptions(t *testing.T, options ...goleak.Option) {
 	t.Helper()
-	goleak.VerifyNone(t, options...)
+	// Combine default options with user-provided options
+	allOptions := append(defaultOptions(), options...)
+	goleak.VerifyNone(t, allOptions...)
+}
+
+// defaultOptions returns common ignore patterns for testing framework goroutines
+func defaultOptions() []goleak.Option {
+	return []goleak.Option{
+		goleak.IgnoreTopFunction("testing.tRunner.func1"),
+		goleak.IgnoreTopFunction("testing.runTests"),
+		goleak.IgnoreTopFunction("testing.(*M).Run"),
+		goleak.IgnoreTopFunction("go.uber.org/goleak.(*opts).retry"),
+		goleak.IgnoreTopFunction("time.Sleep"),
+	}
 }

@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/rs/zerolog"
-	"github.com/wizzomafizzo/bumpers/internal/core/logging"
+	"github.com/wizzomafizzo/bumpers/internal/logging"
 )
 
 // NewTestContext creates a context with logger for race-safe testing

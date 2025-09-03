@@ -182,9 +182,9 @@ linters:
         main:
           deny:
             - pkg: "github.com/rs/zerolog"
-              desc: "Use internal/core/logging instead"
+              desc: "Use internal/logging instead"
             - pkg: "github.com/rs/zerolog/log"
-              desc: "Use internal/core/logging instead"
+              desc: "Use internal/logging instead"
     forbidigo:
       forbid:
         # Prevent direct use of global log functions - only match actual function calls
@@ -205,16 +205,16 @@ linters:
       - common-false-positives
       - legacy
     rules:
-      - path: internal/core/logging/
+      - path: internal/logging/
         linters:
           - depguard
       - path: internal/testing/
         linters:
           - depguard
-      - path: ^internal/core/engine/
+      - path: ^internal/rules/
         linters:
           - forbidigo
-      - path: ^internal/infrastructure/
+      - path: ^internal/matcher/
         linters:
           - forbidigo
       - path: ^cmd/bumpers/

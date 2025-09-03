@@ -39,7 +39,7 @@ test-unit *args="":
 test-integration *args="":
     #!/usr/bin/env bash
     if [ "{{args}}" = "" ]; then
-        just test -race -tags=integration ./...
+        just test -race -tags=integration ./cmd/... ./internal/...
     else
         just test -race {{args}} -tags=integration
     fi
@@ -48,7 +48,7 @@ test-integration *args="":
 test-e2e *args="":
     #!/usr/bin/env bash
     if [ "{{args}}" = "" ]; then
-        just test -race -tags=e2e ./...
+        just test -race -tags=e2e ./cmd/... ./internal/...
     else
         just test -race {{args}} -tags=e2e
     fi

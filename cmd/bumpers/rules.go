@@ -9,10 +9,10 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/wizzomafizzo/bumpers/internal/claude"
+	ai "github.com/wizzomafizzo/bumpers/internal/claude/api"
 	"github.com/wizzomafizzo/bumpers/internal/config"
 	"github.com/wizzomafizzo/bumpers/internal/patterns"
-	"github.com/wizzomafizzo/bumpers/internal/platform/claude"
-	ai "github.com/wizzomafizzo/bumpers/internal/platform/claude/api"
 	"github.com/wizzomafizzo/bumpers/internal/prompt"
 )
 

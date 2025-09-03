@@ -13,7 +13,7 @@ import (
 	"github.com/wizzomafizzo/bumpers/internal/testing"
 )
 
-func TestCreateHookCommand(t *testing.T) {
+func TestCreateHookCommandE2E(t *testing.T) {
 	_, _ = testutil.NewTestContext(t) // Context-aware logging for e2e tests
 	t.Parallel()
 

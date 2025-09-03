@@ -8,9 +8,9 @@ import (
 
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
-	"github.com/wizzomafizzo/bumpers/internal/cli"
-	"github.com/wizzomafizzo/bumpers/internal/core/logging"
-	"github.com/wizzomafizzo/bumpers/internal/infrastructure/project"
+	"github.com/wizzomafizzo/bumpers/internal/app"
+	"github.com/wizzomafizzo/bumpers/internal/logging"
+	"github.com/wizzomafizzo/bumpers/internal/project"
 )
 
 // HookExitError represents an error with a specific exit code for hook processing
@@ -45,26 +45,26 @@ func initLoggingForHook() (context.Context, error) {
 
 // processHookCommand processes hook input and returns ProcessResult with exit code
 func processHookCommand(
-	ctx context.Context, app *cli.App, input io.Reader, _ io.Writer,
-) (result cli.ProcessResult, exitCode int, err error) {
+	ctx context.Context, cliApp *app.App, input io.Reader, _ io.Writer,
+) (result app.ProcessResult, exitCode int, err error) {
 	// Read input for processing
 	inputBytes, err := io.ReadAll(input)
 	if err != nil {
-		return cli.ProcessResult{}, 1, fmt.Errorf("failed to read hook input: %w", err)
+		return app.ProcessResult{}, 1, fmt.Errorf("failed to read hook input: %w", err)
 	}
 
-	result, err = app.ProcessHook(ctx, bytes.NewReader(inputBytes))
+	result, err = cliApp.ProcessHook(ctx, bytes.NewReader(inputBytes))
 	if err != nil {
-		return cli.ProcessResult{}, 1, fmt.Errorf("failed to process hook: %w", err)
+		return app.ProcessResult{}, 1, fmt.Errorf("failed to process hook: %w", err)
 	}
 
 	// Use structured ProcessResult to determine exit code
 	switch result.Mode {
-	case cli.ProcessModeAllow:
+	case app.ProcessModeAllow:
 		return result, 0, nil
-	case cli.ProcessModeInformational:
+	case app.ProcessModeInformational:
 		return result, 0, nil
-	case cli.ProcessModeBlock:
+	case app.ProcessModeBlock:
 		return result, 2, nil
 	default:
 		// Fallback for unknown modes
@@ -80,12 +80,12 @@ func runHookCommand(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("logger init failed: %w", err)
 	}
 
-	app, err := createAppFromCommand(ctx, cmd.Parent())
+	cliApp, err := createAppFromCommand(ctx, cmd.Parent())
 	if err != nil {
 		return err
 	}
 
-	result, exitCode, err := processHookCommand(ctx, app, cmd.InOrStdin(), cmd.ErrOrStderr())
+	result, exitCode, err := processHookCommand(ctx, cliApp, cmd.InOrStdin(), cmd.ErrOrStderr())
 	if err != nil {
 		return err
 	}
@@ -93,7 +93,7 @@ func runHookCommand(cmd *cobra.Command, _ []string) error {
 	// Output message based on ProcessResult mode instead of brittle string parsing
 	if result.Message != "" && exitCode == 0 {
 		// Only output informational messages (hookSpecificOutput)
-		if result.Mode == cli.ProcessModeInformational {
+		if result.Mode == app.ProcessModeInformational {
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s\n", result.Message)
 		}
 	}
